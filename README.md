@@ -1,6 +1,11 @@
 # spec-decoding
 ## Setup
-Please install [uv](https://docs.astral.sh/uv/getting-started/installation/) to run
+Clone with submodules:
+```bash
+git clone --recursive git@github.com:michaelpginn/spec-decoding.git
+```
+
+Please install [uv](https://docs.astral.sh/uv/getting-started/installation/) to run.
 
 ## Research Questions
 
