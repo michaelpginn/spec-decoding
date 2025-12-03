@@ -1,4 +1,7 @@
 # spec-decoding
+## Setup
+Please install [uv](https://docs.astral.sh/uv/getting-started/installation/) to run
+
 ## Research Questions
 
 1. Do **low-resource languages** face worse speedup factors than high-resource languages?
