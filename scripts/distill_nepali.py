@@ -1,9 +1,5 @@
 """
-Knowledge Distillation: Llama 3 8B - Llama 3.2 1B using CulturaX
-
-This script distills a larger teacher model (Llama 3 8B) into a smaller 
-student model (Llama 3.2 1B) using the CulturaX dataset for low-resource
-language modeling (Nepali by default).
+Knowledge Distillation 
 """
 
 import argparse
@@ -20,7 +16,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Knowledge distillation from Llama 3 8B to Llama 3.2 1B"
+        description="Knowledge distillation from 8-1 B"
     )
     # Model configuration
     parser.add_argument(
@@ -76,7 +72,7 @@ def parse_args():
     
     return parser.parse_args()
 
-def load_dataset(args):
+def load_training_dataset(args):
     """Load dataset from various sources."""
 
     streaming = args.dataset_streaming    
@@ -199,7 +195,7 @@ def train(args):
     # Dataset (streaming mode - no full download needed)
     print(f"Loading dataset: {args.dataset_name} (config: {args.dataset_config or 'default'})...")
     # Load dataset
-    dataset = load_dataset(args)
+    dataset = load_training_dataset(args)
     
     # Determine starting step
     start_step = 0
