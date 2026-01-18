@@ -1,0 +1,14 @@
+﻿Language,Code,source,# of sentences,path
+Berber,ber,tatoeba,353517,data/ber/tatoeba.tsv
+Cherokee,chr,tatoeba,28,data/chr/tatoeba.tsv
+Hawaiian,haw,tatoeba,121,data/haw/tatoeba.tsv
+Igbo,ibo,tatoeba,43,data/ibo/tatoeba.tsv
+Lakota,lkt,tatoeba,22,data/lkt/tatoeba.tsv
+Muskogee (Creek),mus,tatoeba,512,data/mus/tatoeba.tsv
+Nepali,npi,tatoeba,3917,data/npi/tatoeba.tsv
+Nepali,npi,hugging face,6391117,data/npi/hugging_face.py
+Occitan,oci,tatoeba,4540,data/oci/tatoeba.tsv
+Ojibwe,oji,tatoeba,116,data/oji/tatoeba.tsv
+Quechua,que,tatoeba,279,data/que/tatoeba.tsv
+Maya,yua,tatoeba,25,data/yua/tatoeba.tsv
+Tamazight,zgh,tatoeba,15760,data/zgh/tatoeba.tsv
