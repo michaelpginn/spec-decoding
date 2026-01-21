@@ -2,6 +2,7 @@ Language,Code,source,# of sentences,# of words,path
 Berber,ber,tatoeba,353517,,data/bilingualber/tatoeba.tsv
 Cherokee,chr,tatoeba,28,,data/bilingualchr/tatoeba.tsv
 Cherokee,chr,hugging face,,45,data/bilingual/chr/hugging_face.py
+Cherokee,chr,cherokeedictionary.net/,10868,,data/bilingual/chr/dictionary.csv
 Hawaiian,haw,tatoeba,121,,data/bilingualhaw/tatoeba.tsv
 Igbo,ibo,tatoeba,43,,data/bilingualibo/tatoeba.tsv
 Lakota,lkt,tatoeba,22,,data/bilinguallkt/tatoeba.tsv
