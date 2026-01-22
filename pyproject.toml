@@ -6,5 +6,6 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "datasets>=4.4.1",
+    "pandas-stubs~=2.3.3",
     "ruff>=0.14.7",
 ]
