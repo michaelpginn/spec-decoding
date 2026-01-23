@@ -1,4 +1,5 @@
 from datasets import load_dataset
 
-# Login using e.g. `huggingface-cli login` to access this dataset
-ds = load_dataset("IRIIS-RESEARCH/Nepali-Text-Corpus")
+
+def load_data():
+    return load_dataset("IRIIS-RESEARCH/Nepali-Text-Corpus")

@@ -1,6 +1,5 @@
 import pandas as pd
 
-bilingual_reference = pd.read_csv("reference_table_bilingual.csv").to_dict("records")
+data = pd.read_csv("data/bilingual/ber/tatoeba.tsv", sep="\t", header=None)
 
-data = [ref["path"] for ref in bilingual_reference if ref["Language"] == "Berber"]
-print(data)
+print(data[3].tolist())

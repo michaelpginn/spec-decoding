@@ -1,3 +1,5 @@
 from datasets import load_dataset
 
-ds = load_dataset("Tamazight-NLP/IRCAM-CORPUS")
+
+def load_data():
+    return load_dataset("Tamazight-NLP/IRCAM-CORPUS")
