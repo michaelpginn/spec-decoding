@@ -36,21 +36,33 @@ class get_data:
         if self.type_of_dataset() != "invalid dataset type":
             for item in self.type_of_dataset():
                 if ".tsv" in item:
-                    self.data.extend(self.deal_tsv(item))
+                    self.data.extend(self.deal_tsv(item, self.dataset_type))
                 elif ".py" in item:
-                    item_spec = importlib.util.spec_from_file_location(
-                        "get_huggingface", item
-                    )
-                    if item_spec is None:
+                    py = self.deal_py(item)
+                    if type(py) == str:
                         return f"cannot run {item}"
                     else:
-                        module = importlib.util.module_from_spec(item_spec)
-                        try:
-                            self.data.extend(item_spec.loader.exec_module(module))
-                        except Exception:
-                            return f"cannot run {item}"
+                        self.data.extend(self.deal_py(item))
+                elif ".csv" in item:
+
         return self.data
 
-    def deal_tsv(self, path: str) -> list:
-        self.df = pd.read_csv(path, sep="\t", header=None)[3].tolist()
+    def deal_tsv(self, path: str, type) -> list:
+        if type == "monolingual":
+            self.df = pd.read_csv(path, sep="\t", header=None, usecols=[3]).to_dict(orient="records")
+        else:
+            self.df = pd.read_csv(path, sep="\t", header=None, usecols=[1, 3]).to_dict(orient="records")
         return self.df
+
+    def deal_py(self, path: str):
+        item_spec = importlib.util.spec_from_file_location(
+            "get_huggingface", path
+        )
+        if item_spec is None:
+            return f"cannot run {path}"
+        else:
+            module = importlib.util.module_from_spec(item_spec)
+            try:
+                self.data.extend(item_spec.loader.exec_module(module))
+            except Exception:
+                return f"cannot run {path}"
