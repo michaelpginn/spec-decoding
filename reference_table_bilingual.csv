@@ -2,7 +2,7 @@ Language,Code,source,# of units,path
 Berber,ber,tatoeba,353517,data/bilingual/ber/tatoeba.tsv
 Cherokee,chr,tatoeba,28,data/bilingual/chr/tatoeba.tsv
 Cherokee,chr,hugging face,45,data/bilingual/chr/hugging_face.py
-Cherokee,chr,cherokeedictionary.net/,10868,data/bilingual/chr/dictionary.csv
+Cherokee,chr,cherokeedictionary.net/,11395,data/bilingual/chr/dictionary.csv
 Hawaiian,haw,tatoeba,121,data/bilingual/haw/tatoeba.tsv
 Igbo,ibo,tatoeba,43,data/bilingual/ibo/tatoeba.tsv
 Lakota,lkt,tatoeba,22,data/bilingual/lkt/tatoeba.tsv

@@ -45,6 +45,7 @@ class get_data:
                         self.data.extend(self.deal_py(item))
                 elif ".csv" in item:
 
+
         return self.data
 
     def deal_tsv(self, path: str, type) -> list:
