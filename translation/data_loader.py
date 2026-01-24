@@ -1,0 +1,44 @@
+"""
+load tranlation data
+"""
+from pathlib import Path
+import csv
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+REFERENCE_TABLE = REPO_ROOT / "reference_table.csv"
+DATA_DIR = REPO_ROOT / "data"
+
+def _get_tatoeba_path(target_lang: str) -> Path:
+    "resolve path to tatoeba tasv for a given target language"
+    target_lang = target_lang.strip().lower()
+    with open(REFERENCE_TABLE, newline="", encoding="utf-8") as f:
+        r = csv.DictReader(f)
+        for row in r:
+            if row["Code"].strip().lower() == target_lang and row["source"].strip().lower() == "tatoeba":
+                return REPO_ROOT / row["path"].strip()
+    raise FileNotFoundError(f"No tatoeba data for language '{target_lang}' in {REFERENCE_TABLE}")
+
+
+def load_tatoeba_data(target_lang: str, max_samples: int | None = None):
+    """
+    Load (source, target) pairs from Tatoeba TSV.
+    - target_lang: e.g. 'ber', 'chr', 'haw'
+    Returns: list of (source_text, target_text)
+    """
+    path = _get_tatoeba_path(target_lang)
+    pairs = []
+
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.reader(f, delimiter="\t")
+        for row in reader:
+            if len(row) < 4:
+                continue
+            _id, source, _user, target = row[0], row[1], row[2], row[3]
+            source = source.strip()
+            target = target.strip()
+            if not source or not target:
+                continue
+            pairs.append((source, target))
+            if max_samples is not None and len(pairs) >= max_samples:
+                break
+        return pairs
