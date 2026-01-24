@@ -12,6 +12,7 @@ class get_data:
         self.monolingual_reference = pd.read_csv(
             "reference_table_monolingual.csv"
         ).to_dict("records")
+        self.data = []
 
     def type_of_dataset(self) -> str | list:
         if self.dataset_type == "monolingual":
@@ -32,7 +33,6 @@ class get_data:
             return "invalid dataset type"
 
     def get_data(self):
-        self.data = []
         if self.type_of_dataset() != "invalid dataset type":
             for item in self.type_of_dataset():
                 if ".tsv" in item:
@@ -46,31 +46,29 @@ class get_data:
                 elif ".csv" in item:
                     self.data.extend(pd.read_csv(item).to_dict(orient="records"))
                 elif ".txt" in item:
-
+                    self.data.extend(self.deal_txt(item))
 
         return self.data
 
     def deal_txt(self, path: str):
-        if type == "monolingual":
-            self.df = pd.read_csv(path, sep="\t", header=None, usecols=[3]).to_dict(
-                orient="records"
-            )
-        else:
-            self.df = pd.read_csv(path, sep="\t", header=None, usecols=[1, 3]).to_dict(
-                orient="records"
-            )
+        self.df = (
+            pd.read_csv(path, quoting=3, sep="\t", usecols=[1], header=None)
+            .iloc[:, 0]
+            .tolist()
+        )
         return self.df
 
-    def deal_tsv(self, path: str, type) -> list:
-        if type == "monolingual":
-            self.df = pd.read_csv(path, sep="\t", header=None, usecols=[3]).to_dict(
+    def deal_tsv(self, path: str, type: str) -> list:
+        self.type = type
+        if self.type == "monolingual":
+            df = pd.read_csv(path, sep="\t", header=None, usecols=[3]).to_dict(
                 orient="records"
             )
         else:
-            self.df = pd.read_csv(path, sep="\t", header=None, usecols=[1, 3]).to_dict(
+            df = pd.read_csv(path, sep="\t", header=None, usecols=[1, 3]).to_dict(
                 orient="records"
             )
-        return self.df
+        return df
 
     def deal_py(self, path: str):
         item_spec = importlib.util.spec_from_file_location("get_huggingface", path)
