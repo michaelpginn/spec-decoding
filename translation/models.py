@@ -32,7 +32,6 @@ def load_draft_model(draft_model_type: str, draft_model_path: str | None, **kwar
     )
 
 
-# XXX only target model for now!!!
 def translate_target(model, tokenizer, source: str, target_lang: str, max_length: int = 512, device=None):
     """Translate using Qwen chat template."""
     # Use Qwen's chat template
