@@ -15,9 +15,17 @@ def assisted_decode(
     max_length: int = 512,
     device=None,
     return_metrics: bool = True,
+    num_assistant_tokens: int = 5,
+    num_assistant_tokens_schedule: str = "heuristic",
 ):
     """
     Use HuggingFace's optimized assisted generation (speculative decoding).
+    
+    Args:
+        num_assistant_tokens: Number of tokens draft model generates before verification.
+            Default is 5. Higher values = more speculative, may be faster if draft is good.
+        num_assistant_tokens_schedule: "heuristic" (dynamic adjustment based on acceptance) 
+            or "constant" (fixed number). Default is "heuristic".
     """
     if device is None:
         device = next(target_model.parameters()).device
@@ -25,7 +33,7 @@ def assisted_decode(
     messages = [
         {
             "role": "system",
-            "content": f"You are a professional translator. Translate the following text from English to {target_lang.upper()}. Maintain the original style and tone. Only output the translation."
+            "content": f"You are a professional translator. Translate the following text from English to {target_lang}. Maintain the original style and tone. Only output the translation."
         },
         {
             "role": "user",
@@ -46,17 +54,41 @@ def assisted_decode(
 
     start_time = time.time()
     
-    with torch.no_grad():
-        outputs = target_model.generate(
-            input_ids,
-            attention_mask=attention_mask,
-            assistant_model=draft_model,
-            tokenizer=target_tokenizer,
-            assistant_tokenizer=draft_tokenizer,
-            max_new_tokens=max_length,
-            do_sample=False,
-            pad_token_id=target_tokenizer.eos_token_id,
-        )
+    # Check if tokenizers are the same object (only skip tokenizer params in this case)
+    same_tokenizer = target_tokenizer is draft_tokenizer
+    
+    generate_kwargs = {
+        "attention_mask": attention_mask,
+        "assistant_model": draft_model,
+        "max_new_tokens": max_length,
+        "do_sample": False,
+        "pad_token_id": target_tokenizer.eos_token_id,
+        "num_assistant_tokens": num_assistant_tokens,
+        "num_assistant_tokens_schedule": num_assistant_tokens_schedule,
+    }
+    
+    # handle both same and different tokenizer cases
+    if same_tokenizer:
+        with torch.no_grad():
+            outputs = target_model.generate(input_ids, **generate_kwargs)
+    else:
+        # Different tokenizer objects - try without first, then with if needed
+        try:
+            with torch.no_grad():
+                outputs = target_model.generate(input_ids, **generate_kwargs)
+        except ValueError as e:
+            if "different tokenizers" in str(e).lower():
+                # Need to pass tokenizers for universal assisted decoding
+                generate_kwargs["tokenizer"] = target_tokenizer
+                generate_kwargs["assistant_tokenizer"] = draft_tokenizer
+                with torch.no_grad():
+                    outputs = target_model.generate(input_ids, **generate_kwargs)
+            elif "not required" in str(e).lower():
+                # Tokenizers are same, already handled above but just in case
+                with torch.no_grad():
+                    outputs = target_model.generate(input_ids, **generate_kwargs)
+            else:
+                raise
     
     total_time = time.time() - start_time
     generated_tokens = outputs.shape[1] - prompt_len

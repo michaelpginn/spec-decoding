@@ -10,7 +10,7 @@ import argparse
 import time
 from pathlib import Path
 from tqdm import tqdm
-from translation.data_loader import load_tatoeba_data
+from translation.data_loader import load_tatoeba_data, get_language_name
 from translation.models import load_target_model, translate_target
 from translation.spec_decode import assisted_decode
 from translation.evaluate import compute_bleu
@@ -47,6 +47,12 @@ def main():
 
     parser.add_argument("--skip-baseline", action="store_true",
                        help="Skip baseline translation")
+    
+    parser.add_argument("--num-assistant-tokens", type=int, default=5,
+                       help="Number of tokens draft model generates before verification (default: 5)")
+    parser.add_argument("--assistant-tokens-schedule", type=str, default="heuristic",
+                       choices=["heuristic", "constant"],
+                       help="Token schedule: 'heuristic' (dynamic) or 'constant' (fixed)")
 
     args = parser.parse_args()
 
@@ -56,7 +62,7 @@ def main():
 
     sources = [src for src, _ in pairs]
     references = [tgt for _, tgt in pairs]
-    lang_name = args.target_lang.upper()
+    lang_name = get_language_name(args.target_lang)
 
     print(f"\nLoading target model: {args.target_model}...")
     target_model, target_tokenizer = load_target_model(args.target_model, device=args.device)
@@ -68,11 +74,12 @@ def main():
 
     if not args.skip_baseline:
         print("\nRunning Baseline")
-        for source in tqdm(sources, desc="Baseline"):
+        for i, source in enumerate(tqdm(sources, desc="Baseline")):
             start = time.time()
             translation = translate_target(
                 target_model, target_tokenizer, source, lang_name,
-                max_length=args.max_length, device=device
+                max_length=args.max_length, device=device,
+                debug=(i == 0)  # Print prompt only for first sample
             )
             baseline_times.append(time.time() - start)
             baseline_translations.append(translation)
@@ -103,6 +110,8 @@ def main():
     spec_translations = []
     spec_times = []
 
+    print(f"Using {args.num_assistant_tokens} draft tokens with '{args.assistant_tokens_schedule}' schedule")
+    
     for source in tqdm(sources, desc="Spec decoding"):
         translation, metrics = assisted_decode(
             target_model, target_tokenizer,
@@ -110,7 +119,9 @@ def main():
             source, lang_name,
             max_length=args.max_length,
             device=device,
-            return_metrics=True
+            return_metrics=True,
+            num_assistant_tokens=args.num_assistant_tokens,
+            num_assistant_tokens_schedule=args.assistant_tokens_schedule,
         )
         spec_translations.append(translation)
         spec_times.append(metrics["total_time"])
@@ -129,6 +140,20 @@ def main():
 
     output_file = output_dir / f"translations_{args.target_lang}.txt"
     with open(output_file, "w", encoding="utf-8") as f:
+        if baseline_translations:
+            f.write("=" * 80 + "\n")
+            f.write("BASELINE (target model only, greedy)\n")
+            f.write("=" * 80 + "\n\n")
+            for src, ref, trans in zip(sources, references, baseline_translations):
+                f.write(f"SOURCE: {src}\n")
+                f.write(f"REFERENCE: {ref}\n")
+                f.write(f"TRANSLATION: {trans}\n")
+                f.write("-" * 80 + "\n")
+            f.write("\n")
+
+        f.write("=" * 80 + "\n")
+        f.write("SPECULATIVE DECODING (target + draft)\n")
+        f.write("=" * 80 + "\n\n")
         for src, ref, trans in zip(sources, references, spec_translations):
             f.write(f"SOURCE: {src}\n")
             f.write(f"REFERENCE: {ref}\n")

@@ -8,10 +8,26 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 REFERENCE_TABLE = REPO_ROOT / "reference_table.csv"
 DATA_DIR = REPO_ROOT / "data"
 
+def get_language_name(lang_code: str) -> str:
+    """
+    Get full language name from language code using reference_table.csv.
+    e.g. 'npi' -> 'Nepali', 'chr' -> 'Cherokee'
+    """
+    lang_code = lang_code.strip().lower()
+    # Use utf-8-sig
+    with open(REFERENCE_TABLE, newline="", encoding="utf-8-sig") as f:
+        r = csv.DictReader(f)
+        for row in r:
+            if row["Code"].strip().lower() == lang_code:
+                return row["Language"].strip()
+    # Fallback: return the code itself if not found
+    return lang_code
+
+
 def _get_tatoeba_path(target_lang: str) -> Path:
     "resolve path to tatoeba tasv for a given target language"
     target_lang = target_lang.strip().lower()
-    with open(REFERENCE_TABLE, newline="", encoding="utf-8") as f:
+    with open(REFERENCE_TABLE, newline="", encoding="utf-8-sig") as f:
         r = csv.DictReader(f)
         for row in r:
             if row["Code"].strip().lower() == target_lang and row["source"].strip().lower() == "tatoeba":

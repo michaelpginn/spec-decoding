@@ -32,9 +32,9 @@ def load_draft_model(draft_model_type: str, draft_model_path: str | None, **kwar
     )
 
 
-def translate_target(model, tokenizer, source: str, target_lang: str, max_length: int = 512, device=None):
+def translate_target(model, tokenizer, source: str, target_lang: str, max_length: int = 512, device=None, debug: bool = False):
     """Translate using Qwen chat template."""
-    # Use Qwen's chat template
+    # Qwen's chat template
     messages = [
         {
             "role": "system",
@@ -52,6 +52,10 @@ def translate_target(model, tokenizer, source: str, target_lang: str, max_length
         tokenize=False,
         add_generation_prompt=True  # Adds <|im_start|>assistant\n
     )
+    
+    # Debug: print the prompt (only when debug=True)
+    if debug:
+        print(f"\n[DEBUG] Prompt:\n{prompt}\n{'='*60}")
     
     # Tokenize
     inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=max_length)
