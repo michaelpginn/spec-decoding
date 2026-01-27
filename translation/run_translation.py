@@ -12,8 +12,8 @@ from pathlib import Path
 from tqdm import tqdm
 from translation.data_loader import load_tatoeba_data, get_language_name
 from translation.models import load_target_model, translate_target
-from translation.spec_decode import assisted_decode
-from translation.evaluate import compute_bleu
+from translation.spec_decode import assisted_decode_hf, speculative_decode_translate
+from translation.evaluate import compute_bleu, compute_spec_metrics
 
 
 def main():
@@ -48,11 +48,18 @@ def main():
     parser.add_argument("--skip-baseline", action="store_true",
                        help="Skip baseline translation")
     
+    # Speculative decoding options (custom implementation is default)
+    parser.add_argument("--gamma", type=int, default=5,
+                       help="Number of draft tokens per iteration (default: 5)")
+    
+    # Use HuggingFace's assisted generation instead of custom implementation
+    parser.add_argument("--use-hf-assisted", action="store_true",
+                       help="Use HuggingFace's assisted generation instead of custom implementation")
     parser.add_argument("--num-assistant-tokens", type=int, default=5,
-                       help="Number of tokens draft model generates before verification (default: 5)")
+                       help="[HF only] Number of tokens draft model generates before verification (default: 5)")
     parser.add_argument("--assistant-tokens-schedule", type=str, default="heuristic",
                        choices=["heuristic", "constant"],
-                       help="Token schedule: 'heuristic' (dynamic) or 'constant' (fixed)")
+                       help="[HF only] Token schedule: 'heuristic' (dynamic) or 'constant' (fixed)")
 
     args = parser.parse_args()
 
@@ -106,34 +113,57 @@ def main():
 
     print(f"Draft model ready on {device}")
 
-    print("\nRunning Speculative Decoding (assisted generation)")
     spec_translations = []
-    spec_times = []
+    spec_results = []  # Full metrics from each sample
+    spec_metrics = None  # Will be set for custom implementation
 
-    print(f"Using {args.num_assistant_tokens} draft tokens with '{args.assistant_tokens_schedule}' schedule")
-    
-    for source in tqdm(sources, desc="Spec decoding"):
-        translation, metrics = assisted_decode(
-            target_model, target_tokenizer,
-            draft_model, draft_tokenizer,
-            source, lang_name,
-            max_length=args.max_length,
-            device=device,
-            return_metrics=True,
-            num_assistant_tokens=args.num_assistant_tokens,
-            num_assistant_tokens_schedule=args.assistant_tokens_schedule,
-        )
-        spec_translations.append(translation)
-        spec_times.append(metrics["total_time"])
+    if args.use_hf_assisted:
+        # HF ASSISTED GENERATION
+        print("\nRunning Speculative Decoding (HuggingFace assisted generation)")
+        print(f"Using {args.num_assistant_tokens} draft tokens with '{args.assistant_tokens_schedule}' schedule")
+        
+        for source in tqdm(sources, desc="HF assisted"):
+            translation, metrics = assisted_decode_hf(
+                target_model, target_tokenizer,
+                draft_model, draft_tokenizer,
+                source, lang_name,
+                max_length=args.max_length,
+                device=device,
+                return_metrics=True,
+                num_assistant_tokens=args.num_assistant_tokens,
+                num_assistant_tokens_schedule=args.assistant_tokens_schedule,
+            )
+            spec_translations.append(translation)
+            spec_results.append(metrics)
+    else:
+        #  CUSTOM SPECULATIVE DECODING (DEFAULT)
+        # Requires same tokenizer for target and draft models
+        if target_tokenizer is not draft_tokenizer:
+            print("\nChecking tokenizer compatibility...")
+        
+        print(f"\nRunning Custom Speculative Decoding (greedy, gamma={args.gamma})")
+        
+        for i, source in enumerate(tqdm(sources, desc="Spec decode")):
+            translation, metrics = speculative_decode_translate(
+                target_model=target_model,
+                draft_model=draft_model,
+                tokenizer=target_tokenizer,  # Shared tokenizer
+                source=source,
+                target_lang=lang_name,
+                max_length=args.max_length,
+                gamma=args.gamma,
+                device=device,
+                debug=(i == 0),  # Print first prompt only
+            )
+            spec_translations.append(translation)
+            spec_results.append(metrics)
+        
+        # Compute and print spec decoding metrics
+        spec_metrics = compute_spec_metrics(spec_results, gamma=args.gamma, verbose=True)
 
-    print("\nSpec Decoding Quality")
+    # Translation quality metrics
+    print("\n=== Translation Quality ===")
     spec_bleu = compute_bleu(references, spec_translations, verbose=True)
-    avg_spec_time = sum(spec_times) / len(spec_times)
-    print(f"Spec avg time: {avg_spec_time:.3f}s")
-
-    if baseline_times:
-        speedup = avg_baseline_time / avg_spec_time if avg_spec_time > 0 else 0
-        print(f"\nSpeedup: {speedup:.2f}x")
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -162,16 +192,24 @@ def main():
 
     metrics_file = output_dir / f"metrics_{args.target_lang}.txt"
     with open(metrics_file, "w", encoding="utf-8") as f:
-        f.write("=== Baseline ===\n")
-        f.write(f"BLEU: {baseline_bleu['bleu']:.2f}\n")
-        f.write(f"chrF2: {baseline_bleu['chrf2']:.2f}\n")
-        f.write(f"Avg time: {avg_baseline_time:.3f}s\n")
-        f.write("\n=== Speculative Decoding ===\n")
-        f.write(f"BLEU: {spec_bleu['bleu']:.2f}\n")
-        f.write(f"chrF2: {spec_bleu['chrf2']:.2f}\n")
-        f.write(f"Avg time: {avg_spec_time:.3f}s\n")
-        if baseline_times:
-            f.write(f"Speedup: {speedup:.2f}x\n")
+        if not args.skip_baseline:
+            f.write("=== Baseline ===\n")
+            f.write(f"BLEU: {baseline_bleu['bleu']:.2f}\n")
+            f.write(f"chrF2: {baseline_bleu['chrf2']:.2f}\n\n")
+        
+        f.write("=== Speculative Decoding ===\n")
+        if args.use_hf_assisted:
+            f.write("Implementation: HuggingFace assisted generation\n")
+            f.write(f"BLEU: {spec_bleu['bleu']:.2f}\n")
+            f.write(f"chrF2: {spec_bleu['chrf2']:.2f}\n")
+        else:
+            f.write(f"Implementation: Custom (greedy, gamma={args.gamma})\n")
+            f.write(f"BLEU: {spec_bleu['bleu']:.2f}\n")
+            f.write(f"chrF2: {spec_bleu['chrf2']:.2f}\n")
+            # Write spec decode metrics
+            f.write(f"Acceptance Rate: {spec_metrics['acceptance_rate']:.2%}\n")
+            f.write(f"Mean Accepted Tokens: {spec_metrics['mean_accepted_tokens']:.2f}\n")
+            f.write(f"Block Efficiency: {spec_metrics['block_efficiency']:.2%}\n")
 
     print(f"\nSaved results to {output_dir}")
 
