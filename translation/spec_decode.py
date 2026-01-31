@@ -8,6 +8,40 @@ Contains:
 import torch
 import time
 
+
+def get_stop_token_ids(tokenizer, eos_token_id=None):
+    """
+    Get all stop token IDs for chat models.
+    Supports: Qwen, Llama, Mistral, Gemma, and others.
+    """
+    stop_ids = set()
+    
+    if eos_token_id is not None:
+        stop_ids.add(eos_token_id)
+    if tokenizer.eos_token_id is not None:
+        stop_ids.add(tokenizer.eos_token_id)
+    
+    stop_tokens = [
+        "<|im_end|>",        # Qwen
+        "<|endoftext|>",     # Qwen, GPT
+        "<|eot_id|>",        # Llama 3
+        "<|end_of_text|>",   # Llama 3
+        "</s>",              # Mistral, Llama 2
+        "<end_of_turn>",     # Gemma
+        "<eos>",             # Gemma
+        "[/INST]",           # Mistral
+    ]
+    
+    for token in stop_tokens:
+        try:
+            ids = tokenizer.encode(token, add_special_tokens=False)
+            if ids and len(ids) == 1:
+                stop_ids.add(ids[0])
+        except Exception:
+            pass
+    
+    return stop_ids
+
 # def crop_past_key_values(past_key_values, new_length):
 #     """
 #     slice the KV cache of the sequence length.
@@ -60,11 +94,12 @@ def speculative_decode_greedy(
     if eos_token_id is None:
         eos_token_id = tokenizer.eos_token_id
     
-    # Ensure input is on device
+    stop_token_ids = get_stop_token_ids(tokenizer, eos_token_id)
+    
     input_ids = input_ids.to(device)
     current_ids = input_ids.clone()
 
-    # targte model prefill
+    # target model prefill
     target_outputs = target_model(input_ids, use_cache=True)
     target_past_key_values = target_outputs.past_key_values
     target_next_logit = target_outputs.logits[:, -1, :]
@@ -90,7 +125,7 @@ def speculative_decode_greedy(
             all_draft_tokens = [draft_first_token.item()]
             current_draft_input = draft_first_token
 
-            if draft_first_token.item() == eos_token_id:
+            if draft_first_token.item() in stop_token_ids:
                 pass
             else:
                 for _ in range(gamma - 1):
@@ -104,7 +139,7 @@ def speculative_decode_greedy(
                     all_draft_tokens.append(new_token_id.item())
                     current_draft_input = new_token_id
                     
-                    if new_token_id.item() == eos_token_id:
+                    if new_token_id.item() in stop_token_ids:
                         break
             
             num_drafted = len(all_draft_tokens)
@@ -130,30 +165,16 @@ def speculative_decode_greedy(
             else:
                 verification_logits = target_next_logit.unsqueeze(1)
 
-            #  Step 3: Accept tokens until first mismatch 
             accepted_tokens = []
             all_match = True
-
-            verification_details = [] if track_iterations else None
 
             for i in range(num_drafted):
                 draft_id = all_draft_tokens[i]
                 target_id = torch.argmax(verification_logits[:, i, :]).item()
-
-                if track_iterations:
-                    verification_details.append({
-                        "position": i,
-                        "draft_token_id": draft_id,
-                        "target_token_id": target_id,
-                        "draft_token_text": tokenizer.decode([draft_id]),
-                        "target_token_text": tokenizer.decode([target_id]),
-                        "matched": draft_id == target_id,
-                    })
                 
                 if draft_id == target_id:
                     accepted_tokens.append(draft_id)
                 else:
-                    # Mismatch: accept target's correction and stop
                     accepted_tokens.append(target_id)
                     all_match = False
                     break
@@ -234,22 +255,28 @@ def speculative_decode_greedy(
                 draft_first_token = torch.argmax(draft_correction_out.logits[:, -1, :], dim=-1, keepdim=True)
             
             if track_iterations:
+                iteration_num += 1
+                draft_text = [tokenizer.decode([t]) for t in all_draft_tokens]
+                
+                if all_match:
+                    bonus_text = tokenizer.decode([bonus_token])
+                    result = f"ALL ACCEPTED ({num_drafted}) + BONUS '{bonus_text}'"
+                else:
+                    matched_count = len(accepted_tokens) - 1
+                    rejected_draft = tokenizer.decode([all_draft_tokens[matched_count]])
+                    target_correction = tokenizer.decode([accepted_tokens[-1]])
+                    if matched_count > 0:
+                        result = f"ACCEPTED {matched_count}, REJECTED '{rejected_draft}' -> TARGET '{target_correction}'"
+                    else:
+                        result = f"REJECTED '{rejected_draft}' -> TARGET '{target_correction}'"
+                
                 iteration_history.append({
-                    "iteration": iteration_num,
-                    "num_drafted": num_drafted,
-                    "num_accepted": len(accepted_tokens),
-                    "num_matched": num_matched,
-                    "all_matched": all_match,
-                    "draft_tokens": all_draft_tokens.copy(),
-                    "accepted_tokens": accepted_tokens.copy(),
-                    "bonus_token": bonus_token,
-                    "bonus_token_text": tokenizer.decode([bonus_token]) if bonus_token else None,
-                    "correction_token": accepted_tokens[-1] if not all_match else None,
-                    "correction_token_text": tokenizer.decode([accepted_tokens[-1]]) if not all_match else None,
-                    "verification_details": verification_details,
+                    "iter": iteration_num,
+                    "drafted": draft_text,
+                    "result": result,
                 })
 
-            if accepted_tokens[-1] == eos_token_id:
+            if any(t in stop_token_ids for t in accepted_tokens):
                 break
     
     total_time = time.time() - start_time
@@ -267,7 +294,6 @@ def speculative_decode_greedy(
 
     if track_iterations:
         metrics["iteration_history"] = iteration_history
-        metrics["total_iterations"] = iteration_num
     
     return current_ids, metrics
 
@@ -309,15 +335,14 @@ def speculative_decode_translate(
     if device is None:
         device = next(target_model.parameters()).device
     
-    # Build prompt
     messages = [
         {
             "role": "system",
-            "content": f"You are a professional translator. Translate the following text from English to {target_lang}. Maintain the original style and tone. Only output the translation."
+            "content": f"You are a translator. Translate English to {target_lang}. Output ONLY the translation, nothing else. No explanations, no notes, no alternatives."
         },
         {
             "role": "user",
-            "content": f"Translate this:\n\n{source}"
+            "content": source
         }
     ]
     
@@ -401,11 +426,11 @@ def assisted_decode_hf(
     messages = [
         {
             "role": "system",
-            "content": f"You are a professional translator. Translate the following text from English to {target_lang}. Maintain the original style and tone. Only output the translation."
+            "content": f"You are a translator. Translate English to {target_lang}. Output ONLY the translation, nothing else. No explanations, no notes, no alternatives."
         },
         {
             "role": "user",
-            "content": f"Translate this:\n\n{source}"
+            "content": source
         }
     ]
 

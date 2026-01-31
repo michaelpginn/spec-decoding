@@ -34,26 +34,23 @@ def load_draft_model(draft_model_type: str, draft_model_path: str | None, **kwar
 
 def translate_target(model, tokenizer, source: str, target_lang: str, max_length: int = 512, device=None, debug: bool = False):
     """Translate using Qwen chat template."""
-    # Qwen's chat template
     messages = [
         {
             "role": "system",
-            "content": f"You are a professional translator. Translate the following text from English to {target_lang}. Maintain the original style and tone. Only output the translation."
+            "content": f"You are a translator. Translate English to {target_lang}. Output ONLY the translation, nothing else. No explanations, no notes, no alternatives."
         },
         {
             "role": "user",
-            "content": f"Translate this:\n\n{source}"
+            "content": source
         }
     ]
     
-    # Apply chat template (handles <|im_start|> and <|im_end|> automatically)
     prompt = tokenizer.apply_chat_template(
         messages,
         tokenize=False,
-        add_generation_prompt=True  # Adds <|im_start|>assistant\n
+        add_generation_prompt=True
     )
     
-    # Debug: print the prompt (only when debug=True)
     if debug:
         print(f"\n[DEBUG] Prompt:\n{prompt}\n{'='*60}")
     

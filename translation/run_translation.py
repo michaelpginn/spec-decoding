@@ -8,7 +8,6 @@ os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
 
 import argparse
 import time
-import json
 from pathlib import Path
 from tqdm import tqdm
 from translation.data_loader import load_tatoeba_data, get_language_name
@@ -170,17 +169,17 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    iteration_file = output_dir / f"iterations_{args.target_lang}.json"
+    iteration_file = output_dir / f"token_flow_{args.target_lang}.txt"
     with open(iteration_file, "w", encoding="utf-8") as f:
-        iteration_data = []
         for i, result in enumerate(spec_results):
             if "iteration_history" in result:
-                iteration_data.append({
-                    "sample_idx": i,
-                    "source": sources[i],
-                    "iteration_history": result["iteration_history"],
-                })
-        json.dump(iteration_data, f, indent=2, ensure_ascii=False)
+                f.write(f"\n{'='*60}\n")
+                f.write(f"Sample {i+1}: \"{sources[i]}\"\n")
+                f.write(f"{'='*60}\n")
+                for item in result["iteration_history"]:
+                    drafted_str = " ".join(f"[{t}]" for t in item["drafted"])
+                    f.write(f"  Iter {item['iter']}: {drafted_str}\n")
+                    f.write(f"           → {item['result']}\n")
 
     output_file = output_dir / f"translations_{args.target_lang}.txt"
     with open(output_file, "w", encoding="utf-8") as f:
