@@ -8,6 +8,22 @@ Contains:
 import torch
 import time
 
+def crop_past_key_values(past_key_values, new_length):
+    """
+    slice the KV cache of the sequence length.
+    """
+    if past_key_values is None:
+        return None
+
+    new_past = []
+    for layer_past in past_key_values:
+        key_state, value_state = layer_past
+        k_cropped = key_state[:, :, :new_length, :]
+        v_cropped = value_state[:, :, :new_length, :]
+        new_past.append((k_cropped, v_cropped))
+
+    return tuple(new_past)
+
 # CUSTOM IMPLEMENTATION
 def speculative_decode_greedy(
     target_model,
@@ -20,8 +36,8 @@ def speculative_decode_greedy(
     device=None,
 ):
     """
-    Custom speculative decoding implementation.
-    Simplest case: same tokenizer, greedy decoding.
+    Speculative Decoding with KV Caching.
+    Key features:
     
     Args:
         target_model: The large target model
@@ -46,76 +62,155 @@ def speculative_decode_greedy(
     # Ensure input is on device
     input_ids = input_ids.to(device)
     current_ids = input_ids.clone()
+
+    # targte model prefill
+    target_outputs = target_model(input_ids, use_cache=True)
+    target_past_key_values = target_outputs.past_key_values
+    target_next_logit = target_outputs.logits[:, -1, :]
+
+    # draft model prefill
+    draft_outputs = draft_model(input_ids, use_cache=True)
+    draft_past_key_values = draft_outputs.past_key_values
+    draft_first_token = torch.argmax(draft_outputs.logits[:, -1, :], dim=-1, keepdim=True)
     
     # Metrics tracking
     total_draft_tokens = 0
-    total_matched_tokens = 0  # Draft tokens that matched target (for acceptance rate)
-    start_time = time.time()
-    
+    total_matched_tokens = 0  
     generated_count = 0
+
+    start_time = time.time()
     
     with torch.no_grad():
         while generated_count < max_new_tokens:
-            # Step 1: Draft model generates gamma tokens greedily 
-            draft_ids = current_ids.clone()
-            draft_tokens = []
             
-            for _ in range(gamma):
-                draft_outputs = draft_model(draft_ids)
-                draft_logits = draft_outputs.logits[:, -1, :]  # [1, vocab_size]
-                next_token = torch.argmax(draft_logits, dim=-1, keepdim=True)  # [1, 1]
-                draft_tokens.append(next_token.item())
-                draft_ids = torch.cat([draft_ids, next_token], dim=-1)
-                
-                # Stop drafting if EOS
-                if next_token.item() == eos_token_id:
-                    break
+            all_draft_tokens = [draft_first_token.item()]
+            current_draft_input = draft_first_token
+
+            if draft_first_token.item() == eos_token_id:
+                pass
+            else:
+                for _ in range(gamma - 1):
+                    draft_out = draft_model(
+                        input_ids=current_draft_input,
+                        past_key_values=draft_past_key_values,
+                        use_cache=True,
+                    )
+                    draft_past_key_values = draft_out.past_key_values
+                    new_token_id = torch.argmax(draft_out.logits[:, -1, :], dim=-1, keepdim=True)
+                    all_draft_tokens.append(new_token_id.item())
+                    current_draft_input = new_token_id
+                    
+                    if new_token_id.item() == eos_token_id:
+                        break
             
-            num_drafted = len(draft_tokens)
+            num_drafted = len(all_draft_tokens)
             if num_drafted == 0:
                 break
-                
+            
             total_draft_tokens += num_drafted
             
-            #  Step 2: Target model verifies all draft tokens in one forward pass 
-            # Feed the sequence with all draft tokens to target model
-            target_outputs = target_model(draft_ids)
-            target_logits = target_outputs.logits  # [1, seq_len, vocab_size]
-            
-            # Get target model's predictions for each position where we have a draft
-            # Position i in target_logits predicts token at position i+1
-            # So to verify draft_tokens[j], we look at target_logits at position (original_len + j - 1)
-            original_len = current_ids.shape[1]
-            
+            #  Step 2: Target model verifies
+            draft_token_tensor = torch.tensor([all_draft_tokens], device=device)
+
+            target_out = target_model(
+                input_ids=draft_token_tensor,
+                past_key_values=target_past_key_values,
+                use_cache=True,
+            )
+
+            if num_drafted > 1:
+                verification_logits = torch.cat([
+                    target_next_logit.unsqueeze(1),     
+                    target_out.logits[:, :-1, :]         
+                ], dim=1)
+            else:
+                verification_logits = target_next_logit.unsqueeze(1)
+
             #  Step 3: Accept tokens until first mismatch 
-            num_accepted = 0
-            num_matched = 0  # Count only exact matches for acceptance rate
-            for j, draft_token in enumerate(draft_tokens):
-                # Target's prediction for this position
-                target_pred_logits = target_logits[:, original_len + j - 1, :]
-                target_token = torch.argmax(target_pred_logits, dim=-1).item()
+            accepted_tokens = []
+            all_match = True
+
+            for i in range(num_drafted):
+                draft_id = all_draft_tokens[i]
+                target_id = torch.argmax(verification_logits[:, i, :]).item()
                 
-                if target_token == draft_token:
-                    num_accepted += 1
-                    num_matched += 1  # Draft was correct
+                if draft_id == target_id:
+                    accepted_tokens.append(draft_id)
                 else:
-                    # Mismatch: use target's token instead and stop
-                    num_accepted += 1  # We still add a token (target's correction)
-                    draft_tokens[j] = target_token  # Replace with target's choice
-                    # num_matched stays the same (this was NOT a match)
+                    # Mismatch: accept target's correction and stop
+                    accepted_tokens.append(target_id)
+                    all_match = False
                     break
             
+            num_accepted = len(accepted_tokens)
+            num_matched = num_accepted - 1 if not all_match else num_accepted
             total_matched_tokens += num_matched
-            
-            #  Step 4: Update sequence with accepted tokens 
-            accepted_tokens = draft_tokens[:num_accepted]
-            if accepted_tokens:
+
+            # cache management
+            if all_match:
+                bonus_logits = target_out.logits[:, -1, :]
+                bonus_token = torch.argmax(bonus_logits, dim=-1).item()
+                accepted_tokens.append(bonus_token)
+
+                # update sequence
                 accepted_tensor = torch.tensor([accepted_tokens], device=device)
                 current_ids = torch.cat([current_ids, accepted_tensor], dim=-1)
-                generated_count += num_accepted
+                generated_count += len(accepted_tokens)
+
+                # target cache
+                target_past_key_values = target_out.past_key_values
+                bonus_token_tensor = torch.tensor([[bonus_token]], device=device)
+                bonus_out = target_model(
+                    input_ids=bonus_token_tensor,
+                    past_key_values=target_past_key_values,
+                    use_cache=True,
+                )
+                target_past_key_values = bonus_out.past_key_values
+                target_next_logit = bonus_out.logits[:, -1, :]
+
+                draft_bonus_out = draft_model(
+                    input_ids=bonus_token_tensor,
+                    past_key_values=draft_past_key_values,
+                    use_cache=True,
+                )
+                draft_past_key_values = draft_bonus_out.past_key_values
+                draft_first_token = torch.argmax(draft_bonus_out.logits[:, -1, :], dim=-1, keepdim=True)
+
+            else:
+                accepted_tensor = torch.tensor([accepted_tokens], device=device)
+                current_ids = torch.cat([current_ids, accepted_tensor], dim=-1)
+                generated_count += len(accepted_tokens)
+
+                valid_cache_len = current_ids.shape[1] - 1
+
+                target_past_key_values = crop_past_key_values(
+                    target_out.past_key_values,
+                    valid_cache_len
+                )
+                correction_token = accepted_tokens[-1]
+                correction_tensor = torch.tensor([[correction_token]], device=device)
+                correction_out = target_model(
+                    input_ids=correction_tensor,
+                    past_key_values=target_past_key_values,
+                    use_cache=True,
+                )
+                target_past_key_values = correction_out.past_key_values
+                target_next_logit = correction_out.logits[:, -1, :]
+                
+                # Crop draft cache and process correction
+                draft_past_key_values = crop_past_key_values(
+                    draft_past_key_values,
+                    valid_cache_len
+                )
+                draft_correction_out = draft_model(
+                    input_ids=correction_tensor,
+                    past_key_values=draft_past_key_values,
+                    use_cache=True,
+                )
+                draft_past_key_values = draft_correction_out.past_key_values
+                draft_first_token = torch.argmax(draft_correction_out.logits[:, -1, :], dim=-1, keepdim=True)
             
-            # Check for EOS
-            if accepted_tokens and accepted_tokens[-1] == eos_token_id:
+            if accepted_tokens[-1] == eos_token_id:
                 break
     
     total_time = time.time() - start_time
