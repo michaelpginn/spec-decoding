@@ -8,21 +8,21 @@ Contains:
 import torch
 import time
 
-def crop_past_key_values(past_key_values, new_length):
-    """
-    slice the KV cache of the sequence length.
-    """
-    if past_key_values is None:
-        return None
+# def crop_past_key_values(past_key_values, new_length):
+#     """
+#     slice the KV cache of the sequence length.
+#     """
+#     if past_key_values is None:
+#         return None
 
-    new_past = []
-    for layer_past in past_key_values:
-        key_state, value_state = layer_past
-        k_cropped = key_state[:, :, :new_length, :]
-        v_cropped = value_state[:, :, :new_length, :]
-        new_past.append((k_cropped, v_cropped))
+#     new_past = []
+#     for layer_past in past_key_values:
+#         key_state, value_state = layer_past
+#         k_cropped = key_state[:, :, :new_length, :]
+#         v_cropped = value_state[:, :, :new_length, :]
+#         new_past.append((k_cropped, v_cropped))
 
-    return tuple(new_past)
+#     return tuple(new_past)
 
 # CUSTOM IMPLEMENTATION
 def speculative_decode_greedy(
@@ -34,6 +34,7 @@ def speculative_decode_greedy(
     gamma: int = 5,
     eos_token_id: int = None,
     device=None,
+    track_iterations: bool = False
 ):
     """
     Speculative Decoding with KV Caching.
@@ -77,6 +78,9 @@ def speculative_decode_greedy(
     total_draft_tokens = 0
     total_matched_tokens = 0  
     generated_count = 0
+
+    iteration_history = [] if track_iterations else None
+    iteration_num = 0
 
     start_time = time.time()
     
@@ -130,9 +134,21 @@ def speculative_decode_greedy(
             accepted_tokens = []
             all_match = True
 
+            verification_details = [] if track_iterations else None
+
             for i in range(num_drafted):
                 draft_id = all_draft_tokens[i]
                 target_id = torch.argmax(verification_logits[:, i, :]).item()
+
+                if track_iterations:
+                    verification_details.append({
+                        "position": i,
+                        "draft_token_id": draft_id,
+                        "target_token_id": target_id,
+                        "draft_token_text": tokenizer.decode([draft_id]),
+                        "target_token_text": tokenizer.decode([target_id]),
+                        "matched": draft_id == target_id,
+                    })
                 
                 if draft_id == target_id:
                     accepted_tokens.append(draft_id)
@@ -145,6 +161,7 @@ def speculative_decode_greedy(
             num_accepted = len(accepted_tokens)
             num_matched = num_accepted - 1 if not all_match else num_accepted
             total_matched_tokens += num_matched
+            bonus_token = None
 
             # cache management
             if all_match:
@@ -183,10 +200,14 @@ def speculative_decode_greedy(
 
                 valid_cache_len = current_ids.shape[1] - 1
 
-                target_past_key_values = crop_past_key_values(
-                    target_out.past_key_values,
-                    valid_cache_len
-                )
+                # target_past_key_values = crop_past_key_values(
+                #     target_out.past_key_values,
+                #     valid_cache_len
+                # )
+
+                target_past_key_values = target_out.past_key_values
+                target_past_key_values.crop(valid_cache_len)
+
                 correction_token = accepted_tokens[-1]
                 correction_tensor = torch.tensor([[correction_token]], device=device)
                 correction_out = target_model(
@@ -198,10 +219,12 @@ def speculative_decode_greedy(
                 target_next_logit = correction_out.logits[:, -1, :]
                 
                 # Crop draft cache and process correction
-                draft_past_key_values = crop_past_key_values(
-                    draft_past_key_values,
-                    valid_cache_len
-                )
+                # draft_past_key_values = crop_past_key_values(
+                #     draft_past_key_values,
+                #     valid_cache_len
+                # )
+                draft_past_key_values.crop(valid_cache_len)
+
                 draft_correction_out = draft_model(
                     input_ids=correction_tensor,
                     past_key_values=draft_past_key_values,
@@ -210,6 +233,22 @@ def speculative_decode_greedy(
                 draft_past_key_values = draft_correction_out.past_key_values
                 draft_first_token = torch.argmax(draft_correction_out.logits[:, -1, :], dim=-1, keepdim=True)
             
+            if track_iterations:
+                iteration_history.append({
+                    "iteration": iteration_num,
+                    "num_drafted": num_drafted,
+                    "num_accepted": len(accepted_tokens),
+                    "num_matched": num_matched,
+                    "all_matched": all_match,
+                    "draft_tokens": all_draft_tokens.copy(),
+                    "accepted_tokens": accepted_tokens.copy(),
+                    "bonus_token": bonus_token,
+                    "bonus_token_text": tokenizer.decode([bonus_token]) if bonus_token else None,
+                    "correction_token": accepted_tokens[-1] if not all_match else None,
+                    "correction_token_text": tokenizer.decode([accepted_tokens[-1]]) if not all_match else None,
+                    "verification_details": verification_details,
+                })
+
             if accepted_tokens[-1] == eos_token_id:
                 break
     
@@ -225,6 +264,10 @@ def speculative_decode_greedy(
         "total_matched_tokens": total_matched_tokens,
         "acceptance_rate": acceptance_rate,
     }
+
+    if track_iterations:
+        metrics["iteration_history"] = iteration_history
+        metrics["total_iterations"] = iteration_num
     
     return current_ids, metrics
 
@@ -239,6 +282,7 @@ def speculative_decode_translate(
     gamma: int = 5,
     device=None,
     debug: bool = False,
+    track_iterations: bool = True,
 ):
     """
     Wrapper for speculative_decode_greedy for translation tasks.
@@ -300,6 +344,7 @@ def speculative_decode_translate(
         max_new_tokens=max_length,
         gamma=gamma,
         device=device,
+        track_iterations=track_iterations
     )
     
     # Decode translation (only new tokens)

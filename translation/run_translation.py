@@ -8,6 +8,7 @@ os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
 
 import argparse
 import time
+import json
 from pathlib import Path
 from tqdm import tqdm
 from translation.data_loader import load_tatoeba_data, get_language_name
@@ -154,12 +155,13 @@ def main():
                 gamma=args.gamma,
                 device=device,
                 debug=(i == 0),  # Print first prompt only
+                track_iterations=True,
             )
             spec_translations.append(translation)
             spec_results.append(metrics)
         
         # Compute and print spec decoding metrics
-        spec_metrics = compute_spec_metrics(spec_results, gamma=args.gamma, verbose=True)
+        spec_metrics = compute_spec_metrics(spec_results, gamma=args.gamma, baseline_times=baseline_times, verbose=True)
 
     # Translation quality metrics
     print("\n=== Translation Quality ===")
@@ -167,6 +169,18 @@ def main():
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    iteration_file = output_dir / f"iterations_{args.target_lang}.json"
+    with open(iteration_file, "w", encoding="utf-8") as f:
+        iteration_data = []
+        for i, result in enumerate(spec_results):
+            if "iteration_history" in result:
+                iteration_data.append({
+                    "sample_idx": i,
+                    "source": sources[i],
+                    "iteration_history": result["iteration_history"],
+                })
+        json.dump(iteration_data, f, indent=2, ensure_ascii=False)
 
     output_file = output_dir / f"translations_{args.target_lang}.txt"
     with open(output_file, "w", encoding="utf-8") as f:
@@ -210,6 +224,7 @@ def main():
             f.write(f"Acceptance Rate: {spec_metrics['acceptance_rate']:.2%}\n")
             f.write(f"Mean Accepted Tokens: {spec_metrics['mean_accepted_tokens']:.2f}\n")
             f.write(f"Block Efficiency: {spec_metrics['block_efficiency']:.2%}\n")
+            f.write(f"Overall Speedup: {spec_metrics['speedup']:.2f}x\n")
 
     print(f"\nSaved results to {output_dir}")
 

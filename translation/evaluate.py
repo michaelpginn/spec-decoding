@@ -26,6 +26,7 @@ def compute_bleu(references: list[str], hypotheses: list[str], verbose: bool = T
 def compute_spec_metrics(
     spec_results: list[dict],
     gamma: int,
+    baseline_times: list[float] = None,
     verbose: bool = True
 ):
     """
@@ -72,6 +73,15 @@ def compute_spec_metrics(
         "total_matched_tokens": total_matched,
     }
 
+    if baseline_times is not None:
+        total_baseline_time = sum(baseline_times)
+        total_spec_time = sum(r['total_time'] for r in spec_results)
+        speedup = total_baseline_time / total_spec_time if total_spec_time > 0 else 0.0
+        
+        metrics["baseline_total_time"] = total_baseline_time
+        metrics["spec_total_time"] = total_spec_time
+        metrics["speedup"] = speedup
+
     if verbose:
         print("\n=== Speculative Decoding Metrics ===")
         print(f"Acceptance Rate: {acceptance_rate:.2%}")
@@ -80,5 +90,8 @@ def compute_spec_metrics(
         print(f"Total Generated: {total_generated} tokens")
         print(f"Total Drafted: {total_draft} tokens")
         print(f"Total Matched: {total_matched} tokens")
+
+        if baseline_times is not None:
+            print(f"Speedup: {speedup:.2f}x")
     
     return metrics
