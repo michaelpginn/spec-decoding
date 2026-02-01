@@ -219,11 +219,11 @@ def main():
             f.write(f"Implementation: Custom (greedy, gamma={args.gamma})\n")
             f.write(f"BLEU: {spec_bleu['bleu']:.2f}\n")
             f.write(f"chrF2: {spec_bleu['chrf2']:.2f}\n")
-            # Write spec decode metrics
             f.write(f"Acceptance Rate: {spec_metrics['acceptance_rate']:.2%}\n")
             f.write(f"Mean Accepted Tokens: {spec_metrics['mean_accepted_tokens']:.2f}\n")
             f.write(f"Block Efficiency: {spec_metrics['block_efficiency']:.2%}\n")
-            f.write(f"Overall Speedup: {spec_metrics['speedup']:.2f}x\n")
+            if "speedup" in spec_metrics:
+                f.write(f"Speedup: {spec_metrics['speedup']:.2f}x\n")
 
     print(f"\nSaved results to {output_dir}")
 

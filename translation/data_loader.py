@@ -1,5 +1,5 @@
 """
-load tranlation data
+Load translation data from various sources.
 """
 from pathlib import Path
 import csv
@@ -25,7 +25,7 @@ def get_language_name(lang_code: str) -> str:
 
 
 def _get_tatoeba_path(target_lang: str) -> Path:
-    "resolve path to tatoeba tasv for a given target language"
+    """Resolve path to Tatoeba TSV for a given target language."""
     target_lang = target_lang.strip().lower()
     with open(REFERENCE_TABLE, newline="", encoding="utf-8-sig") as f:
         r = csv.DictReader(f)
@@ -35,11 +35,16 @@ def _get_tatoeba_path(target_lang: str) -> Path:
     raise FileNotFoundError(f"No tatoeba data for language '{target_lang}' in {REFERENCE_TABLE}")
 
 
-def load_tatoeba_data(target_lang: str, max_samples: int | None = None):
+def load_tatoeba_data(target_lang: str, max_samples: int | None = None) -> list[tuple[str, str]]:
     """
     Load (source, target) pairs from Tatoeba TSV.
-    - target_lang: e.g. 'ber', 'chr', 'haw'
-    Returns: list of (source_text, target_text)
+    
+    Args:
+        target_lang: Language code, e.g. 'ber', 'chr', 'haw', 'npi'
+        max_samples: Maximum number of samples to load (None for all)
+    
+    Returns:
+        List of (source_text, target_text) tuples
     """
     path = _get_tatoeba_path(target_lang)
     pairs = []

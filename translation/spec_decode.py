@@ -1,9 +1,10 @@
 """
-speculative decoding for translation
+Speculative decoding for translation.
 
 Contains:
-- speculative_decode_greedy: Custom implementation (same tokenizer, greedy decoding)
-- assisted_decode: HuggingFace's assisted generation wrapper
+- speculative_decode_greedy: Custom implementation 
+- speculative_decode_translate: Translation wrapper for speculative_decode_greedy
+- assisted_decode_hf: HuggingFace's assisted generation wrapper
 """
 import torch
 import time
@@ -42,23 +43,28 @@ def get_stop_token_ids(tokenizer, eos_token_id=None):
     
     return stop_ids
 
-# def crop_past_key_values(past_key_values, new_length):
-#     """
-#     slice the KV cache of the sequence length.
-#     """
-#     if past_key_values is None:
-#         return None
 
-#     new_past = []
-#     for layer_past in past_key_values:
-#         key_state, value_state = layer_past
-#         k_cropped = key_state[:, :, :new_length, :]
-#         v_cropped = value_state[:, :, :new_length, :]
-#         new_past.append((k_cropped, v_cropped))
+def crop_kv_cache(past_key_values, new_length):
+    """
+    Crop KV cache to a specific sequence length.
+    Handles both DynamicCache objects and tuple format.
+    """
+    if past_key_values is None:
+        return None
+    
+    if hasattr(past_key_values, 'crop'):
+        past_key_values.crop(new_length)
+        return past_key_values
+    else:
+        new_past = []
+        for layer_past in past_key_values:
+            key_state, value_state = layer_past
+            k_cropped = key_state[:, :, :new_length, :]
+            v_cropped = value_state[:, :, :new_length, :]
+            new_past.append((k_cropped, v_cropped))
+        return tuple(new_past)
 
-#     return tuple(new_past)
 
-# CUSTOM IMPLEMENTATION
 def speculative_decode_greedy(
     target_model,
     draft_model,
@@ -221,13 +227,7 @@ def speculative_decode_greedy(
 
                 valid_cache_len = current_ids.shape[1] - 1
 
-                # target_past_key_values = crop_past_key_values(
-                #     target_out.past_key_values,
-                #     valid_cache_len
-                # )
-
-                target_past_key_values = target_out.past_key_values
-                target_past_key_values.crop(valid_cache_len)
+                target_past_key_values = crop_kv_cache(target_out.past_key_values, valid_cache_len)
 
                 correction_token = accepted_tokens[-1]
                 correction_tensor = torch.tensor([[correction_token]], device=device)
@@ -239,12 +239,7 @@ def speculative_decode_greedy(
                 target_past_key_values = correction_out.past_key_values
                 target_next_logit = correction_out.logits[:, -1, :]
                 
-                # Crop draft cache and process correction
-                # draft_past_key_values = crop_past_key_values(
-                #     draft_past_key_values,
-                #     valid_cache_len
-                # )
-                draft_past_key_values.crop(valid_cache_len)
+                draft_past_key_values = crop_kv_cache(draft_past_key_values, valid_cache_len)
 
                 draft_correction_out = draft_model(
                     input_ids=correction_tensor,

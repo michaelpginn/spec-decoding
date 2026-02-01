@@ -1,5 +1,5 @@
 """
-load the target and the draft models for speculative translation tasks
+Load models for speculative translation tasks.
 """
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -9,10 +9,16 @@ def _resolve_device(device: str) -> torch.device:
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
     return torch.device(device)
 
-def load_target_model(model_name: str, device: str = "auto"):
+def load_model(model_name: str, device: str = "auto"):
     """
-    load huggingface model and the tokenizer for the target model.
-    returns model and the tokenizer.
+    Load a HuggingFace model and tokenizer.
+    
+    Args:
+        model_name: HuggingFace model name or local path
+        device: "cuda", "cpu", or "auto"
+    
+    Returns:
+        tuple of (model, tokenizer)
     """
     dev = _resolve_device(device)
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
@@ -26,10 +32,10 @@ def load_target_model(model_name: str, device: str = "auto"):
         model = model.to(dev)
     return model, tokenizer
 
-def load_draft_model(draft_model_type: str, draft_model_path: str | None, **kwargs):
-    raise NotImplementedError(
-        "Draft model not implemented yet. Use target model only for now."
-    )
+
+def load_target_model(model_name: str, device: str = "auto"):
+    """Load target model. Alias for load_model for backward compatibility."""
+    return load_model(model_name, device)
 
 
 def translate_target(model, tokenizer, source: str, target_lang: str, max_length: int = 512, device=None, debug: bool = False):

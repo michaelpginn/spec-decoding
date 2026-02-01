@@ -1,13 +1,14 @@
 """
-translation evaluation metrices, BLEU for now, TODO: add other metrics as well
+Translation evaluation metrics.
 """
 import sacrebleu
 
-def compute_bleu(references: list[str], hypotheses: list[str], verbose: bool = True):
-    """
-    computer BLEU score of the references adn hypothesis strings
 
-    returns:
+def compute_bleu(references: list[str], hypotheses: list[str], verbose: bool = True) -> dict:
+    """
+    Compute BLEU and chrF2 scores for references and hypothesis strings.
+
+    Returns:
         dict with bleu and chrf2 keys
     """
     refs = [[r] for r in references]
@@ -26,9 +27,9 @@ def compute_bleu(references: list[str], hypotheses: list[str], verbose: bool = T
 def compute_spec_metrics(
     spec_results: list[dict],
     gamma: int,
-    baseline_times: list[float] = None,
-    verbose: bool = True
-):
+    baseline_times: list[float] | None = None,
+    verbose: bool = True,
+) -> dict:
     """
     Compute speculative decoding metrics from a list of per-sample results.
     
@@ -73,7 +74,7 @@ def compute_spec_metrics(
         "total_matched_tokens": total_matched,
     }
 
-    if baseline_times is not None:
+    if baseline_times:
         total_baseline_time = sum(baseline_times)
         total_spec_time = sum(r['total_time'] for r in spec_results)
         speedup = total_baseline_time / total_spec_time if total_spec_time > 0 else 0.0
@@ -91,7 +92,7 @@ def compute_spec_metrics(
         print(f"Total Drafted: {total_draft} tokens")
         print(f"Total Matched: {total_matched} tokens")
 
-        if baseline_times is not None:
+        if baseline_times:
             print(f"Speedup: {speedup:.2f}x")
     
     return metrics
