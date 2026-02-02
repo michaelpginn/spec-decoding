@@ -43,9 +43,9 @@ def load_draft_model(model_name: str, device: str = "auto"):
     return load_model(model_name, device)
 
 
-def translate_target(model, tokenizer, source: str, target_lang: str, max_length: int = 512, device=None, debug: bool = False):
-    """Translate using Qwen chat template."""
-    messages = [
+def create_translation_messages(source: str, target_lang: str) -> list:
+    """Create chat messages for translation task."""
+    return [
         {
             "role": "system",
             "content": f"You are a translator. Translate English to {target_lang}. Output ONLY the translation, nothing else. No explanations, no notes, no alternatives."
@@ -55,6 +55,10 @@ def translate_target(model, tokenizer, source: str, target_lang: str, max_length
             "content": source
         }
     ]
+
+def translate_target(model, tokenizer, source: str, target_lang: str, max_length: int = 512, device=None, debug: bool = False):
+    """Translate using Qwen chat template."""
+    messages = create_translation_messages(source, target_lang)
     
     prompt = tokenizer.apply_chat_template(
         messages,

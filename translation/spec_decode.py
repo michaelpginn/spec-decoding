@@ -9,6 +9,8 @@ Contains:
 import torch
 import time
 
+from translation.models import create_translation_messages
+
 
 def get_stop_token_ids(tokenizer, eos_token_id=None):
     """
@@ -330,16 +332,7 @@ def speculative_decode_translate(
     if device is None:
         device = next(target_model.parameters()).device
     
-    messages = [
-        {
-            "role": "system",
-            "content": f"You are a translator. Translate English to {target_lang}. Output ONLY the translation, nothing else. No explanations, no notes, no alternatives."
-        },
-        {
-            "role": "user",
-            "content": source
-        }
-    ]
+    messages = create_translation_messages(source, target_lang)
     
     prompt = tokenizer.apply_chat_template(
         messages,
@@ -418,16 +411,7 @@ def assisted_decode_hf(
     if device is None:
         device = next(target_model.parameters()).device
 
-    messages = [
-        {
-            "role": "system",
-            "content": f"You are a translator. Translate English to {target_lang}. Output ONLY the translation, nothing else. No explanations, no notes, no alternatives."
-        },
-        {
-            "role": "user",
-            "content": source
-        }
-    ]
+    messages = create_translation_messages(source, target_lang)
 
     prompt = target_tokenizer.apply_chat_template(
         messages,

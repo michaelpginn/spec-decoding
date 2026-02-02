@@ -105,7 +105,7 @@ def main():
         draft_model, draft_tokenizer = load_draft_model(args.draft_model_path, device=args.device)
     elif args.draft_model:
         print(f"Loading from HuggingFace: {args.draft_model}")
-        draft_model, draft_tokenizer = load_target_model(args.draft_model, device=args.device)
+        draft_model, draft_tokenizer = load_draft_model(args.draft_model, device=args.device)
     else:
         print("No draft model specified. Using target model as draft.")
         draft_model = target_model
