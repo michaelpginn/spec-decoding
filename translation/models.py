@@ -28,13 +28,18 @@ def load_model(model_name: str, device: str = "auto"):
         device_map="auto" if dev.type == "cuda" else None,
         trust_remote_code=True,
     )
+    model.eval()
     if dev.type == "cpu" and getattr(model, "device", None) != dev:
         model = model.to(dev)
     return model, tokenizer
 
 
 def load_target_model(model_name: str, device: str = "auto"):
-    """Load target model. Alias for load_model for backward compatibility."""
+    """Load target model."""
+    return load_model(model_name, device)
+
+def load_draft_model(model_name: str, device: str = "auto"):
+    """Load draft model."""
     return load_model(model_name, device)
 
 

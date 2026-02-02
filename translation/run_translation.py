@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from tqdm import tqdm
 from translation.data_loader import load_tatoeba_data, get_language_name
-from translation.models import load_target_model, translate_target
+from translation.models import load_draft_model, load_target_model, translate_target
 from translation.spec_decode import assisted_decode_hf, speculative_decode_translate
 from translation.evaluate import compute_bleu, compute_spec_metrics
 
@@ -102,7 +102,7 @@ def main():
     print("\nLoading Draft Model")
     if args.draft_model_path:
         print(f"Loading from: {args.draft_model_path}")
-        draft_model, draft_tokenizer = load_target_model(args.draft_model_path, device=args.device)
+        draft_model, draft_tokenizer = load_draft_model(args.draft_model_path, device=args.device)
     elif args.draft_model:
         print(f"Loading from HuggingFace: {args.draft_model}")
         draft_model, draft_tokenizer = load_target_model(args.draft_model, device=args.device)
