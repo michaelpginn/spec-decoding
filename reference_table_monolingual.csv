@@ -28,3 +28,4 @@ Quechua,que,hugging face,175408,data/monolingual/que/hugging_face.py,Llamacha/mo
 Maya,yua,tatoeba,33,data/monolingual/yua/tatoeba.tsv,lecslab/monoling_yua
 Tamazight,zgh,tatoeba,20665,data/monolingual/zgh/tatoeba.tsv,lecslab/monoling_zgh
 Tamazight,zgh,hugging face,55,data/monolingual/zgh/hugging_face.py,Tamazight-NLP/IRCAM-CORPUS
+Chinese,zh,hugging face,958000000,,opencsg/Fineweb-Edu-Chinese-V2.1

@@ -14,3 +14,4 @@ Ojibwe,oji,tatoeba,116,data/bilingual/oji/tatoeba.tsv,lecslab/biling_oji
 Quechua,que,tatoeba,279,data/bilingual/que/tatoeba.tsv,lecslab/biling_que
 Maya,yua,tatoeba,25,data/bilingual/yua/tatoeba.tsv,lecslab/biling_yua
 Tamazight,zgh,tatoeba,15760,data/bilingual/zgh/tatoeba.tsv,lecslab/biling_zgh
+Chinese,zh,hugging face,1000000,,Helsinki-NLP/opus-100
