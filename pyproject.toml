@@ -8,10 +8,10 @@ dependencies = [
     "datasets>=4.4.1",
     "pandas-stubs~=2.3.3",
     "ruff>=0.14.7",
-
     # for the distillation script
     "torch>=2.0.0",
     "transformers>=4.40.0",
     "accelerate>=0.30.0",
     "bitsandbytes>=0.43.0",
+    "wandb>=0.24.2",
 ]
