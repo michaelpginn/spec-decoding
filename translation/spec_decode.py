@@ -6,8 +6,9 @@ Contains:
 - speculative_decode_translate: Translation wrapper for speculative_decode_greedy
 - assisted_decode_hf: HuggingFace's assisted generation wrapper
 """
-import torch
 import time
+
+import torch
 
 from translation.models import create_translation_messages
 
@@ -74,7 +75,7 @@ def speculative_decode_greedy(
     input_ids: torch.Tensor,
     max_new_tokens: int = 256,
     gamma: int = 5,
-    eos_token_id: int = None,
+    eos_token_id: int | None = None,
     device=None,
     track_iterations: bool = False
 ):
@@ -96,194 +97,141 @@ def speculative_decode_greedy(
         output_ids: Generated token IDs
         metrics: Dict with acceptance_rate, total_time, etc.
     """
+    
     if device is None:
         device = next(target_model.parameters()).device
     
-    if eos_token_id is None:
-        eos_token_id = tokenizer.eos_token_id
-    
-    stop_token_ids = get_stop_token_ids(tokenizer, eos_token_id)
-    
+    stop_token_ids = torch.tensor(list(get_stop_token_ids(tokenizer, eos_token_id)))
     input_ids = input_ids.to(device)
-    current_ids = input_ids.clone()
 
-    # target model prefill
-    target_outputs = target_model(input_ids, use_cache=True)
-    target_past_key_values = target_outputs.past_key_values
-    target_next_logit = target_outputs.logits[:, -1, :]
+    # B,S+max_new
+    generated_tokens = torch.concat(
+        [
+            input_ids,
+            torch.zeros(input_ids.size(0), max_new_tokens, device=device, dtype=torch.int64),
+        ], dim=-1
+    )
+    cur_gen_idx = input_ids.size(1)
 
-    # draft model prefill
-    draft_outputs = draft_model(input_ids, use_cache=True)
-    draft_past_key_values = draft_outputs.past_key_values
-    draft_first_token = torch.argmax(draft_outputs.logits[:, -1, :], dim=-1, keepdim=True)
+    # Preload kv cache for prompts
+    target_out = target_model(input_ids, use_cache=True)
+    target_kv_cache = target_out.past_key_values
+    draft_kv_cache = draft_model(input_ids, use_cache=True).past_key_values
+
+    # Add the first new token
+    last_target_token = target_out.logits[:,-1,:].argmax(dim=-1)
+    generated_tokens[:, cur_gen_idx] = last_target_token
+    cur_gen_idx += 1
     
-    # Metrics tracking
+    # Metrics
     total_draft_tokens = 0
     total_matched_tokens = 0  
-    generated_count = 0
-
-    iteration_history = [] if track_iterations else None
-    iteration_num = 0
-
+    iteration_history = []
     start_time = time.time()
     
     with torch.no_grad():
-        while generated_count < max_new_tokens:
-            
-            all_draft_tokens = [draft_first_token.item()]
-            current_draft_input = draft_first_token
-
-            if draft_first_token.item() in stop_token_ids:
-                pass
-            else:
-                for _ in range(gamma - 1):
-                    draft_out = draft_model(
-                        input_ids=current_draft_input,
-                        past_key_values=draft_past_key_values,
-                        use_cache=True,
-                    )
-                    draft_past_key_values = draft_out.past_key_values
-                    new_token_id = torch.argmax(draft_out.logits[:, -1, :], dim=-1, keepdim=True)
-                    all_draft_tokens.append(new_token_id.item())
-                    current_draft_input = new_token_id
-                    
-                    if new_token_id.item() in stop_token_ids:
-                        break
-            
-            num_drafted = len(all_draft_tokens)
-            if num_drafted == 0:
-                break
-            
-            total_draft_tokens += num_drafted
-            
-            #  Step 2: Target model verifies
-            draft_token_tensor = torch.tensor([all_draft_tokens], device=device)
-
-            target_out = target_model(
-                input_ids=draft_token_tensor,
-                past_key_values=target_past_key_values,
-                use_cache=True,
+        while cur_gen_idx < generated_tokens.size(-1):
+            # Step 1: Draft tokens
+            # B * gamma (unless gamma > remaining tokens)
+            new_draft_tokens = torch.zeros(
+                (
+                    input_ids.size(0),
+                    min(gamma, generated_tokens.size(-1) - cur_gen_idx),
+                ),
+                device=input_ids.device,
+                dtype=torch.int64
             )
-
-            if num_drafted > 1:
-                verification_logits = torch.cat([
-                    target_next_logit.unsqueeze(1),     
-                    target_out.logits[:, :-1, :]         
-                ], dim=1)
-            else:
-                verification_logits = target_next_logit.unsqueeze(1)
-
-            accepted_tokens = []
-            all_match = True
-
-            for i in range(num_drafted):
-                draft_id = all_draft_tokens[i]
-                target_id = torch.argmax(verification_logits[:, i, :]).item()
-                
-                if draft_id == target_id:
-                    accepted_tokens.append(draft_id)
-                else:
-                    accepted_tokens.append(target_id)
-                    all_match = False
+            draft_input_ids = generated_tokens[:, cur_gen_idx-1:cur_gen_idx]
+            for idx in range(new_draft_tokens.size(-1)):
+                draft_out = draft_model(
+                    input_ids=draft_input_ids,
+                    past_key_values=draft_kv_cache,
+                    use_cache=True,
+                )
+                draft_kv_cache = draft_out.past_key_values
+                next_draft_token = draft_out.logits[:, -1, :].argmax(dim=-1)
+                new_draft_tokens[:, idx] = next_draft_token
+                draft_input_ids = next_draft_token.unsqueeze(-1)
+                if torch.isin(next_draft_token, stop_token_ids).any():
+                    # Trim draft tokens tensor since it's shorter than usual
+                    new_draft_tokens = new_draft_tokens[:,:idx+1]
                     break
             
-            num_accepted = len(accepted_tokens)
-            num_matched = num_accepted - 1 if not all_match else num_accepted
-            total_matched_tokens += num_matched
-            bonus_token = None
-
-            # cache management
-            if all_match:
-                bonus_logits = target_out.logits[:, -1, :]
-                bonus_token = torch.argmax(bonus_logits, dim=-1).item()
-                accepted_tokens.append(bonus_token)
-
-                # update sequence
-                accepted_tensor = torch.tensor([accepted_tokens], device=device)
-                current_ids = torch.cat([current_ids, accepted_tensor], dim=-1)
-                generated_count += len(accepted_tokens)
-
-                # target cache
-                target_past_key_values = target_out.past_key_values
-                bonus_token_tensor = torch.tensor([[bonus_token]], device=device)
-                bonus_out = target_model(
-                    input_ids=bonus_token_tensor,
-                    past_key_values=target_past_key_values,
-                    use_cache=True,
+            #  Step 2: Target model verifies
+            target_input_ids = torch.concat([
+                generated_tokens[:, cur_gen_idx-1:cur_gen_idx],
+                new_draft_tokens
+            ], dim=-1)
+            target_out = target_model(
+                input_ids=target_input_ids,
+                past_key_values=target_kv_cache,
+                use_cache=True,
+            )
+            # Find the first collision, if any
+            target_preds_for_draft = target_out.logits.argmax(dim=-1)
+            collisions = (new_draft_tokens != target_preds_for_draft[:,:-1])
+            total_draft_tokens += collisions.size(-1)
+            if collisions.any():
+                first_collision_idx = collisions.int().argmax(dim=-1).min().item()
+                tokens_to_add = torch.concat(
+                    [
+                        new_draft_tokens[:, :first_collision_idx],
+                        target_preds_for_draft[:, first_collision_idx].unsqueeze(-1),
+                    ],
+                    dim=-1,
                 )
-                target_past_key_values = bonus_out.past_key_values
-                target_next_logit = bonus_out.logits[:, -1, :]
-
-                draft_bonus_out = draft_model(
-                    input_ids=bonus_token_tensor,
-                    past_key_values=draft_past_key_values,
-                    use_cache=True,
-                )
-                draft_past_key_values = draft_bonus_out.past_key_values
-                draft_first_token = torch.argmax(draft_bonus_out.logits[:, -1, :], dim=-1, keepdim=True)
-
+                total_matched_tokens += first_collision_idx
             else:
-                accepted_tensor = torch.tensor([accepted_tokens], device=device)
-                current_ids = torch.cat([current_ids, accepted_tensor], dim=-1)
-                generated_count += len(accepted_tokens)
-
-                valid_cache_len = current_ids.shape[1] - 1
-
-                target_past_key_values = crop_kv_cache(target_out.past_key_values, valid_cache_len)
-
-                correction_token = accepted_tokens[-1]
-                correction_tensor = torch.tensor([[correction_token]], device=device)
-                correction_out = target_model(
-                    input_ids=correction_tensor,
-                    past_key_values=target_past_key_values,
-                    use_cache=True,
-                )
-                target_past_key_values = correction_out.past_key_values
-                target_next_logit = correction_out.logits[:, -1, :]
-                
-                draft_past_key_values = crop_kv_cache(draft_past_key_values, valid_cache_len)
-
-                draft_correction_out = draft_model(
-                    input_ids=correction_tensor,
-                    past_key_values=draft_past_key_values,
-                    use_cache=True,
-                )
-                draft_past_key_values = draft_correction_out.past_key_values
-                draft_first_token = torch.argmax(draft_correction_out.logits[:, -1, :], dim=-1, keepdim=True)
+                if torch.isin(new_draft_tokens[:,-1], stop_token_ids).any():
+                    # If we've reached <eos>, don't add bonus token
+                    tokens_to_add = new_draft_tokens
+                else:
+                    # If no collision, add all draft tokens plus the bonus token
+                    tokens_to_add = torch.concat(
+                        [new_draft_tokens, target_preds_for_draft[:, -1].unsqueeze(-1)],
+                        dim=-1,
+                    )
+                total_matched_tokens += new_draft_tokens.size(-1)
+            # Actually add the new tokens and update idxs
+            new_gen_idx = cur_gen_idx + tokens_to_add.size(-1)
+            generated_tokens[:, cur_gen_idx : new_gen_idx] = tokens_to_add
+            cur_gen_idx = new_gen_idx
+            
+            # Update kv caches
+            # Either cache should not include the last generated tok (either correction or bonus token)
+            draft_kv_cache = crop_kv_cache(draft_kv_cache, new_gen_idx - 1)
+            target_kv_cache = crop_kv_cache(target_kv_cache, new_gen_idx - 1)
             
             if track_iterations:
-                iteration_num += 1
-                draft_text = [tokenizer.decode([t]) for t in all_draft_tokens]
-                
-                if all_match:
-                    bonus_text = tokenizer.decode([bonus_token])
-                    result = f"ALL ACCEPTED ({num_drafted}) + BONUS '{bonus_text}'"
+                # FIXME: If we ever do batching this is wrong
+                draft_text = tokenizer.convert_ids_to_tokens(new_draft_tokens[0])
+                last_token = tokenizer.convert_ids_to_tokens(tokens_to_add[0][-1:])
+                if not collisions.any():
+                    result = f"ALL ACCEPTED ({len(new_draft_tokens[0])}) + BONUS '{last_token}'"
                 else:
-                    matched_count = len(accepted_tokens) - 1
-                    rejected_draft = tokenizer.decode([all_draft_tokens[matched_count]])
-                    target_correction = tokenizer.decode([accepted_tokens[-1]])
-                    if matched_count > 0:
-                        result = f"ACCEPTED {matched_count}, REJECTED '{rejected_draft}' -> TARGET '{target_correction}'"
-                    else:
-                        result = f"REJECTED '{rejected_draft}' -> TARGET '{target_correction}'"
-                
+                    first_collision_idx = collisions.int().argmax(dim=-1)
+                    rejected = tokenizer.convert_ids_to_tokens(new_draft_tokens[0][first_collision_idx])
+                    result = f"ACCEPTED {first_collision_idx}, REJECTED '{rejected}' -> TARGET '{last_token}'"
                 iteration_history.append({
-                    "iter": iteration_num,
+                    "iter": len(iteration_history),
                     "drafted": draft_text,
                     "result": result,
                 })
 
-            if any(t in stop_token_ids for t in accepted_tokens):
+            if torch.isin(generated_tokens[:,cur_gen_idx-1], stop_token_ids).any():
+                # Get rid of extra 0s
+                generated_tokens = generated_tokens[:,:cur_gen_idx]
                 break
     
     total_time = time.time() - start_time
     
     # Calculate acceptance rate (matched draft tokens / total draft tokens)
     acceptance_rate = total_matched_tokens / total_draft_tokens if total_draft_tokens > 0 else 0.0
+    total_generated_tokens = torch.count_nonzero(generated_tokens)
     
     metrics = {
         "total_time": total_time,
-        "generated_tokens": generated_count,
+        "generated_tokens": total_generated_tokens,
         "total_draft_tokens": total_draft_tokens,
         "total_matched_tokens": total_matched_tokens,
         "acceptance_rate": acceptance_rate,
@@ -292,7 +240,7 @@ def speculative_decode_greedy(
     if track_iterations:
         metrics["iteration_history"] = iteration_history
     
-    return current_ids, metrics
+    return generated_tokens, metrics
 
 
 def speculative_decode_translate(
@@ -363,7 +311,7 @@ def speculative_decode_translate(
     # Decode translation (only new tokens)
     translation = tokenizer.decode(
         output_ids[0][prompt_len:],
-        skip_special_tokens=True
+        skip_special_tokens=False
     ).strip()
     
     return translation, metrics
