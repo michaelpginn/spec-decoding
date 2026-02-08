@@ -93,6 +93,7 @@ def speculative_decode_greedy(
         output_ids: Generated token IDs
         metrics: Dict with acceptance_rate, total_time, etc.
     """
+    assert input_ids.shape[0] == 1, "Speculative decoding only supports batch_size=1"
     
     if device is None:
         device = next(target_model.parameters()).device
