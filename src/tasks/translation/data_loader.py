@@ -5,7 +5,7 @@ from pathlib import Path
 import csv
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-REFERENCE_TABLE = REPO_ROOT / "reference_table.csv"
+REFERENCE_TABLE = REPO_ROOT / "reference_table_bilingual.csv"
 DATA_DIR = REPO_ROOT / "data"
 
 def get_language_name(lang_code: str) -> str:
@@ -60,6 +60,6 @@ def load_tatoeba_data(target_lang: str, max_samples: int | None = None) -> list[
             if not source or not target:
                 continue
             pairs.append((source, target))
-            if max_samples is not None and len(pairs) >= max_samples:
+            if max_samples > 0 and len(pairs) >= max_samples:
                 break
         return pairs

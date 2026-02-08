@@ -107,7 +107,7 @@ def run_translation(config: ExperimentConfig):
     wandb.log({"spec/bleu": spec_bleu["bleu"], "spec/chrf2": spec_bleu["chrf2"]})
     logger.info(f"Spec BLEU: {spec_bleu['bleu']:.2f}  chrF2: {spec_bleu['chrf2']:.2f}")
 
-    # 7. Save token flow trace (for debugging spec decode behavior)
+    # 7. Save token flow trace
     output_dir = Path(f"./outputs/{config.language_code}")
     output_dir.mkdir(parents=True, exist_ok=True)
 
