@@ -113,23 +113,23 @@ def speculative_decode_greedy(
     )
     cur_gen_idx = input_ids.size(1)
 
-    # Preload kv cache for prompts
-    target_out = target_model(input_ids, use_cache=True)
-    target_kv_cache = target_out.past_key_values
-    draft_kv_cache = draft_model(input_ids, use_cache=True).past_key_values
-
-    # Add the first new token
-    last_target_token = target_out.logits[:,-1,:].argmax(dim=-1)
-    generated_tokens[:, cur_gen_idx] = last_target_token
-    cur_gen_idx += 1
-    
-    # Metrics
-    total_draft_tokens = 0
-    total_matched_tokens = 0  
-    iteration_history = []
-    start_time = time.time()
-    
     with torch.no_grad():
+        # Preload kv cache for prompts
+        target_out = target_model(input_ids, use_cache=True)
+        target_kv_cache = target_out.past_key_values
+        draft_kv_cache = draft_model(input_ids, use_cache=True).past_key_values
+
+        # Add the first new token
+        last_target_token = target_out.logits[:,-1,:].argmax(dim=-1)
+        generated_tokens[:, cur_gen_idx] = last_target_token
+        cur_gen_idx += 1
+        
+        # Metrics
+        total_draft_tokens = 0
+        total_matched_tokens = 0  
+        iteration_history = []
+        start_time = time.time()
+    
         while cur_gen_idx < generated_tokens.size(-1):
             # Step 1: Draft tokens
             # B * gamma (unless gamma > remaining tokens)
