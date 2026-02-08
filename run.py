@@ -7,6 +7,7 @@ import wandb
 
 from src.config.config import ExperimentConfig
 from src.config.config_to_dataclass import config_to_dataclass
+from src.tasks.translation.run import run_translation
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,7 +33,10 @@ def run(config: ExperimentConfig):
         entity="lecs-general",
         config=asdict(config),
     )
-    raise NotImplementedError()
+    if config.task == "translation":
+        run_translation(config)
+    else:
+        raise ValueError(f"Unknown task: {config.task}")
 
 
 if __name__ == "__main__":
