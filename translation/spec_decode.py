@@ -101,7 +101,7 @@ def speculative_decode_greedy(
     if device is None:
         device = next(target_model.parameters()).device
     
-    stop_token_ids = torch.tensor(list(get_stop_token_ids(tokenizer, eos_token_id)))
+    stop_token_ids = torch.tensor(list(get_stop_token_ids(tokenizer, eos_token_id)), device=device)
     input_ids = input_ids.to(device)
 
     # B,S+max_new
@@ -185,12 +185,17 @@ def speculative_decode_greedy(
                 if torch.isin(new_draft_tokens[:,-1], stop_token_ids).any():
                     # If we've reached <eos>, don't add bonus token
                     tokens_to_add = new_draft_tokens
+
                 else:
-                    # If no collision, add all draft tokens plus the bonus token
-                    tokens_to_add = torch.concat(
-                        [new_draft_tokens, target_preds_for_draft[:, -1].unsqueeze(-1)],
-                        dim=-1,
-                    )
+                    # If no collision, add all draft tokens plus the bonus token (if room)
+                    if cur_gen_idx + new_draft_tokens.size(-1) < generated_tokens.size(-1):
+                        tokens_to_add = torch.concat(
+                            [new_draft_tokens, target_preds_for_draft[:, -1].unsqueeze(-1)],
+                            dim=-1,
+                        )
+                    else:
+                        tokens_to_add = new_draft_tokens
+
                 total_matched_tokens += new_draft_tokens.size(-1)
             # Actually add the new tokens and update idxs
             new_gen_idx = cur_gen_idx + tokens_to_add.size(-1)
