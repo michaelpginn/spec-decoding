@@ -14,7 +14,7 @@ class ExperimentConfig:
     task: str = "translation"
     data_source: str = "tatoeba"
     max_samples: int = 5
-    max_length: int = 256
+    max_new_tokens: int = 256
     gamma: int = 5
     use_hf_assisted: bool = False
     device: str = "auto"

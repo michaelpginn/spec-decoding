@@ -15,7 +15,7 @@ def create_translation_messages(source: str, target_lang: str) -> list:
         }
     ]
 
-def translate_target(model, tokenizer, source: str, target_lang: str, max_length: int = 512, device=None, debug: bool = False):
+def translate_target(model, tokenizer, source: str, target_lang: str, max_new_tokens: int = 512, device=None, debug: bool = False):
     """Translate using Qwen chat template."""
     messages = create_translation_messages(source, target_lang)
     
@@ -29,7 +29,7 @@ def translate_target(model, tokenizer, source: str, target_lang: str, max_length
         print(f"\n[DEBUG] Prompt:\n{prompt}\n{'='*60}")
     
     # Tokenize
-    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=max_length)
+    inputs = tokenizer(prompt, return_tensors="pt")
     if device is not None:
         inputs = {k: v.to(device) for k, v in inputs.items()}
     else:
@@ -37,12 +37,13 @@ def translate_target(model, tokenizer, source: str, target_lang: str, max_length
         inputs = {k: v.to(device) for k, v in inputs.items()}
     
     # Generate
-    out = model.generate(
-        **inputs,
-        max_new_tokens=max_length,
-        do_sample=False,
-        pad_token_id=tokenizer.eos_token_id,
-    )
+    with torch.no_grad():
+        out = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            pad_token_id=tokenizer.eos_token_id,
+        )
     
     # Decode only the new tokens (after the prompt)
     prompt_len = inputs["input_ids"].shape[1]
@@ -56,7 +57,7 @@ def speculative_decode_translate(
     tokenizer,
     source: str,
     target_lang: str,
-    max_length: int = 256,
+    max_new_tokens: int = 256,
     gamma: int = 5,
     device=None,
     debug: bool = False,
@@ -72,7 +73,7 @@ def speculative_decode_translate(
         tokenizer: Shared tokenizer
         source: Source text to translate
         target_lang: Target language name (e.g., "Nepali")
-        max_length: Maximum new tokens
+        max_new_tokens: Maximum new tokens to generate
         gamma: Number of draft tokens per iteration
         device: Device to run on
         debug: Print debug info
@@ -99,7 +100,7 @@ def speculative_decode_translate(
         print(f"\n[DEBUG] Prompt:\n{prompt}\n{'='*60}")
     
     # Tokenize
-    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=max_length)
+    inputs = tokenizer(prompt, return_tensors="pt")
     input_ids = inputs["input_ids"].to(device)
     prompt_len = input_ids.shape[1]
     
@@ -109,7 +110,7 @@ def speculative_decode_translate(
         draft_model=draft_model,
         tokenizer=tokenizer,
         input_ids=input_ids,
-        max_new_tokens=max_length,
+        max_new_tokens=max_new_tokens,
         gamma=gamma,
         device=device,
         track_iterations=track_iterations
@@ -118,7 +119,7 @@ def speculative_decode_translate(
     # Decode translation (only new tokens)
     translation = tokenizer.decode(
         output_ids[0][prompt_len:],
-        skip_special_tokens=False
+        skip_special_tokens=True
     ).strip()
     
     return translation, metrics
@@ -131,7 +132,7 @@ def assisted_decode_hf(
     draft_tokenizer,
     source: str,
     target_lang: str,
-    max_length: int = 512,
+    max_new_tokens: int = 512,
     device=None,
     return_metrics: bool = True,
     num_assistant_tokens: int = 5,
@@ -157,7 +158,7 @@ def assisted_decode_hf(
         add_generation_prompt=True
     )
 
-    inputs = target_tokenizer(prompt, return_tensors="pt", truncation=True, max_length=max_length)
+    inputs = target_tokenizer(prompt, return_tensors="pt")
     input_ids = inputs["input_ids"].to(device)
     attention_mask = inputs["attention_mask"].to(device)
     prompt_len = input_ids.shape[1]
@@ -170,7 +171,7 @@ def assisted_decode_hf(
     generate_kwargs = {
         "attention_mask": attention_mask,
         "assistant_model": draft_model,
-        "max_new_tokens": max_length,
+        "max_new_tokens": max_new_tokens,
         "do_sample": False,
         "pad_token_id": target_tokenizer.eos_token_id,
         "num_assistant_tokens": num_assistant_tokens,

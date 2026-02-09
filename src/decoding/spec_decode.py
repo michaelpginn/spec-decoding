@@ -206,13 +206,13 @@ def speculative_decode_greedy(
             
             if track_iterations:
                 # FIXME: If we ever do batching this is wrong
-                draft_text = tokenizer.convert_ids_to_tokens(new_draft_tokens[0])
-                last_token = tokenizer.convert_ids_to_tokens(tokens_to_add[0][-1:])
+                draft_text = tokenizer.convert_ids_to_tokens(new_draft_tokens[0].tolist())
+                last_token = tokenizer.convert_ids_to_tokens(int(tokens_to_add[0, -1].item()))
                 if not collisions.any():
                     result = f"ALL ACCEPTED ({len(new_draft_tokens[0])}) + BONUS '{last_token}'"
                 else:
-                    first_collision_idx = collisions.int().argmax(dim=-1)
-                    rejected = tokenizer.convert_ids_to_tokens(new_draft_tokens[0][first_collision_idx])
+                    first_collision_idx = collisions.int().argmax(dim=-1).item()
+                    rejected = tokenizer.convert_ids_to_tokens(new_draft_tokens[0][first_collision_idx].item())
                     result = f"ACCEPTED {first_collision_idx}, REJECTED '{rejected}' -> TARGET '{last_token}'"
                 iteration_history.append({
                     "iter": len(iteration_history),
@@ -229,7 +229,7 @@ def speculative_decode_greedy(
     
     # Calculate acceptance rate (matched draft tokens / total draft tokens)
     acceptance_rate = total_matched_tokens / total_draft_tokens if total_draft_tokens > 0 else 0.0
-    total_generated_tokens = torch.count_nonzero(generated_tokens)
+    total_generated_tokens = cur_gen_idx - input_ids.size(1)
     
     metrics = {
         "total_time": total_time,

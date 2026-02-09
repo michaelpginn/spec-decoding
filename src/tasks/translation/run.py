@@ -44,7 +44,7 @@ def run_translation(config: ExperimentConfig):
         start = time.time()
         translation = translate_target(
             target_model, target_tokenizer, source, lang_name,
-            max_length=config.max_length, device=device,
+            max_new_tokens=config.max_new_tokens, device=device,
         )
         baseline_times.append(time.time() - start)
         baseline_translations.append(translation)
@@ -73,7 +73,7 @@ def run_translation(config: ExperimentConfig):
                 target_model, target_tokenizer,
                 draft_model, draft_tokenizer,
                 source, lang_name,
-                max_length=config.max_length,
+                max_new_tokens=config.max_new_tokens,
                 device=device,
                 num_assistant_tokens=config.gamma,
             )
@@ -88,7 +88,7 @@ def run_translation(config: ExperimentConfig):
                 tokenizer=target_tokenizer,
                 source=source,
                 target_lang=lang_name,
-                max_length=config.max_length,
+                max_new_tokens=config.max_new_tokens,
                 gamma=config.gamma,
                 device=device,
                 track_iterations=True,

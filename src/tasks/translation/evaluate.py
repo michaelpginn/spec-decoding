@@ -11,7 +11,7 @@ def compute_bleu(references: list[str], hypotheses: list[str], verbose: bool = T
     Returns:
         dict with bleu and chrf2 keys
     """
-    refs = [[r] for r in references]
+    refs = [references]
     bleu = sacrebleu.corpus_bleu(hypotheses, refs)
     chrf = sacrebleu.corpus_chrf(hypotheses, refs)
 

@@ -60,6 +60,6 @@ def load_tatoeba_data(target_lang: str, max_samples: int | None = None) -> list[
             if not source or not target:
                 continue
             pairs.append((source, target))
-            if max_samples > 0 and len(pairs) >= max_samples:
+            if max_samples is not None and max_samples > 0 and len(pairs) >= max_samples:
                 break
         return pairs
