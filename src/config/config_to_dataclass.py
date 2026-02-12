@@ -26,7 +26,11 @@ def config_to_dataclass(
         raise ValueError("Must provide a config file!")
 
     config = configparser.ConfigParser()
-    config.read(config_path)
+    read_files = config.read(config_path)
+    if not read_files:
+        raise FileNotFoundError(
+            f"Config file '{config_path}' does not exist or could not be read"
+        )
 
     overrides_dict = parse_overrides(overrides)
 
