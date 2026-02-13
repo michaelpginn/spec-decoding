@@ -30,7 +30,7 @@ def run(config: ExperimentConfig):
     # 2. If no draft model is provided, train the draft model
     # 3. Run according to the setting and log metrics to wandb
     wandb.init(
-        project=os.environ.get("WANDB_PROJECT", "polygloss"),
+        project=os.environ.get("WANDB_PROJECT", "spec-decoding"),
         entity=os.environ.get("WANDB_ENTITY", "lecs-general"),
         config=asdict(config),
     )

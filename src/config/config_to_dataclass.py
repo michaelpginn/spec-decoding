@@ -1,8 +1,11 @@
 import configparser
+import logging
 from dataclasses import MISSING, fields, is_dataclass
 from typing import Any, Literal, Optional, Type, TypeVar, get_args, get_origin
 
 T = TypeVar("T")
+
+logger = logging.getLogger(__name__)
 
 
 def parse_overrides(overrides: list[str]):
@@ -26,7 +29,11 @@ def config_to_dataclass(
         raise ValueError("Must provide a config file!")
 
     config = configparser.ConfigParser()
-    config.read(config_path)
+    read_files = config.read(config_path)
+    if not read_files:
+        raise FileNotFoundError(
+            f"Config file '{config_path}' does not exist or could not be read"
+        )
 
     overrides_dict = parse_overrides(overrides)
 
@@ -44,7 +51,7 @@ def config_to_dataclass(
         if field.name in overrides_dict:
             # Use the override if available
             if field_type is bool:
-                value = bool(overrides_dict[field.name])
+                value = overrides_dict[field.name].lower() in ("true", "1", "yes")
             elif field_type is int:
                 value = int(overrides_dict[field.name])
             elif field_type is float:
@@ -80,8 +87,8 @@ def config_to_dataclass(
                 value = field.default if field.default is not MISSING else None
             except ValueError as e:
                 # Handle type conversion and Literal validation errors
-                print(
-                    f"Warning: {e}. Using default value for '{field.name}' in section '[config]'."
+                logger.warning(
+                    f"{e}. Using default value for '{field.name}' in section '[config]'."
                 )
                 value = field.default if field.default is not MISSING else None
 
