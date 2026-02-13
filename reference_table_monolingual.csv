@@ -1,30 +1,31 @@
-Language,Code,source,# of units,path
-Berber,ber,tatoeba,52834,data/monolingual/ber/tatoeba.tsv
-Cherokee,chr,tatoeba,31,data/monolingual/chr/tatoeba.tsv
-Hawaiian,haw,https://dohliam.github.io/corpus/haw/,91984,data/monolingual/haw/2grams_haw.txt
-Hawaiian,haw,https://dohliam.github.io/corpus/haw/,5461,data/monolingual/haw/3grams_haw.txt
-Hawaiian,haw,https://dohliam.github.io/corpus/haw/,12612,data/monolingual/haw/4grams_haw.txt
-Hawaiian,haw,https://dohliam.github.io/corpus/haw/,96140,data/monolingual/haw/freqlist_haw.txt
-Hawaiian,haw,https://dohliam.github.io/corpus/haw/,99,data/monolingual/haw/stoplist_haw.txt
-Hawaiian,haw,tatoeba,160,data/monolingual/haw/tatoeba.tsv
-Igbo,ibo,https://wortschatz.uni-leipzig.de/en/download/ibo,7742,data/monolingual/ibo/ibo_community_2017-sentences.txt
-Igbo,ibo,https://wortschatz.uni-leipzig.de/en/download/ibo,14624,data/monolingual/ibo/ibo_community_2017-words.txt
-Igbo,ibo,https://wortschatz.uni-leipzig.de/en/download/ibo,10000,data/monolingual/ibo/ibo_wikipedia_2021_10K-sentences.txt
-Igbo,ibo,https://wortschatz.uni-leipzig.de/en/download/ibo,23685,data/monolingual/ibo/ibo_wikipedia_2021_10K-words.txt
-Igbo,ibo,tatoeba,46,data/monolingual/ibo/tatoeba.tsv
-Lakota,lkt,tatoeba,22,data/monolingual/lkt/tatoeba.tsv
-Muskogee (Creek),mus,tatoeba,640,data/monolingual/mus/tatoeba.tsv
-Nepali,npi,tatoeba,4504,data/monolingual/npi/tatoeba.tsv
-Occitan,oci,https://wortschatz-leipzig.de/en/download/oci#oci_community_2017,10000,data/monolingual/oci/oci-fr_web_2020_10K-sentences.txt
-Occitan,oci,https://wortschatz-leipzig.de/en/download/oci#oci_community_2017,25982,data/monolingual/oci/oci-fr_web_2020_10K-words.txt
-Occitan,oci,https://wortschatz-leipzig.de/en/download/oci#oci_community_2017,1792,data/monolingual/oci/oci_community_2023-sentences.txt
-Occitan,oci,https://wortschatz-leipzig.de/en/download/oci#oci_community_2017,257903,data/monolingual/oci/oci_community_2023-words.txt
-Occitan,oci,https://wortschatz-leipzig.de/en/download/oci#oci_community_2017,99981,data/monolingual/oci/oci_wikipedia_2021_100K-sentences.txt
-Occitan,oci,https://wortschatz-leipzig.de/en/download/oci#oci_community_2017,161875,data/monolingual/oci/oci_wikipedia_2021_100K-words.txt
-Occitan,oci,tatoeba,24157,data/monolingual/oci/tatoeba.tsv
-Ojibwe,oji,tatoeba,111,data/monolingual/oji/tatoeba.tsv
-Quechua,que,tatoeba,435,data/monolingual/que/tatoeba.tsv
-Quechua,que,hugging face,175408,data/monolingual/que/hugging_face.py
-Maya,yua,tatoeba,33,data/monolingual/yua/tatoeba.tsv
-Tamazight,zgh,tatoeba,20665,data/monolingual/zgh/tatoeba.tsv
-Tamazight,zgh,hugging face,55,data/monolingual/zgh/hugging_face.py
+Language,Code,source,# of units,original path,hugging face 
+Berber,ber,tatoeba,52834,data/monolingual/ber/tatoeba.tsv,lecslab/monoling_ber
+Cherokee,chr,tatoeba,31,data/monolingual/chr/tatoeba.tsv,lecslab/monoling_chr
+Hawaiian,haw,https://dohliam.github.io/corpus/haw/,91984,data/monolingual/haw/2grams_haw.txt,lecslab/monoling_haw
+Hawaiian,haw,https://dohliam.github.io/corpus/haw/,5461,data/monolingual/haw/3grams_haw.txt,
+Hawaiian,haw,https://dohliam.github.io/corpus/haw/,12612,data/monolingual/haw/4grams_haw.txt,
+Hawaiian,haw,https://dohliam.github.io/corpus/haw/,96140,data/monolingual/haw/freqlist_haw.txt,
+Hawaiian,haw,https://dohliam.github.io/corpus/haw/,99,data/monolingual/haw/stoplist_haw.txt,
+Hawaiian,haw,tatoeba,160,data/monolingual/haw/tatoeba.tsv,
+Igbo,ibo,https://wortschatz.uni-leipzig.de/en/download/ibo,7742,data/monolingual/ibo/ibo_community_2017-sentences.txt,lecslab/monoling_ibo
+Igbo,ibo,https://wortschatz.uni-leipzig.de/en/download/ibo,14624,data/monolingual/ibo/ibo_community_2017-words.txt,
+Igbo,ibo,https://wortschatz.uni-leipzig.de/en/download/ibo,10000,data/monolingual/ibo/ibo_wikipedia_2021_10K-sentences.txt,
+Igbo,ibo,https://wortschatz.uni-leipzig.de/en/download/ibo,23685,data/monolingual/ibo/ibo_wikipedia_2021_10K-words.txt,
+Igbo,ibo,tatoeba,46,data/monolingual/ibo/tatoeba.tsv,
+Lakota,lkt,tatoeba,22,data/monolingual/lkt/tatoeba.tsv,lecslab/monoling_lkt
+Muskogee (Creek),mus,tatoeba,640,data/monolingual/mus/tatoeba.tsv,lecslab/monoling_mus
+Nepali,npi,tatoeba,4504,data/monolingual/npi/tatoeba.tsv,lecslab/monoling_npi
+Occitan,oci,https://wortschatz-leipzig.de/en/download/oci#oci_community_2017,10000,data/monolingual/oci/oci-fr_web_2020_10K-sentences.txt,lecslab/monoling_oci
+Occitan,oci,https://wortschatz-leipzig.de/en/download/oci#oci_community_2017,25982,data/monolingual/oci/oci-fr_web_2020_10K-words.txt,
+Occitan,oci,https://wortschatz-leipzig.de/en/download/oci#oci_community_2017,1792,data/monolingual/oci/oci_community_2023-sentences.txt,
+Occitan,oci,https://wortschatz-leipzig.de/en/download/oci#oci_community_2017,257903,data/monolingual/oci/oci_community_2023-words.txt,
+Occitan,oci,https://wortschatz-leipzig.de/en/download/oci#oci_community_2017,99981,data/monolingual/oci/oci_wikipedia_2021_100K-sentences.txt,
+Occitan,oci,https://wortschatz-leipzig.de/en/download/oci#oci_community_2017,161875,data/monolingual/oci/oci_wikipedia_2021_100K-words.txt,
+Occitan,oci,tatoeba,24157,data/monolingual/oci/tatoeba.tsv,
+Ojibwe,oji,tatoeba,111,data/monolingual/oji/tatoeba.tsv,lecslab/monoling_oji
+Quechua,que,tatoeba,435,data/monolingual/que/tatoeba.tsv,lecslab/monoling_que
+Quechua,que,hugging face,175408,data/monolingual/que/hugging_face.py,Llamacha/monolingual-quechua-iic
+Maya,yua,tatoeba,33,data/monolingual/yua/tatoeba.tsv,lecslab/monoling_yua
+Tamazight,zgh,tatoeba,20665,data/monolingual/zgh/tatoeba.tsv,lecslab/monoling_zgh
+Tamazight,zgh,hugging face,55,data/monolingual/zgh/hugging_face.py,Tamazight-NLP/IRCAM-CORPUS
+Chinese,zh,hugging face,958000000,,opencsg/Fineweb-Edu-Chinese-V2.1

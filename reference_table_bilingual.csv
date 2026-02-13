@@ -1,16 +1,17 @@
-Language,Code,source,# of units,path
-Berber,ber,tatoeba,353517,data/bilingual/ber/tatoeba.tsv
-Cherokee,chr,tatoeba,28,data/bilingual/chr/tatoeba.tsv
-Cherokee,chr,hugging face,45,data/bilingual/chr/hugging_face.py
-Cherokee,chr,cherokeedictionary.net/,11395,data/bilingual/chr/dictionary.csv
-Hawaiian,haw,tatoeba,121,data/bilingual/haw/tatoeba.tsv
-Igbo,ibo,tatoeba,43,data/bilingual/ibo/tatoeba.tsv
-Lakota,lkt,tatoeba,22,data/bilingual/lkt/tatoeba.tsv
-Muskogee (Creek),mus,tatoeba,512,data/bilingual/mus/tatoeba.tsv
-Nepali,npi,tatoeba,3917,data/bilingual/npi/tatoeba.tsv
-Nepali,npi,hugging face,6391117,data/bilingualnpi/hugging_face.py
-Occitan,oci,tatoeba,4540,data/bilingual/oci/tatoeba.tsv
-Ojibwe,oji,tatoeba,116,data/bilingual/oji/tatoeba.tsv
-Quechua,que,tatoeba,279,data/bilingual/que/tatoeba.tsv
-Maya,yua,tatoeba,25,data/bilingual/yua/tatoeba.tsv
-Tamazight,zgh,tatoeba,15760,data/bilingual/zgh/tatoeba.tsv
+Language,Code,source,# of units,path,Hugging face
+Berber,ber,tatoeba,353517,data/bilingual/ber/tatoeba.tsv,lecslab/biling_ber
+Cherokee,chr,tatoeba,28,data/bilingual/chr/tatoeba.tsv,lecslab/biling_chr
+Cherokee,chr,cherokeedictionary.net/,11395,data/bilingual/chr/dictionary.csv,
+Cherokee,chr,hugging face,45,data/bilingual/chr/hugging_face.py,wang4067/cherokee-english-45
+Hawaiian,haw,tatoeba,121,data/bilingual/haw/tatoeba.tsv,lecslab/biling_haw
+Igbo,ibo,tatoeba,43,data/bilingual/ibo/tatoeba.tsv,lecslab/biling_ibo
+Lakota,lkt,tatoeba,22,data/bilingual/lkt/tatoeba.tsv,lecslab/biling_lkt
+Muskogee (Creek),mus,tatoeba,512,data/bilingual/mus/tatoeba.tsv,lecslab/biling_mus
+Nepali,npi,tatoeba,3917,data/bilingual/npi/tatoeba.tsv,lecslab/biling_npi
+Nepali,npi,hugging face,6391117,data/bilingualnpi/hugging_face.py,IRIIS-RESEARCH/Nepali-Text-Corpus
+Occitan,oci,tatoeba,4540,data/bilingual/oci/tatoeba.tsv,lecslab/biling_oci
+Ojibwe,oji,tatoeba,116,data/bilingual/oji/tatoeba.tsv,lecslab/biling_oji
+Quechua,que,tatoeba,279,data/bilingual/que/tatoeba.tsv,lecslab/biling_que
+Maya,yua,tatoeba,25,data/bilingual/yua/tatoeba.tsv,lecslab/biling_yua
+Tamazight,zgh,tatoeba,15760,data/bilingual/zgh/tatoeba.tsv,lecslab/biling_zgh
+Chinese,zh,hugging face,1000000,,Helsinki-NLP/opus-100
