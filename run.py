@@ -1,12 +1,14 @@
 import argparse
 import logging
 import pprint
+import os
 from dataclasses import asdict
 
 import wandb
 
 from src.config.config import ExperimentConfig
 from src.config.config_to_dataclass import config_to_dataclass
+from src.tasks.translation.run import run_translation
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,11 +30,14 @@ def run(config: ExperimentConfig):
     # 2. If no draft model is provided, train the draft model
     # 3. Run according to the setting and log metrics to wandb
     wandb.init(
-        project="polygloss",
-        entity="lecs-general",
+        project=os.environ.get("WANDB_PROJECT", "spec-decoding"),
+        entity=os.environ.get("WANDB_ENTITY", "lecs-general"),
         config=asdict(config),
     )
-    raise NotImplementedError()
+    if config.task == "translation":
+        run_translation(config)
+    else:
+        raise ValueError(f"Unknown task: {config.task}")
 
 
 if __name__ == "__main__":

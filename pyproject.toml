@@ -14,4 +14,5 @@ dependencies = [
     "accelerate>=0.30.0",
     "bitsandbytes>=0.43.0",
     "wandb>=0.24.2",
+    "sacrebleu>=2.0.0"
 ]
