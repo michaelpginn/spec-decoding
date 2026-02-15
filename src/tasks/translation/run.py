@@ -8,7 +8,7 @@ import wandb
 
 from src.config.config import ExperimentConfig
 from src.decoding.models import load_model
-from src.evaluation import compute_spec_metrics
+from src.evaluation import compute_baseline_metrics, compute_spec_metrics
 from src.tasks.translation.data_loader import load_tatoeba_data, get_language_name
 from src.tasks.translation.translate import (
     translate_target,
@@ -36,22 +36,38 @@ def run_translation(config: ExperimentConfig):
     target_model, target_tokenizer = load_model(config.target_model, device=config.device)
     device = next(target_model.parameters()).device
 
-    # 3. Baseline (always run for comparison)
-    baseline_times = []
-    baseline_translations = []
-    logger.info("Running baseline...")
-    for i, source in enumerate(tqdm(sources, desc="Baseline")):
-        start = time.time()
-        translation = translate_target(
-            target_model, target_tokenizer, source, lang_name,
-            max_new_tokens=config.max_new_tokens, device=device,
-        )
-        baseline_times.append(time.time() - start)
-        baseline_translations.append(translation)
+    # 3. Baseline run
+    if config.draft_model_type == "none":
+        baseline_times = []
+        baseline_translations = []
+        logger.info("Running baseline (no draft model)...")
+        for i, source in enumerate(tqdm(sources, desc="Baseline")):
+            start = time.time()
+            translation = translate_target(
+                target_model, target_tokenizer, source, lang_name,
+                max_new_tokens=config.max_new_tokens, device=device,
+            )
+            baseline_times.append(time.time() - start)
+            baseline_translations.append(translation)
 
-    baseline_bleu = compute_bleu(references, baseline_translations, verbose=False)
-    wandb.log({"baseline/bleu": baseline_bleu["bleu"], "baseline/chrf2": baseline_bleu["chrf2"]})
-    logger.info(f"Baseline BLEU: {baseline_bleu['bleu']:.2f}  chrF2: {baseline_bleu['chrf2']:.2f}")
+        baseline_bleu = compute_bleu(references, baseline_translations, verbose=False)
+        per_sentence, summary = compute_baseline_metrics(baseline_times)
+
+        # Log per-sentence metrics
+        for entry in per_sentence:
+            wandb.log(entry)
+
+        # Log summary (includes timing + BLEU)
+        summary["baseline/bleu"] = baseline_bleu["bleu"]
+        summary["baseline/chrf2"] = baseline_bleu["chrf2"]
+        wandb.summary.update(summary)
+
+        logger.info(
+            f"Baseline BLEU: {baseline_bleu['bleu']:.2f}  chrF2: {baseline_bleu['chrf2']:.2f}  "
+            f"Total time: {summary['baseline/total_time']:.2f}s  "
+            f"Avg: {summary['baseline/avg_time_per_sentence']:.2f}s/sentence"
+        )
+        return
 
     # 4. Load draft model
     if config.draft_model:
@@ -96,16 +112,26 @@ def run_translation(config: ExperimentConfig):
             spec_translations.append(translation)
             spec_results.append(metrics)
 
-        spec_metrics = compute_spec_metrics(
-            spec_results, gamma=config.gamma,
-            baseline_times=baseline_times, verbose=False
-        )
-        wandb.log(spec_metrics)
+    spec_metrics = compute_spec_metrics(
+        spec_results, gamma=config.gamma, verbose=False
+    )
 
-    # 6. Translation quality
+    # 6. Log all spec metrics
+    per_sentence, summary = spec_metrics
+
+    for entry in per_sentence:
+        wandb.log(entry)
+
     spec_bleu = compute_bleu(references, spec_translations, verbose=False)
-    wandb.log({"spec/bleu": spec_bleu["bleu"], "spec/chrf2": spec_bleu["chrf2"]})
-    logger.info(f"Spec BLEU: {spec_bleu['bleu']:.2f}  chrF2: {spec_bleu['chrf2']:.2f}")
+    summary["spec/bleu"] = spec_bleu["bleu"]
+    summary["spec/chrf2"] = spec_bleu["chrf2"]
+    wandb.summary.update(summary)
+
+    logger.info(
+        f"Spec BLEU: {spec_bleu['bleu']:.2f}  chrF2: {spec_bleu['chrf2']:.2f}  "
+        f"Total time: {summary['spec/total_time']:.2f}s  "
+        f"Avg: {summary['spec/avg_time_per_sentence']:.2f}s/sentence"
+    )
 
     # 7. Save token flow trace
     output_dir = Path(f"./outputs/{config.language_code}")

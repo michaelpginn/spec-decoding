@@ -33,6 +33,7 @@ def run(config: ExperimentConfig):
         project=os.environ.get("WANDB_PROJECT", "spec-decoding"),
         entity=os.environ.get("WANDB_ENTITY", "lecs-general"),
         config=asdict(config),
+        name=f"{config.language_code}_{config.decoding_mode}_{'spec' if config.draft_model and config.draft_model != 'None' else 'baseline'}",
     )
     if config.task == "translation":
         run_translation(config)
