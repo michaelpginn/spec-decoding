@@ -18,17 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 def run(config: ExperimentConfig):
-    # TODO: Main script for running spec decoding eval
-    # Should take command-line args such as:
-    # - source (ntrex | totoeba | other)
-    # - language code
-    # - spec decoding setting (greedy, eagle, etc)
-    # - draft model setting (n-gram, distill, etc)
-    # - draft model name (if already trained)
-    # Then do the following:
-    # 1. Load the appropriate evaluation dataset
-    # 2. If no draft model is provided, train the draft model
-    # 3. Run according to the setting and log metrics to wandb
+    """Run experiment: load config, init wandb, dispatch to task (e.g. translation)."""
     wandb.init(
         project=os.environ.get("WANDB_PROJECT", "spec-decoding"),
         entity=os.environ.get("WANDB_ENTITY", "lecs-general"),

@@ -14,7 +14,7 @@ REFERENCE_TABLE = REPO_ROOT / "reference_table_bilingual.csv"
 
 def get_language_name(lang_code: str) -> str:
     """
-    Get full language name from language code using reference_table.csv.
+    Get full language name from language code using reference_table_bilingual.csv.
     e.g. 'npi' -> 'Nepali', 'chr' -> 'Cherokee'
     """
     lang_code = lang_code.strip().lower()

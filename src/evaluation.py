@@ -20,7 +20,7 @@ def compute_baseline_metrics(
     avg_time = total_time / len(baseline_times)
 
     per_sentence = [
-        {"baseline/sentence_time": t, "sentence": i}
+        {"baseline/per_sentence_time": t, "sentence": i}
         for i, t in enumerate(baseline_times)
     ]
 
