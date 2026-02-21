@@ -1,5 +1,5 @@
 import pandas as pd
-from datasets import load_dataset, concatenate_datasets
+from datasets import concatenate_datasets, load_dataset
 from pandas import DataFrame
 
 
@@ -11,7 +11,7 @@ def load_data(df: DataFrame, lang: str, type: str):
         hugging = [item["hugging face "] for item in land_df]
         loading_data = load_dataset(hugging[0], "en-zh")
         return loading_data
-    elif len(land_df) > 0:
+    elif len(land_df) > 1:
         hugging = [
             item["hugging face "]
             for item in land_df
@@ -24,7 +24,10 @@ def load_data(df: DataFrame, lang: str, type: str):
         loading_data = concatenate_datasets([loading_data_1, loading_data_2])
         return loading_data
     else:
-        hugging = [item["hugging face "] for item in land_df]
+        hugging = [
+            item["hugging face "]
+            for item in land_df and land_df["hugging face "] is not None
+        ]
         loading_data = load_dataset(hugging[0])
         return loading_data
 
