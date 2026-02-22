@@ -6,13 +6,9 @@ from nltk import bigrams, trigrams
 
 class bigram_model:
     def __init__(self, train, test) -> None:
-        self.train,self.test = [],[]
         self.model = defaultdict(lambda: defaultdict(lambda: 0.0))
-        for tr,te in zip(train,test):
-            self.train.append(nltk.word_tokenize(' '.join(tr)))
-            self.test.append(nltk.word_tokenize(' '.join(te)))
-        self.bi_train = list(bigrams((self.train)))
-        self.bi_test =  list(bigrams((self.test)))
+
+        for
 
 
     def training(self):
