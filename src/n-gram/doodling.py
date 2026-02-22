@@ -11,7 +11,7 @@ from data_loading import data_prep
 
 dataset = data_prep(language='Ojibwe', text_type="mono")
 train,test = dataset.prepare_data()
-train = [item for item in train]
+train = [item['Ojibwwe'] for item in train]
 test = [item for item in test]
 
-print(train[0])
+print(train['Ojibwwe'])

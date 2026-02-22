@@ -31,8 +31,8 @@ def main():
     for language in languages:
         dataset = data_prep(language=language, text_type="mono")
         train,test = dataset.prepare_data()
-        train = [item for item in train]
-        test = [item for item in test]
+        train = [item[language] for item in train]
+        test = [item[language] for item in test]
     return 0
 
 
