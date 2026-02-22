@@ -6,8 +6,6 @@ from datasets import Dataset, concatenate_datasets, load_dataset
 
 def load_data(df: list, lang: str, type: str):
     land_df = [d for d in df if d["Language"] == lang]
-    if len(land_df) == 0:
-        return "Wrong input"
     if lang == "Chinese" and type == "monolingual":
         hugging = [item["hugging face "] for item in land_df]
         loading_data = cast(Dataset, load_dataset(hugging[0], "en-zh"))
@@ -33,12 +31,10 @@ def load_data(df: list, lang: str, type: str):
 
 
 def get_data(lang: str, mono_or_bi: str):
-    if mono_or_bi == "mono":
-        df = pd.read_csv("reference_table_monolingual.csv").to_dict("records")
-        return load_data(df, lang, mono_or_bi)
+    file = "reference_table_monolingual.csv" if mono_or_bi=="mono" else "reference_table_bilingual.csv"
 
-    elif mono_or_bi == "bi":
-        df = pd.read_csv("reference_table_bilingual.csv").to_dict("records")
+    try:
+        df = pd.read_csv(file).to_dict("records")
         return load_data(df, lang, mono_or_bi)
-    else:
-        return "Wrong input"
+    except FileNotFoundError:
+        raise
