@@ -1,7 +1,3 @@
-import sys
-
-import pandas as pd
-
 from data import hugging_face_data
 
 

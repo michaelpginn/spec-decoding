@@ -1,5 +1,7 @@
+from typing import cast
+
 import pandas as pd
-from datasets import concatenate_datasets, load_dataset
+from datasets import Dataset, concatenate_datasets, load_dataset
 
 
 def load_data(df: list, lang: str, type: str):
@@ -8,7 +10,7 @@ def load_data(df: list, lang: str, type: str):
         return "Wrong input"
     if lang == "Chinese" and type == "monolingual":
         hugging = [item["hugging face "] for item in land_df]
-        loading_data = load_dataset(hugging[0], "en-zh")
+        loading_data = cast(Dataset, load_dataset(hugging[0], "en-zh"))
         return loading_data
     elif len(land_df) == 2:
         hugging = [
@@ -16,8 +18,8 @@ def load_data(df: list, lang: str, type: str):
             for item in land_df
             if item["hugging face "] is not None
         ]
-        loading_data_1 = load_dataset(hugging[0], split="train")
-        loading_data_2 = load_dataset(hugging[1], split="train")
+        loading_data_1 = cast(Dataset, load_dataset(hugging[0], split="train"))
+        loading_data_2 = cast(Dataset, load_dataset(hugging[1], split="train"))
 
         loading_data = concatenate_datasets([loading_data_1, loading_data_2])
         return loading_data
@@ -26,7 +28,7 @@ def load_data(df: list, lang: str, type: str):
             item["hugging face "]
             for item in land_df if item["hugging face "] is not None
         ]
-        loading_data = load_dataset(hugging[0])
+        loading_data = cast(Dataset, load_dataset(hugging[0]))
         return loading_data
 
 
