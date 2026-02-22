@@ -1,29 +1,13 @@
+import sys
+
 import pandas as pd
-from hugging_face_data import get_data
+
+from data import hugging_face_data
 
 
 class data_prep:
-    def __init__(self):
-        self.languages: list = [
-            "Berber",
-            "Cherokee",
-            "Hawaiian",
-            "Igbo",
-            "Lakota",
-            "Muskogee(Creek)",
-            "Nepali",
-            "Occitan",
-            "Occitan",
-            "Ojibwe",
-            "Quechua",
-            "Maya",
-            "Tamazight",
-            "Chinese",
-        ]
-
-        def retrieve_data(self):
-            self.df = pd.read_csv(
-                "../../src/data/reference_table_monolingual.csv"
-            ).to_dict("records")
-            for language in self.languages:
-                self.data = get_data(language, "mono")
+    def __init__(self, language: str, text_type: str):
+        self.language = language
+        self.text_type = text_type
+    def prepare_data(self):
+        self.data = hugging_face_data.get_data(self.language,self.text_type)
