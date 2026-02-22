@@ -13,7 +13,7 @@ def compute_baseline_metrics(
 
     Returns:
         (per_sentence, summary) where:
-            per_sentence: list of dicts with {"baseline/sentence_time": float}
+            per_sentence: list of dicts with {"baseline/per_sentence_time": float}
             summary: dict with aggregate timing metrics
     """
     total_time = sum(baseline_times)

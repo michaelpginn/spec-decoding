@@ -26,6 +26,8 @@ def run_translation(config: ExperimentConfig):
     logger.info(f"Loading data for {config.language_code}...")
     pairs = load_tatoeba_data(config.language_code, max_samples=config.max_samples)
     logger.info(f"Loaded {len(pairs)} source-target pairs")
+    if not pairs:
+        raise ValueError("No source-target pairs loaded; cannot run metrics.")
 
     sources = [src for src, _ in pairs]
     references = [tgt for _, tgt in pairs]
