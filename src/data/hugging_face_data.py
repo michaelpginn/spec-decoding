@@ -6,16 +6,14 @@ from datasets import Dataset, concatenate_datasets, load_dataset
 
 DATA_DIR = Path(__file__).resolve().parent
 def load_data(df: list, lang: str, type: str):
-    land_df = [d for d in df if d["Language"] == lang]
+    land_df = [d for d in df if lang in d["Language"]]
 
-    # Handle Chinese specific logic with corrected type check
     if lang == "Chinese" and type == "mono":
         hugging_paths = [item["hugging face "] for item in land_df if pd.notna(item["hugging face "])]
         if not hugging_paths:
             raise ValueError(f"No Hugging Face path found for {lang}")
-        return cast(Dataset, load_dataset(hugging_paths[0], "en-zh"))
+        return cast(Dataset, load_dataset(hugging_paths[0]))
 
-    # Extract all valid Hugging Face paths for the language
     hugging_paths = [
         item["hugging face "]
         for item in land_df
@@ -25,7 +23,6 @@ def load_data(df: list, lang: str, type: str):
     if not hugging_paths:
         raise ValueError(f"No valid Hugging Face datasets found for language: {lang}")
 
-    # Load and concatenate all available datasets (handles 1, 2, or many entries)
     datasets_list = [cast(Dataset, load_dataset(path, split="train")) for path in hugging_paths]
 
     if len(datasets_list) > 1:

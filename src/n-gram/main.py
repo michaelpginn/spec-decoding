@@ -24,8 +24,7 @@ languages: list = [
     "Ojibwe",
     "Quechua",
     "Maya",
-    "Tamazight",
-    "Chinese"
+    "Tamazight"
 ]
 
 def main():
@@ -33,8 +32,18 @@ def main():
     for language in languages:
         dataset = data_prep(language=language, text_type="mono")
         train,test = dataset.prepare_data()
-        train = [item[language] for item in train]
-        test = [item[language] for item in test]
+
+        print(train)
+        available_cols = train.column_names
+        if "text" in available_cols:
+            target_col = "text"
+        elif language in available_cols:
+            target_col = language
+        else:
+            target_col = available_cols[0]
+
+        train = train[target_col]
+        test = test[target_col]
 
         model_bigram = model.bigram(train, test).perplexity()
         model_trigram = model.trigram(train,test).perplexity()
