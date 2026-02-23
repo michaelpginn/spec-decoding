@@ -11,12 +11,13 @@ class bigram:
 
     def ngram_model(self):
         for sentence in self.train_text:
-            self.train_token = [token for token in sentence.split() if token != ""]
+            if sentence is not None:
+                self.train_token = [token for token in sentence.split() if token != ""]
 
-            self.gram = list(zip(self.train_token, self.train_token[1:]))
+                self.gram = list(zip(self.train_token, self.train_token[1:]))
 
-            for w1, w2 in self.gram:
-                self.model[(w1)][w2] += 1.0
+                for w1, w2 in self.gram:
+                    self.model[(w1)][w2] += 1.0
 
         for word in self.model:
             total_count = float(sum(self.model[word].values()))
@@ -38,15 +39,16 @@ class bigram:
         self.epsilon = 1e-10
 
         for sentence in self.train_text:
-            self.train_token = [token for token in sentence.split() if token != ""]
+            if sentence is not None:
+                self.train_token = [token for token in sentence.split() if token != ""]
 
-            self.gram = list(zip(self.train_token, self.train_token[1:]))
+                self.gram = list(zip(self.train_token, self.train_token[1:]))
 
-            for w1, w2 in self.gram:
-                self.word_count += 1.0
-                prob = self.model[w1].get(w2, self.epsilon)
+                for w1, w2 in self.gram:
+                    self.word_count += 1.0
+                    prob = self.model[w1].get(w2, self.epsilon)
 
-                self.log_prob += math.log2(prob)
+                    self.log_prob += math.log2(prob)
 
         if self.word_count == 0:
             return float('inf')
@@ -62,12 +64,13 @@ class trigram():
 
     def ngram_model(self):
         for sentence in self.train_text:
-            self.train_token = [token for token in sentence.split() if token != ""]
+            if sentence is not None:
+                self.train_token = [token for token in sentence.split() if token != ""]
 
-            self.gram = list(zip(self.train_token, self.train_token[1:], self.train_token[2:]))
+                self.gram = list(zip(self.train_token, self.train_token[1:], self.train_token[2:]))
 
-            for w1, w2, w3 in self.gram:
-                self.model[(w1, w2)][w3] += 1.0
+                for w1, w2, w3 in self.gram:
+                    self.model[(w1, w2)][w3] += 1.0
 
         for w1_w2 in self.model:
             total_count = float(sum(self.model[w1_w2].values()))
@@ -87,15 +90,16 @@ class trigram():
         self.epsilon = 1e-10
 
         for sentence in self.train_text:
-            self.train_token = [token for token in sentence.split() if token != ""]
+            if sentence is not None:
+                self.train_token = [token for token in sentence.split(" ") if token != ""]
 
-            self.gram = list(zip(self.train_token, self.train_token[1:], self.train_token[2:]))
+                self.gram = list(zip(self.train_token, self.train_token[1:], self.train_token[2:]))
 
-            for w1, w2, w3 in self.gram:
-                self.word_count += 1
-                prob = self.model[(w1, w2)].get(w3, self.epsilon)
+                for w1, w2, w3 in self.gram:
+                    self.word_count += 1
+                    prob = self.model[(w1, w2)].get(w3, self.epsilon)
 
-                self.log_prob += math.log2(prob)
+                    self.log_prob += math.log2(prob)
 
         if self.word_count == 0:
             return float('inf')

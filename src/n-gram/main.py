@@ -2,6 +2,7 @@ import os
 import sys
 
 import model
+import pandas as pd
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -17,27 +18,31 @@ languages: list = [
     "Hawaiian",
     "Igbo",
     "Lakota",
-    "Muskogee(Creek)",
+    "Muskogee (Creek)",
     "Nepali",
-    "Occitan",
     "Occitan",
     "Ojibwe",
     "Quechua",
     "Maya",
     "Tamazight",
-    "Chinese",
+    "Chinese"
 ]
 
-
 def main():
+    csv_file = []
+    for language in languages:
+        dataset = data_prep(language=language, text_type="mono")
+        train,test = dataset.prepare_data()
+        train = [item[language] for item in train]
+        test = [item[language] for item in test]
 
-    dataset = data_prep(language=languages[0], text_type="mono")
-    train,test = dataset.prepare_data()
-    train = [item[languages[0]] for item in train]
-    test = [item[languages[0]] for item in test]
+        model_bigram = model.bigram(train, test).perplexity()
+        model_trigram = model.trigram(train,test).perplexity()
 
-    model_bigram = model.bigram(train, test).ngram_model()
-    # print(model_bigram)
+        csv_file.append({"language":language, "bigram perplexity":model_bigram,"trigram perplexity":model_trigram})
+
+    df = pd.DataFrame(csv_file)
+    df.to_csv("n-gram_perplexity.csv",index=False)
     return 0
 
 
