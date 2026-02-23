@@ -1,39 +1,37 @@
 from collections import defaultdict
 
-import nltk
-from nltk import bigrams, trigrams
+# import nltk
+# from nltk.util import bigrams, trigrams
 
 
-class bigram_model:
+class bigram:
     def __init__(self, train_list, test_list) -> None:
+        self.train_text = train_list
+        self.test_text = test_list
         self.model = defaultdict(lambda: defaultdict(lambda: 0.0))
 
-        self.train_text = ' '.join(train_list)
-        self.test_text = ' '.join(test_list)
+    def ngram_model(self):
+        for sentence in self.train_text:
+            self.train_token = [token for token in sentence.split() if token != ""]
 
-        self.train = nltk.word_tokenize(self.train_text)
-        self.test = nltk.word_tokenize(self.test_text)
+            self.gram = list(zip(self.train_token, self.train_token[1:]))
 
-        self.bi_train = list(bigrams((self.train)))
-        self.bi_test =  list(bigrams((self.test)))
+            for w1, w2 in self.gram:
+                self.model[(w1)][w2] += 1.0
 
+        for word in self.model:
+            total_count = float(sum(self.model[word].values()))
+            for w2 in self.model[word]:
+                self.model[word][w2] /= total_count
+        return self.model
 
-    def training(self):
-            for w1, w2 in self.bi_train:
-                self.model[w1][w2] += 1.0
+#     def predict(self, word):
+#         self.next_word_pred = self.model.get(word)
 
-            for w in self.model:
-                total_count = float(sum(self.model[w].values()))
-                for w2 in self.model[w]:
-                    self.model[w][w2] /= total_count
-
-    def predict(self, word1):
-            next_word_pred = self.model.get(word1)
-
-            if next_word_pred and len(next_word_pred) > 0:
-                return max(next_word_pred, key=next_word_pred.get)
-            else:
-                return "No prediction available"
+#         if self.next_word_pred and len(self.next_word_pred) > 0:
+#             return max(self.next_word_pred, key=self.next_word_pred.get)
+#         else:
+#             return "No prediction available"
 
 # class trigram_model:
 #     def __init__(self, train,test) -> None:
