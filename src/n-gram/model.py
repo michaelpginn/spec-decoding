@@ -1,8 +1,5 @@
 from collections import defaultdict
 
-# import nltk
-# from nltk.util import bigrams, trigrams
-
 
 class bigram:
     def __init__(self, train_list, test_list) -> None:
@@ -25,17 +22,10 @@ class bigram:
                 self.model[word][w2] /= total_count
         return self.model
 
-#     def predict(self, word):
-#         self.next_word_pred = self.model.get(word)
+    def predict(self, word):
+        self.next_word_pred = self.model.get(word)
 
-#         if self.next_word_pred and len(self.next_word_pred) > 0:
-#             return max(self.next_word_pred, key=self.next_word_pred.get)
-#         else:
-#             return "No prediction available"
-
-# class trigram_model:
-#     def __init__(self, train,test) -> None:
-#         self.train,self.test = [],[]
-#         for tr,te in zip(train,test):
-#             self.train.append(nltk.word_tokenize(' '.join(tr)))
-#             self.test.append(nltk.word_tokenize(' '.join(te)))
+        if self.next_word_pred and len(self.next_word_pred) > 0:
+            return max(self.model[word], key=lambda k: self.model[word][k])
+        else:
+            return "No prediction available"
