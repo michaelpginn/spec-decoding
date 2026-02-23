@@ -33,8 +33,8 @@ class bigram:
             return "No prediction available"
 
     def perplexity(self):
-        self.log_prob = 0
-        self.word_count = 0
+        self.log_prob = 0.0
+        self.word_count = 0.0
         self.epsilon = 1e-10
 
         for sentence in self.train_text:
@@ -43,7 +43,15 @@ class bigram:
             self.gram = list(zip(self.train_token, self.train_token[1:]))
 
             for w1, w2 in self.gram:
-                self.model[(w1)][w2] += 1.0
+                self.word_count += 1.0
+                prob = self.model[w1].get(w2, self.epsilon)
+
+                self.log_prob += math.log2(prob)
+
+        if self.word_count == 0:
+            return float('inf')
+
+        return 2**(-(self.log_prob/self.word_count))
 
 # trigram model
 class trigram():
@@ -85,11 +93,11 @@ class trigram():
 
             for w1, w2, w3 in self.gram:
                 self.word_count += 1
-                prob = self.model.get((w1, w2), {}).get(w3, self.epsilon)
+                prob = self.model[(w1, w2)].get(w3, self.epsilon)
 
                 self.log_prob += math.log2(prob)
 
-        if self.word_count==0:
+        if self.word_count == 0:
             return float('inf')
 
         return 2**(-(self.log_prob/self.word_count))
