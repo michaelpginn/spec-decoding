@@ -1,7 +1,7 @@
 import os
 import sys
 
-import model
+import n_gram
 import pandas as pd
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -45,8 +45,8 @@ def main():
         train = train[target_col]
         test = test[target_col]
 
-        model_bigram = model.bigram(train, test).perplexity()
-        model_trigram = model.trigram(train,test).perplexity()
+        model_bigram = n_gram.bigram(train, test)#.perplexity()
+        model_trigram = n_gram.trigram(train,test)#.perplexity()
 
         csv_file.append({"language":language, "bigram perplexity":model_bigram,"trigram perplexity":model_trigram})
 

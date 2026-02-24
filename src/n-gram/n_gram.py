@@ -1,4 +1,4 @@
-import math
+# import math
 from collections import defaultdict
 
 
@@ -34,28 +34,28 @@ class bigram:
         else:
             return "No prediction available"
 
-    def perplexity(self):
-        self.log_prob = 0.0
-        self.word_count = 0.0
-        self.epsilon = 1e-10
+    # def perplexity(self):
+    #     self.log_prob = 0.0
+    #     self.word_count = 0.0
+    #     self.epsilon = 1e-10
 
-        for sentence in self.train_text:
-            if sentence is not None:
-                sentence = f'<s> {sentence} <\\s>'
-                self.train_token = [token for token in sentence.split() if token != ""]
+    #     for sentence in self.train_text:
+    #         if sentence is not None:
+    #             sentence = f'<s> {sentence} <\\s>'
+    #             self.train_token = [token for token in sentence.split() if token != ""]
 
-                self.gram = list(zip(self.train_token, self.train_token[1:]))
+    #             self.gram = list(zip(self.train_token, self.train_token[1:]))
 
-                for w1, w2 in self.gram:
-                    self.word_count += 1.0
-                    prob = self.model[w1].get(w2, self.epsilon)
+    #             for w1, w2 in self.gram:
+    #                 self.word_count += 1.0
+    #                 prob = self.model[w1].get(w2, self.epsilon)
 
-                    self.log_prob += math.log2(prob)
+    #                 self.log_prob += math.log2(prob)
 
-        if self.word_count == 0:
-            return float('inf')
+    #     if self.word_count == 0:
+    #         return float('inf')
 
-        return 2**(-(self.log_prob/self.word_count))
+    #     return 2**(-(self.log_prob/self.word_count))
 
 # trigram model
 class trigram():
@@ -86,24 +86,24 @@ class trigram():
         else:
             return "No prediction available"
 
-    def perplexity(self):
-        self.log_prob = 0
-        self.word_count = 0
-        self.epsilon = 1e-10
+    # def perplexity(self):
+    #     self.log_prob = 0
+    #     self.word_count = 0
+    #     self.epsilon = 1e-10
 
-        for sentence in self.train_text:
-            if sentence is not None:
-                self.train_token = [token for token in sentence.split(" ") if token != ""]
+    #     for sentence in self.train_text:
+    #         if sentence is not None:
+    #             self.train_token = [token for token in sentence.split(" ") if token != ""]
 
-                self.gram = list(zip(self.train_token, self.train_token[1:], self.train_token[2:]))
+    #             self.gram = list(zip(self.train_token, self.train_token[1:], self.train_token[2:]))
 
-                for w1, w2, w3 in self.gram:
-                    self.word_count += 1
-                    prob = self.model[(w1, w2)].get(w3, self.epsilon)
+    #             for w1, w2, w3 in self.gram:
+    #                 self.word_count += 1
+    #                 prob = self.model[(w1, w2)].get(w3, self.epsilon)
 
-                    self.log_prob += math.log2(prob)
+    #                 self.log_prob += math.log2(prob)
 
-        if self.word_count == 0:
-            return float('inf')
+    #     if self.word_count == 0:
+    #         return float('inf')
 
-        return 2**(-(self.log_prob/self.word_count))
+    #     return 2**(-(self.log_prob/self.word_count))
