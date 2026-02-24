@@ -12,6 +12,7 @@ class bigram:
     def ngram_model(self):
         for sentence in self.train_text:
             if sentence is not None:
+                sentence = f'<s> {sentence} <\\s>'
                 self.train_token = [token for token in sentence.split() if token != ""]
 
                 self.gram = list(zip(self.train_token, self.train_token[1:]))
@@ -40,6 +41,7 @@ class bigram:
 
         for sentence in self.train_text:
             if sentence is not None:
+                sentence = f'<s> {sentence} <\\s>'
                 self.train_token = [token for token in sentence.split() if token != ""]
 
                 self.gram = list(zip(self.train_token, self.train_token[1:]))
