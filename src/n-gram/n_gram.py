@@ -1,6 +1,7 @@
 import math
 from collections import defaultdict
 
+import torch
 from transformers import AutoTokenizer
 
 """
@@ -55,8 +56,8 @@ class bigram:
 
             for w1, w2 in grams:
                 word_count += 1
-                prob = self.model.get((w1), {}).get(w2, epsilon)
-                log_prob_sum += math.log2(prob)
+                prob = torch.tensor(self.model.get((w1), {}).get(w2, epsilon))
+                log_prob_sum += torch.log2(prob)
 
         if word_count == 0:
             return float('inf')
@@ -112,8 +113,8 @@ class trigram():
 
             for w1, w2, w3 in grams:
                 word_count += 1
-                prob = self.model.get((w1, w2), {}).get(w3, epsilon)
-                log_prob_sum += math.log2(prob)
+                prob = torch.tensor(self.model.get((w1, w2), {}).get(w3, epsilon))
+                log_prob_sum += torch.log2(prob)
 
         if word_count == 0:
             return float('inf')
