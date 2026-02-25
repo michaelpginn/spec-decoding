@@ -9,8 +9,8 @@ from datasets import load_dataset
 
 logger = logging.getLogger(__name__)
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-REFERENCE_TABLE = REPO_ROOT / "reference_table_bilingual.csv"
+DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+REFERENCE_TABLE = DATA_DIR / "reference_table_bilingual.csv"
 
 def get_language_name(lang_code: str) -> str:
     """
