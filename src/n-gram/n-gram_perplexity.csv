@@ -1,13 +1,13 @@
 language,bigram perplexity,trigram perplexity
-Berber,9999999988.595282,10000000009.423952
-Cherokee,10000000000.000105,10000000000.000008
-Hawaiian,10000000046.925835,10000000013.209784
-Igbo,9999999999.92352,9999999999.924013
-Lakota,10000000000.000008,9999999999.999859
-Muskogee (Creek),10000000000.012861,9999999999.99843
-Nepali,9999999999.939034,9999999999.954302
-Occitan,10000000007.21982,9999999985.913757
-Ojibwe,9999999999.99912,9999999999.99981
-Quechua,10000000007.770447,10000000005.759674
-Maya,10000000000.0005,9999999999.99981
-Tamazight,9999999999.923471,9999999999.923471
+Berber,<n_gram.bigram object at 0x12c3157f0>,<n_gram.trigram object at 0x12c315a90>
+Cherokee,<n_gram.bigram object at 0x12c02b390>,<n_gram.trigram object at 0x12c33afd0>
+Hawaiian,<n_gram.bigram object at 0x12c33b610>,<n_gram.trigram object at 0x12f540e10>
+Igbo,<n_gram.bigram object at 0x12c3f0fc0>,<n_gram.trigram object at 0x12c3f1810>
+Lakota,<n_gram.bigram object at 0x12c3f15b0>,<n_gram.trigram object at 0x12c3f1a70>
+Muskogee (Creek),<n_gram.bigram object at 0x12c7068d0>,<n_gram.trigram object at 0x12c706c30>
+Nepali,<n_gram.bigram object at 0x12c7a5150>,<n_gram.trigram object at 0x12c7a5040>
+Occitan,<n_gram.bigram object at 0x12c3486b0>,<n_gram.trigram object at 0x12c7a4f30>
+Ojibwe,<n_gram.bigram object at 0x12c745450>,<n_gram.trigram object at 0x12c744450>
+Quechua,<n_gram.bigram object at 0x12c07b250>,<n_gram.trigram object at 0x12c746a50>
+Maya,<n_gram.bigram object at 0x13e9d8d70>,<n_gram.trigram object at 0x12c38aa80>
+Tamazight,<n_gram.bigram object at 0x12c38b5c0>,<n_gram.trigram object at 0x12c38b980>
