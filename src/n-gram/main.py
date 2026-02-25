@@ -45,8 +45,8 @@ def main():
         train = train[target_col]
         test = test[target_col]
 
-        model_bigram = n_gram.bigram(train).perplexity(test)
-        model_trigram = n_gram.trigram(train).perplexity(test)
+        model_bigram = n_gram.bigram(train, "Qwen/Qwen-7B").perplexity(test)
+        model_trigram = n_gram.trigram(train, "Qwen/Qwen-7B").perplexity(test)
 
         csv_file.append({"language":language, "bigram perplexity":model_bigram,"trigram perplexity":model_trigram})
 

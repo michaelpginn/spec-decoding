@@ -9,11 +9,11 @@ Would need to install tiktoken and transformers
 """
 # bigram model
 class bigram:
-    def __init__(self, train_list) -> None:
+    def __init__(self, train_list, tokenizer) -> None:
         self.train_text = train_list
         self.model = defaultdict(lambda: defaultdict(lambda: 0.0))
         self.vocabulary = set()
-        self.tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen-7B", trust_remote_code=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer, trust_remote_code=True)
 
     def ngram_model(self):
         for sentence in self.train_text:
@@ -66,11 +66,11 @@ class bigram:
 
 # trigram model
 class trigram():
-    def __init__(self, train_list) -> None:
+    def __init__(self, train_list, tokenizer) -> None:
         self.train_text = train_list
         self.model = defaultdict(lambda: defaultdict(lambda: 0.0))
         self.vocabulary = set()
-        self.tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen-7B", trust_remote_code=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer, trust_remote_code=True)
 
     def ngram_model(self):
         for sentence in self.train_text:
