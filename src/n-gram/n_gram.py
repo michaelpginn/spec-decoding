@@ -1,4 +1,3 @@
-import math
 from collections import defaultdict
 
 import torch
@@ -15,7 +14,7 @@ class bigram:
         self.vocabulary = set()
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer, trust_remote_code=True)
 
-    def ngram_model(self):
+    def train(self):
         for sentence in self.train_text:
             if sentence is not None:
                 train_token = self.tokenizer.tokenize(sentence)
@@ -72,7 +71,7 @@ class trigram():
         self.vocabulary = set()
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer, trust_remote_code=True)
 
-    def ngram_model(self):
+    def train(self):
         for sentence in self.train_text:
             if sentence is not None:
                 train_token = self.tokenizer.tokenize(sentence)
