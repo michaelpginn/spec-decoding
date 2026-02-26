@@ -211,14 +211,16 @@ def speculative_decode_greedy(
             
             if track_iterations:
                 # FIXME: If we ever do batching this is wrong
-                draft_text = tokenizer.convert_ids_to_tokens(new_draft_tokens[0].tolist())
-                last_token = tokenizer.convert_ids_to_tokens(int(tokens_to_add[0, -1].item()))
+                draft_ids = new_draft_tokens[0].tolist()
+                # Decode each token to Unicode so Nepali/other scripts display correctly (not raw UTF-8 bytes)
+                draft_text = [tokenizer.decode([tid]) for tid in draft_ids]
+                last_token_str = tokenizer.decode([int(tokens_to_add[0, -1].item())])
                 if not collisions.any():
-                    result = f"ALL ACCEPTED ({len(new_draft_tokens[0])}) + BONUS '{last_token}'"
+                    result = f"ALL ACCEPTED ({len(draft_ids)}) + BONUS '{last_token_str}'"
                 else:
                     first_collision_idx = collisions.int().argmax(dim=-1).item()
-                    rejected = tokenizer.convert_ids_to_tokens(new_draft_tokens[0][first_collision_idx].item())
-                    result = f"ACCEPTED {first_collision_idx}, REJECTED '{rejected}' -> TARGET '{last_token}'"
+                    rejected_str = tokenizer.decode([new_draft_tokens[0][first_collision_idx].item()])
+                    result = f"ACCEPTED {first_collision_idx}, REJECTED '{rejected_str}' -> TARGET '{last_token_str}'"
                 iteration_history.append({
                     "iter": len(iteration_history),
                     "drafted": draft_text,
