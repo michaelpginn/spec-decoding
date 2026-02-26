@@ -38,16 +38,11 @@ def main():
         train = train[dataset.get_col_name(language)]
         test = test[dataset.get_col_name(language)]
 
-        model_bigram = n_gram.bigram(train, "Qwen/Qwen-7B")
-        model_trigram = n_gram.trigram(train, "Qwen/Qwen-7B")
+        model_bigram = n_gram.ngram(2, "Qwen/Qwen-7B",)
+        model_trigram = n_gram.ngram(3, "Qwen/Qwen-7B",)
 
-        model_bigram.train()
-        model_trigram.train()
-
-        # csv_file.append({"language":language, "bigram perplexity":model_bigram,"trigram perplexity":model_trigram})
-
-    # df = pd.DataFrame(csv_file)
-    # df.to_csv("n-gram_perplexity.csv",index=False)
+        model_bigram.train(train)
+        model_trigram.train(train)
     return 0
 
 
