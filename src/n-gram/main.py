@@ -28,30 +28,26 @@ languages: list = [
 ]
 
 def main():
-    csv_file = []
+    # csv_file = []
     for language in languages:
         dataset = data_prep(language=language, text_type="mono")
         train,test = dataset.prepare_data()
 
         print(train)
-        available_cols = train.column_names
-        if "text" in available_cols:
-            target_col = "text"
-        elif language in available_cols:
-            target_col = language
-        else:
-            target_col = available_cols[0]
 
-        train = train[target_col]
-        test = test[target_col]
+        train = train[dataset.get_col_name(language)]
+        test = test[dataset.get_col_name(language)]
 
-        model_bigram = n_gram.bigram(train, "Qwen/Qwen-7B").perplexity(test)
-        model_trigram = n_gram.trigram(train, "Qwen/Qwen-7B").perplexity(test)
+        model_bigram = n_gram.bigram(train, "Qwen/Qwen-7B")
+        model_trigram = n_gram.trigram(train, "Qwen/Qwen-7B")
 
-        csv_file.append({"language":language, "bigram perplexity":model_bigram,"trigram perplexity":model_trigram})
+        model_bigram.train()
+        model_trigram.train()
 
-    df = pd.DataFrame(csv_file)
-    df.to_csv("n-gram_perplexity.csv",index=False)
+        # csv_file.append({"language":language, "bigram perplexity":model_bigram,"trigram perplexity":model_trigram})
+
+    # df = pd.DataFrame(csv_file)
+    # df.to_csv("n-gram_perplexity.csv",index=False)
     return 0
 
 

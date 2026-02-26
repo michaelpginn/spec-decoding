@@ -6,6 +6,48 @@ from transformers import AutoTokenizer
 """
 Would need to install tiktoken and transformers
 """
+class ngram:
+    def __init__(self, n, hug_tokenizer):
+        self.n = n
+        self.model = defaultdict(lambda: defaultdict(lambda: 0.0))
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(hug_tokenizer, trust_remote_code=True)
+        except OSError:
+            return "Not a hugging face tokenizer"
+        self.vocabulary = set()
+
+    def train(self, train_list):
+        for sentence in train_list:
+            if sentence is not None:
+                train_token = self.tokenizer.tokenize(sentence)
+                train_token = [self.tokenizer.bos_token] + train_token + [self.tokenizer.eos_token]
+                gram = []
+                for i in range(self.n):
+                    gram.append(train_token[i:])
+
+                n_gram = zip(*gram)
+
+                for gram in n_gram:
+                    context = tuple(gram[:-1])
+                    target = gram[-1]
+                    self.model[context][target] += 1.0
+
+                    for w in gram:
+                        self.vocabulary.add(w)
+        return self.model, self.vocabulary
+
+    def predict(self, input):
+        if isinstance(input, str):
+            token = self.tokenizer.tokenizer(input)
+        else:
+            token = input
+
+        size = self.n-1
+
+        if len(token)>size:
+            return self.tokenizer.unk_token
+        return
+
 # bigram model
 class bigram:
     def __init__(self, train_list, tokenizer) -> None:
