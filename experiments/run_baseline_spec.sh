@@ -3,10 +3,10 @@
 
 # *********************
 #  Run full baseline + spec (Qwen, Llama, Aya). Use from REPO root:
-#    bash experiments/run_baseline_spec_sweep.sh
+#    bash experiments/run_baseline_spec.sh
 
 # set up the wandb and the huggingface before running the script
-# also, gated models should be given access 
+# also, ensure that access to gated models has been granted
 # *********************
 
 set -uo pipefail
@@ -101,7 +101,7 @@ done
 # ══════════════════════════════════════════════════════════════
 
 # Only 3 languages: ber, chr, npi.
-echo "###  Quick test — 7B + 0.5B, gamma=5, ber/chr/npi  ###"
+echo "###  Quick test — 0.5B + 0.5B, gamma=5, ber/chr/npi  ###"
 for lang in ber chr npi; do
     run_one python run.py $SPEC_CFG \
         -o language_code=$lang \

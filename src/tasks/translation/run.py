@@ -41,33 +41,34 @@ def run_translation(config: ExperimentConfig):
     # 3. Baseline run
     if config.draft_model_type == "none":
         baseline_times = []
+        baseline_token_counts = []
         baseline_translations = []
         logger.info("Running baseline (no draft model)...")
         for i, source in enumerate(tqdm(sources, desc="Baseline")):
             start = time.time()
-            translation = translate_target(
+            translation, num_tokens = translate_target(
                 target_model, target_tokenizer, source, lang_name,
                 max_new_tokens=config.max_new_tokens, device=device,
             )
             baseline_times.append(time.time() - start)
+            baseline_token_counts.append(num_tokens)
             baseline_translations.append(translation)
 
         baseline_bleu = compute_bleu(references, baseline_translations, verbose=False)
-        per_sentence, summary = compute_baseline_metrics(baseline_times)
+        per_sentence, summary = compute_baseline_metrics(baseline_times, baseline_token_counts)
 
-        # Log per-sentence metrics
         for entry in per_sentence:
             wandb.log(entry)
 
-        # Log summary (includes timing + BLEU)
-        summary["baseline/bleu"] = baseline_bleu["bleu"]
-        summary["baseline/chrf2"] = baseline_bleu["chrf2"]
+        summary["bleu"] = baseline_bleu["bleu"]
+        summary["chrf2"] = baseline_bleu["chrf2"]
         wandb.summary.update(summary)
 
         logger.info(
             f"Baseline BLEU: {baseline_bleu['bleu']:.2f}  chrF2: {baseline_bleu['chrf2']:.2f}  "
-            f"Total time: {summary['baseline/total_time']:.2f}s  "
-            f"Avg: {summary['baseline/avg_time_per_sentence']:.2f}s/sentence"
+            f"Total time: {summary['total_time']:.2f}s  "
+            f"Avg: {summary['avg_time_per_sentence']:.2f}s/sentence  "
+            f"Avg time/token: {summary['avg_time_per_token']:.4f}s"
         )
         return
 
@@ -86,6 +87,8 @@ def run_translation(config: ExperimentConfig):
 
     if config.use_hf_assisted:
         logger.info(f"Running HF assisted generation (gamma={config.gamma})...")
+        hf_times = []
+        hf_token_counts = []
         for source in tqdm(sources, desc="HF assisted"):
             translation, metrics = assisted_decode_hf(
                 target_model, target_tokenizer,
@@ -96,7 +99,14 @@ def run_translation(config: ExperimentConfig):
                 num_assistant_tokens=config.gamma,
             )
             spec_translations.append(translation)
-            spec_results.append(metrics)
+            hf_times.append(metrics["total_time"])
+            hf_token_counts.append(metrics["generated_tokens"])
+
+        # HF assisted is a black box — no acceptance rate data available,
+        # so we use baseline-style metrics (time + token counts only).
+        per_sentence, summary = compute_baseline_metrics(hf_times, hf_token_counts)
+        summary["method"] = "hf_assisted"
+
     else:
         logger.info(f"Running custom spec decode (greedy, gamma={config.gamma})...")
         for i, source in enumerate(tqdm(sources, desc="Spec decode")):
@@ -114,28 +124,42 @@ def run_translation(config: ExperimentConfig):
             spec_translations.append(translation)
             spec_results.append(metrics)
 
-    spec_metrics = compute_spec_metrics(
-        spec_results, gamma=config.gamma, verbose=False
-    )
+        per_sentence, summary = compute_spec_metrics(
+            spec_results, gamma=config.gamma, verbose=False
+        )
 
-    # 6. Log all spec metrics
-    per_sentence, summary = spec_metrics
-
+    # 6. Log per-sentence metrics
     for entry in per_sentence:
         wandb.log(entry)
 
     spec_bleu = compute_bleu(references, spec_translations, verbose=False)
-    summary["spec/bleu"] = spec_bleu["bleu"]
-    summary["spec/chrf2"] = spec_bleu["chrf2"]
+    summary["bleu"] = spec_bleu["bleu"]
+    summary["chrf2"] = spec_bleu["chrf2"]
     wandb.summary.update(summary)
 
     logger.info(
         f"Spec BLEU: {spec_bleu['bleu']:.2f}  chrF2: {spec_bleu['chrf2']:.2f}  "
-        f"Total time: {summary['spec/total_time']:.2f}s  "
-        f"Avg: {summary['spec/avg_time_per_sentence']:.2f}s/sentence"
+        f"Total time: {summary['total_time']:.2f}s  "
+        f"Avg: {summary['avg_time_per_sentence']:.2f}s/sentence  "
+        f"Avg time/token: {summary['avg_time_per_token']:.4f}s"
     )
 
-    # 7. Save token flow trace
+    # 7. Log token flow trace as wandb Table
+    if any("iteration_history" in r for r in spec_results):
+        flow_table = wandb.Table(columns=[
+            "sample_idx", "source_text", "iteration", "drafted_tokens",
+            "num_drafted", "result",
+        ])
+        for i, result in enumerate(spec_results):
+            for item in result.get("iteration_history", []):
+                flow_table.add_data(
+                    i, sources[i], item["iter"],
+                    " ".join(f"[{t}]" for t in item["drafted"]),
+                    len(item["drafted"]), item["result"],
+                )
+        wandb.log({"token_flow": flow_table})
+
+    # 8. Save token flow trace locally
     output_dir = Path(f"./outputs/{config.language_code}")
     output_dir.mkdir(parents=True, exist_ok=True)
 

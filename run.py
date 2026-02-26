@@ -19,16 +19,54 @@ logger = logging.getLogger(__name__)
 
 def run(config: ExperimentConfig):
     """Run experiment: load config, init wandb, dispatch to task (e.g. translation)."""
+    target_short = config.target_model.split("/")[-1]
+    is_spec = config.draft_model_type != "none"
+    draft_short = (
+        config.draft_model.split("/")[-1]
+        if config.draft_model and config.draft_model != "None"
+        else None
+    )
+    job_type = "spec" if is_spec else "baseline"
+
+    group = f"{target_short}__{config.language_code}"
+
+    if is_spec:
+        name = f"{config.language_code}_{draft_short}_g{config.gamma}"
+    else:
+        name = f"{config.language_code}_baseline"
+
+    tags = [config.language_code, target_short, config.decoding_mode, config.task]
+    if is_spec:
+        tags += [draft_short, f"gamma={config.gamma}", config.draft_model_type]
+    else:
+        tags.append("baseline")
+
+    wandb_config = asdict(config)
+    wandb_config["target_model_short"] = target_short
+    wandb_config["draft_model_short"] = draft_short
+    wandb_config["model_pair"] = f"{target_short}+{draft_short}" if is_spec else target_short
+    wandb_config["run_type"] = job_type
+
     wandb.init(
         project=os.environ.get("WANDB_PROJECT", "spec-decoding"),
         entity=os.environ.get("WANDB_ENTITY", "lecs-general"),
-        config=asdict(config),
-        name=f"{config.language_code}_{config.decoding_mode}_{'spec' if config.draft_model and config.draft_model != 'None' else 'baseline'}",
+        config=wandb_config,
+        group=group,
+        job_type=job_type,
+        name=name,
+        tags=tags,
     )
-    if config.task == "translation":
-        run_translation(config)
-    else:
-        raise ValueError(f"Unknown task: {config.task}")
+
+    wandb.define_metric("sentence_idx")
+    wandb.define_metric("sentence/*", step_metric="sentence_idx")
+
+    try:
+        if config.task == "translation":
+            run_translation(config)
+        else:
+            raise ValueError(f"Unknown task: {config.task}")
+    finally:
+        wandb.finish()
 
 
 if __name__ == "__main__":

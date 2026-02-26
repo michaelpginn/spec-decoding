@@ -47,8 +47,9 @@ def translate_target(model, tokenizer, source: str, target_lang: str, max_new_to
     
     # Decode only the new tokens (after the prompt)
     prompt_len = inputs["input_ids"].shape[1]
+    generated_token_count = out.shape[1] - prompt_len
     decoded = tokenizer.decode(out[0][prompt_len:], skip_special_tokens=True)
-    return decoded.strip()
+    return decoded.strip(), generated_token_count
 
 
 def speculative_decode_translate(
