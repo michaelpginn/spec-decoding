@@ -110,6 +110,7 @@ def speculative_decode_greedy(
     )
     cur_gen_idx = input_ids.size(1)
 
+    is_cuda = device.type == "cuda"
     with torch.no_grad():
         # Preload kv cache for prompts
         target_out = target_model(input_ids, use_cache=True)
@@ -124,10 +125,14 @@ def speculative_decode_greedy(
         # Metrics
         total_draft_tokens = 0
         total_matched_tokens = 0  
+        num_iterations = 0
         iteration_history = []
+        if is_cuda:
+            torch.cuda.synchronize()
         start_time = time.time()
-    
+        
         while cur_gen_idx < generated_tokens.size(-1):
+            num_iterations += 1
             # Step 1: Draft tokens
             # B * gamma (unless gamma > remaining tokens)
             new_draft_tokens = torch.zeros(
@@ -225,6 +230,8 @@ def speculative_decode_greedy(
                 generated_tokens = generated_tokens[:,:cur_gen_idx]
                 break
     
+    if is_cuda:
+        torch.cuda.synchronize()
     total_time = time.time() - start_time
     
     # Calculate acceptance rate (matched draft tokens / total draft tokens)
@@ -237,6 +244,7 @@ def speculative_decode_greedy(
         "total_draft_tokens": total_draft_tokens,
         "total_matched_tokens": total_matched_tokens,
         "acceptance_rate": acceptance_rate,
+        "num_iterations": num_iterations,
     }
 
     if track_iterations:

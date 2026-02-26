@@ -1,7 +1,6 @@
 # src/tasks/translation/run.py
 
 import logging
-import time
 from pathlib import Path
 from tqdm import tqdm
 import wandb
@@ -45,12 +44,11 @@ def run_translation(config: ExperimentConfig):
         baseline_translations = []
         logger.info("Running baseline (no draft model)...")
         for i, source in enumerate(tqdm(sources, desc="Baseline")):
-            start = time.time()
-            translation, num_tokens = translate_target(
+            translation, num_tokens, decode_time = translate_target(
                 target_model, target_tokenizer, source, lang_name,
                 max_new_tokens=config.max_new_tokens, device=device,
             )
-            baseline_times.append(time.time() - start)
+            baseline_times.append(decode_time)
             baseline_token_counts.append(num_tokens)
             baseline_translations.append(translation)
 
@@ -63,6 +61,11 @@ def run_translation(config: ExperimentConfig):
         summary["bleu"] = baseline_bleu["bleu"]
         summary["chrf2"] = baseline_bleu["chrf2"]
         wandb.summary.update(summary)
+
+        # Remove per-sentence keys that wandb.log in summary
+        for key in list(wandb.summary.keys()):
+            if key.startswith("sentence/") or key == "sentence_idx":
+                del wandb.summary[key]
 
         logger.info(
             f"Baseline BLEU: {baseline_bleu['bleu']:.2f}  chrF2: {baseline_bleu['chrf2']:.2f}  "
@@ -136,6 +139,11 @@ def run_translation(config: ExperimentConfig):
     summary["bleu"] = spec_bleu["bleu"]
     summary["chrf2"] = spec_bleu["chrf2"]
     wandb.summary.update(summary)
+
+    # Remove per-sentence keys that wandb.log leaked into the summary
+    for key in list(wandb.summary.keys()):
+        if key.startswith("sentence/") or key == "sentence_idx":
+            del wandb.summary[key]
 
     logger.info(
         f"Spec BLEU: {spec_bleu['bleu']:.2f}  chrF2: {spec_bleu['chrf2']:.2f}  "

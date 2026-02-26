@@ -107,9 +107,13 @@ def compute_spec_metrics(
     total_draft = sum(r["total_draft_tokens"] for r in spec_results)
     total_matched = sum(r["total_matched_tokens"] for r in spec_results)
 
-    num_iterations = total_draft / gamma if gamma > 0 else 0
-    mean_accepted = total_generated / num_iterations if num_iterations > 0 else 0
+    total_iterations = sum(r.get("num_iterations", r["total_draft_tokens"] / gamma) for r in spec_results)
+    mean_accepted = total_matched / total_iterations if total_iterations > 0 else 0
 
+    summary["total_generated_tokens"] = total_generated
+    summary["total_draft_tokens"] = total_draft
+    summary["total_matched_tokens"] = total_matched
+    summary["draft_to_output_ratio"] = total_draft / total_generated if total_generated > 0 else 0
     summary["acceptance_rate"] = total_matched / total_draft if total_draft > 0 else 0
     summary["mean_acceptance_rate"] = (
         sum(r["acceptance_rate"] for r in spec_results) / len(spec_results)
