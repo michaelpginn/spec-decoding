@@ -206,8 +206,23 @@ def speculative_decode_greedy(
             
             # Update kv caches
             # Either cache should not include the last generated tok (either correction or bonus token)
-            draft_kv_cache = crop_kv_cache(draft_kv_cache, new_gen_idx - 1)
             target_kv_cache = crop_kv_cache(target_kv_cache, new_gen_idx - 1)
+            
+            # Draft KV cache length after step 1 is (old cur_gen_idx) - 1 + n
+            old_cur_gen_idx = new_gen_idx - tokens_to_add.size(-1)
+            current_draft_len = old_cur_gen_idx - 1 + new_draft_tokens.size(-1)
+            required_draft_len = new_gen_idx - 1
+            
+            if required_draft_len > current_draft_len:
+                missing_input_ids = generated_tokens[:, current_draft_len:required_draft_len]
+                draft_out = draft_model(
+                    input_ids=missing_input_ids,
+                    past_key_values=draft_kv_cache,
+                    use_cache=True,
+                )
+                draft_kv_cache = draft_out.past_key_values
+
+            draft_kv_cache = crop_kv_cache(draft_kv_cache, required_draft_len)
             
             if track_iterations:
                 # FIXME: If we ever do batching this is wrong
