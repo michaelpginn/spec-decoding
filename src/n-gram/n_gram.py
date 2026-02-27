@@ -38,14 +38,14 @@ class ngram:
                     target = gram[-1]
                     self.model[context][target] += 1.0
 
-        for key, value in self.model:
-            total_instances = sum(self.model[key].values())
-            if total_instances > 1:
+        for key, value in self.model.items():
+            if key not in self.vocabulary:
+                total_instances = float(sum(self.model[key].values()))
                 temp = 0.0
-                for i in range(len(self.model[key].values())):
-                    temp += self.model[key][i]
-                self.vocabulary[key] = value
-                self.vocabulary[key][value] = float(sum(self.model[key].values())) / temp
+                for inner in self.model[key].values():
+                    temp = self.model[key][inner]
+                    self.vocabulary[key] = value
+                    self.vocabulary[key][value] = temp / total_instances
         return self.model, self.vocabulary
 
     def predict(self, input):
