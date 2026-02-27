@@ -69,9 +69,9 @@ def run_translation(config: ExperimentConfig):
 
         logger.info(
             f"Baseline BLEU: {baseline_bleu['bleu']:.2f}  chrF2: {baseline_bleu['chrf2']:.2f}  "
-            f"Total time: {summary['total_time']:.2f}s  "
             f"Avg: {summary['avg_time_per_sentence']:.2f}s/sentence  "
-            f"Avg time/token: {summary['avg_time_per_token']:.4f}s"
+            f"Avg time/token: {summary['avg_time_per_token']:.4f}s  "
+            f"Tokens/sec: {summary['tokens_per_second']:.2f}"
         )
         return
 
@@ -102,7 +102,7 @@ def run_translation(config: ExperimentConfig):
                 num_assistant_tokens=config.gamma,
             )
             spec_translations.append(translation)
-            hf_times.append(metrics["total_time"])
+            hf_times.append(metrics["time"])
             hf_token_counts.append(metrics["generated_tokens"])
 
         # HF assisted is a black box — no acceptance rate data available,
@@ -147,9 +147,9 @@ def run_translation(config: ExperimentConfig):
 
     logger.info(
         f"Spec BLEU: {spec_bleu['bleu']:.2f}  chrF2: {spec_bleu['chrf2']:.2f}  "
-        f"Total time: {summary['total_time']:.2f}s  "
         f"Avg: {summary['avg_time_per_sentence']:.2f}s/sentence  "
-        f"Avg time/token: {summary['avg_time_per_token']:.4f}s"
+        f"Avg time/token: {summary['avg_time_per_token']:.4f}s  "
+        f"Tokens/sec: {summary['tokens_per_second']:.2f}"
     )
 
     # 7. Log token flow trace as wandb Table

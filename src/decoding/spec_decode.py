@@ -91,7 +91,7 @@ def speculative_decode_greedy(
     
     Returns:
         output_ids: Generated token IDs
-        metrics: Dict with acceptance_rate, total_time, etc.
+        metrics: Dict with acceptance_rate, time, draft_tokens, matched_tokens, etc.
     """
     assert input_ids.shape[0] == 1, "Speculative decoding only supports batch_size=1"
     
@@ -212,7 +212,6 @@ def speculative_decode_greedy(
             if track_iterations:
                 # FIXME: If we ever do batching this is wrong
                 draft_ids = new_draft_tokens[0].tolist()
-                # Decode each token to Unicode so Nepali/other scripts display correctly (not raw UTF-8 bytes)
                 draft_text = [tokenizer.decode([tid]) for tid in draft_ids]
                 last_token_str = tokenizer.decode([int(tokens_to_add[0, -1].item())])
                 if not collisions.any():
@@ -241,10 +240,10 @@ def speculative_decode_greedy(
     total_generated_tokens = cur_gen_idx - input_ids.size(1)
     
     metrics = {
-        "total_time": total_time,
+        "time": total_time,
         "generated_tokens": total_generated_tokens,
-        "total_draft_tokens": total_draft_tokens,
-        "total_matched_tokens": total_matched_tokens,
+        "draft_tokens": total_draft_tokens,
+        "matched_tokens": total_matched_tokens,
         "acceptance_rate": acceptance_rate,
         "num_iterations": num_iterations,
     }

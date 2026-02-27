@@ -104,7 +104,7 @@ def speculative_decode_translate(
     
     Returns:
         translation: Translated text
-        metrics: Dict with acceptance_rate, total_time, etc.
+        metrics: Dict with acceptance_rate, time, draft_tokens, matched_tokens, etc.
     
     Raises:
         NotImplementedError: If tokenizers are different or sampling is requested
@@ -251,7 +251,7 @@ def assisted_decode_hf(
 
     if return_metrics:
         metrics = {
-            "total_time": decode_time,
+            "time": decode_time,
             "generated_tokens": generated_tokens,
             "decode_tps": generated_tokens / decode_time if decode_time > 0 else 0,
         }

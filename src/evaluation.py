@@ -43,7 +43,6 @@ def _compute_common_metrics(
     ]
 
     summary = {
-        "total_time": total_time,
         "avg_time_per_sentence": total_time / n,
         "median_time_per_sentence": median(times),
         "avg_time_per_token": sum(time_per_token_list) / n,
@@ -79,11 +78,11 @@ def compute_spec_metrics(
     Compute per-sentence and summary metrics for a speculative decoding run.
 
     Args:
-        spec_results: List of dicts with keys:
-            - total_time: Time for this sentence
+        spec_results: List of dicts with per-sentence keys:
+            - time: Decode time for this sentence
             - generated_tokens: Tokens generated for this sentence
-            - total_draft_tokens: Draft tokens proposed
-            - total_matched_tokens: Draft tokens that matched target
+            - draft_tokens: Draft tokens proposed for this sentence
+            - matched_tokens: Draft tokens that matched target for this sentence
             - acceptance_rate: Per-sentence acceptance rate
         gamma: Number of draft tokens per iteration
         verbose: Print metrics to console
@@ -94,28 +93,25 @@ def compute_spec_metrics(
     if not spec_results:
         return [], {}
 
-    times = [r["total_time"] for r in spec_results]
+    times = [r["time"] for r in spec_results]
     token_counts = [r["generated_tokens"] for r in spec_results]
     per_sentence, summary = _compute_common_metrics(times, token_counts)
 
     for i, r in enumerate(spec_results):
         per_sentence[i]["sentence/acceptance_rate"] = r["acceptance_rate"]
-        per_sentence[i]["sentence/draft_tokens"] = r["total_draft_tokens"]
-        per_sentence[i]["sentence/matched_tokens"] = r["total_matched_tokens"]
+        per_sentence[i]["sentence/draft_tokens"] = r["draft_tokens"]
+        per_sentence[i]["sentence/matched_tokens"] = r["matched_tokens"]
 
     total_generated = sum(r["generated_tokens"] for r in spec_results)
-    total_draft = sum(r["total_draft_tokens"] for r in spec_results)
-    total_matched = sum(r["total_matched_tokens"] for r in spec_results)
+    total_draft = sum(r["draft_tokens"] for r in spec_results)
+    total_matched = sum(r["matched_tokens"] for r in spec_results)
 
-    total_iterations = sum(r.get("num_iterations", r["total_draft_tokens"] / gamma) for r in spec_results)
+    total_iterations = sum(r.get("num_iterations", r["draft_tokens"] / gamma) for r in spec_results)
     mean_accepted = total_matched / total_iterations if total_iterations > 0 else 0
 
-    summary["total_generated_tokens"] = total_generated
-    summary["total_draft_tokens"] = total_draft
-    summary["total_matched_tokens"] = total_matched
     summary["draft_to_output_ratio"] = total_draft / total_generated if total_generated > 0 else 0
-    summary["acceptance_rate"] = total_matched / total_draft if total_draft > 0 else 0
-    summary["mean_acceptance_rate"] = (
+    summary["token_weighted_acceptance_rate"] = total_matched / total_draft if total_draft > 0 else 0
+    summary["sentence_avg_acceptance_rate"] = (
         sum(r["acceptance_rate"] for r in spec_results) / len(spec_results)
     )
     summary["mean_accepted_tokens"] = mean_accepted
@@ -123,9 +119,9 @@ def compute_spec_metrics(
 
     if verbose:
         print("\n=== Speculative Decoding Metrics ===")
-        print(f"Acceptance Rate (weighted): {summary['acceptance_rate']:.2%}")
+        print(f"Acceptance Rate (token-weighted): {summary['token_weighted_acceptance_rate']:.2%}")
         print(f"Mean Accepted Tokens (per iteration): {mean_accepted:.2f}")
         print(f"Block Efficiency: {summary['block_efficiency']:.2%}")
-        print(f"Tokens/sec: {summary['tokens_per_second']:.2f}")
+        print(f"Tokens/sec:  {summary['tokens_per_second']:.2f}")
 
     return per_sentence, summary
