@@ -17,7 +17,7 @@ class ngram:
             self.tokenizer = AutoTokenizer.from_pretrained(hug_tokenizer, trust_remote_code=True)
         except OSError:
             return "Not a hugging face tokenizer"
-        self.vocabulary = set()
+        self.vocabulary = defaultdict(lambda: defaultdict(lambda: 0.0))
 
     def train(self, train_list):
         '''
@@ -38,8 +38,14 @@ class ngram:
                     target = gram[-1]
                     self.model[context][target] += 1.0
 
-                    for w in gram: #adds new words to vocabulary and returns with the model
-                        self.vocabulary.add(w)
+        for key, value in self.model:
+            total_instances = sum(self.model[key].values())
+            if total_instances > 1:
+                temp = 0.0
+                for i in range(len(self.model[key].values())):
+                    temp += self.model[key][i]
+                self.vocabulary[key] = value
+                self.vocabulary[key][value] = float(sum(self.model[key].values())) / temp
         return self.model, self.vocabulary
 
     def predict(self, input):
