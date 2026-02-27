@@ -39,13 +39,10 @@ class ngram:
                     self.model[context][target] += 1.0
 
         for key, value in self.model.items():
-            if key not in self.vocabulary:
-                total_instances = float(sum(self.model[key].values()))
-                temp = 0.0
-                for inner in self.model[key].values():
-                    temp = self.model[key][inner]
-                    self.vocabulary[key] = value
-                    self.vocabulary[key][value] = temp / total_instances
+            total_instances = float(sum(self.model[key].values()))
+            if total_instances > 0:
+                for inner, count in value.items():
+                    self.vocabulary[key][inner] = count / total_instances
         return self.model, self.vocabulary
 
     def predict(self, input):
