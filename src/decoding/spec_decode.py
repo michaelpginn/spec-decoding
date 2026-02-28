@@ -64,6 +64,17 @@ def crop_kv_cache(past_key_values, new_length):
         return tuple(new_past)
 
 
+def get_kv_cache_length(past_key_values) -> int:
+    """Helper to get the current sequence length of a KV cache."""
+    if past_key_values is None:
+        return 0
+    if hasattr(past_key_values, "get_seq_length"):
+        return past_key_values.get_seq_length()
+    if isinstance(past_key_values, tuple) and len(past_key_values) > 0:
+        return past_key_values[0][0].size(2)
+    return 0
+
+
 def speculative_decode_greedy(
     target_model,
     draft_model,
@@ -91,7 +102,7 @@ def speculative_decode_greedy(
     
     Returns:
         output_ids: Generated token IDs
-        metrics: Dict with acceptance_rate, total_time, etc.
+        metrics: Dict with acceptance_rate, time, draft_tokens, matched_tokens, etc.
     """
     assert input_ids.shape[0] == 1, "Speculative decoding only supports batch_size=1"
     
@@ -110,6 +121,7 @@ def speculative_decode_greedy(
     )
     cur_gen_idx = input_ids.size(1)
 
+    is_cuda = device.type == "cuda"
     with torch.no_grad():
         # Preload kv cache for prompts
         target_out = target_model(input_ids, use_cache=True)
@@ -124,10 +136,14 @@ def speculative_decode_greedy(
         # Metrics
         total_draft_tokens = 0
         total_matched_tokens = 0  
+        num_iterations = 0
         iteration_history = []
+        if is_cuda:
+            torch.cuda.synchronize()
         start_time = time.time()
-    
+        
         while cur_gen_idx < generated_tokens.size(-1):
+            num_iterations += 1
             # Step 1: Draft tokens
             # B * gamma (unless gamma > remaining tokens)
             new_draft_tokens = torch.zeros(
@@ -138,7 +154,15 @@ def speculative_decode_greedy(
                 device=input_ids.device,
                 dtype=torch.int64
             )
-            draft_input_ids = generated_tokens[:, cur_gen_idx-1:cur_gen_idx]
+            
+            # Determine how many tokens the draft model is missing from its cache
+            cache_len = get_kv_cache_length(draft_kv_cache)
+            expected_len = cur_gen_idx - 1
+            if cache_len < expected_len:
+                draft_input_ids = generated_tokens[:, cache_len:cur_gen_idx]
+            else:
+                draft_input_ids = generated_tokens[:, cur_gen_idx-1:cur_gen_idx]
+            
             for idx in range(new_draft_tokens.size(-1)):
                 draft_out = draft_model(
                     input_ids=draft_input_ids,
@@ -201,19 +225,20 @@ def speculative_decode_greedy(
             
             # Update kv caches
             # Either cache should not include the last generated tok (either correction or bonus token)
-            draft_kv_cache = crop_kv_cache(draft_kv_cache, new_gen_idx - 1)
             target_kv_cache = crop_kv_cache(target_kv_cache, new_gen_idx - 1)
+            draft_kv_cache = crop_kv_cache(draft_kv_cache, new_gen_idx - 1)
             
             if track_iterations:
                 # FIXME: If we ever do batching this is wrong
-                draft_text = tokenizer.convert_ids_to_tokens(new_draft_tokens[0].tolist())
-                last_token = tokenizer.convert_ids_to_tokens(int(tokens_to_add[0, -1].item()))
+                draft_ids = new_draft_tokens[0].tolist()
+                draft_text = [tokenizer.decode([tid]) for tid in draft_ids]
+                last_token_str = tokenizer.decode([int(tokens_to_add[0, -1].item())])
                 if not collisions.any():
-                    result = f"ALL ACCEPTED ({len(new_draft_tokens[0])}) + BONUS '{last_token}'"
+                    result = f"ALL ACCEPTED ({len(draft_ids)}) + BONUS '{last_token_str}'"
                 else:
                     first_collision_idx = collisions.int().argmax(dim=-1).item()
-                    rejected = tokenizer.convert_ids_to_tokens(new_draft_tokens[0][first_collision_idx].item())
-                    result = f"ACCEPTED {first_collision_idx}, REJECTED '{rejected}' -> TARGET '{last_token}'"
+                    rejected_str = tokenizer.decode([new_draft_tokens[0][first_collision_idx].item()])
+                    result = f"ACCEPTED {first_collision_idx}, REJECTED '{rejected_str}' -> TARGET '{last_token_str}'"
                 iteration_history.append({
                     "iter": len(iteration_history),
                     "drafted": draft_text,
@@ -225,6 +250,8 @@ def speculative_decode_greedy(
                 generated_tokens = generated_tokens[:,:cur_gen_idx]
                 break
     
+    if is_cuda:
+        torch.cuda.synchronize()
     total_time = time.time() - start_time
     
     # Calculate acceptance rate (matched draft tokens / total draft tokens)
@@ -232,11 +259,12 @@ def speculative_decode_greedy(
     total_generated_tokens = cur_gen_idx - input_ids.size(1)
     
     metrics = {
-        "total_time": total_time,
+        "time": total_time,
         "generated_tokens": total_generated_tokens,
-        "total_draft_tokens": total_draft_tokens,
-        "total_matched_tokens": total_matched_tokens,
+        "draft_tokens": total_draft_tokens,
+        "matched_tokens": total_matched_tokens,
         "acceptance_rate": acceptance_rate,
+        "num_iterations": num_iterations,
     }
 
     if track_iterations:

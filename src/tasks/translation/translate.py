@@ -16,7 +16,12 @@ def create_translation_messages(source: str, target_lang: str) -> list:
     ]
 
 def translate_target(model, tokenizer, source: str, target_lang: str, max_new_tokens: int = 512, device=None, debug: bool = False):
-    """Translate using Qwen chat template."""
+    """Translate using the model's chat template.
+    
+    Returns:
+        tuple of (translation, generated_token_count, decode_time)
+            decode_time: Wall-clock generation time excluding prefill (seconds)
+    """
     messages = create_translation_messages(source, target_lang)
     
     prompt = tokenizer.apply_chat_template(
@@ -30,25 +35,44 @@ def translate_target(model, tokenizer, source: str, target_lang: str, max_new_to
     
     # Tokenize
     inputs = tokenizer(prompt, return_tensors="pt")
-    if device is not None:
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-    else:
+    if device is None:
         device = next(model.parameters()).device
-        inputs = {k: v.to(device) for k, v in inputs.items()}
+    inputs = {k: v.to(device) for k, v in inputs.items()}
     
-    # Generate
+    is_cuda = inputs["input_ids"].device.type == "cuda"
+
+    # Measure prefill time (one forward pass to fill KV cache)
     with torch.no_grad():
+        if is_cuda:
+            torch.cuda.synchronize()
+        prefill_start = time.time()
+        model(inputs["input_ids"], use_cache=True)
+        if is_cuda:
+            torch.cuda.synchronize()
+        prefill_time = time.time() - prefill_start
+    
+    # Generate (this re-does prefill internally)
+    with torch.no_grad():
+        if is_cuda:
+            torch.cuda.synchronize()
+        gen_start = time.time()
         out = model.generate(
             **inputs,
             max_new_tokens=max_new_tokens,
             do_sample=False,
             pad_token_id=tokenizer.eos_token_id,
         )
+        if is_cuda:
+            torch.cuda.synchronize()
+        total_time = time.time() - gen_start
+    
+    decode_time = total_time - prefill_time
     
     # Decode only the new tokens (after the prompt)
     prompt_len = inputs["input_ids"].shape[1]
+    generated_token_count = out.shape[1] - prompt_len
     decoded = tokenizer.decode(out[0][prompt_len:], skip_special_tokens=True)
-    return decoded.strip()
+    return decoded.strip(), generated_token_count, decode_time
 
 
 def speculative_decode_translate(
@@ -80,7 +104,7 @@ def speculative_decode_translate(
     
     Returns:
         translation: Translated text
-        metrics: Dict with acceptance_rate, total_time, etc.
+        metrics: Dict with acceptance_rate, time, draft_tokens, matched_tokens, etc.
     
     Raises:
         NotImplementedError: If tokenizers are different or sampling is requested
@@ -162,7 +186,20 @@ def assisted_decode_hf(
     input_ids = inputs["input_ids"].to(device)
     attention_mask = inputs["attention_mask"].to(device)
     prompt_len = input_ids.shape[1]
+    is_cuda = input_ids.device.type == "cuda"
 
+    # Measure prefill time (one forward pass to fill KV cache)
+    with torch.no_grad():
+        if is_cuda:
+            torch.cuda.synchronize()
+        prefill_start = time.time()
+        target_model(input_ids, use_cache=True)
+        if is_cuda:
+            torch.cuda.synchronize()
+        prefill_time = time.time() - prefill_start
+
+    if is_cuda:
+        torch.cuda.synchronize()
     start_time = time.time()
     
     # Check if tokenizers are the same object (only skip tokenizer params in this case)
@@ -201,7 +238,10 @@ def assisted_decode_hf(
             else:
                 raise
     
+    if is_cuda:
+        torch.cuda.synchronize()
     total_time = time.time() - start_time
+    decode_time = total_time - prefill_time
     generated_tokens = outputs.shape[1] - prompt_len
 
     translation = target_tokenizer.decode(
@@ -211,9 +251,9 @@ def assisted_decode_hf(
 
     if return_metrics:
         metrics = {
-            "total_time": total_time,
+            "time": decode_time,
             "generated_tokens": generated_tokens,
-            "decode_tps": generated_tokens / total_time if total_time > 0 else 0,
+            "decode_tps": generated_tokens / decode_time if decode_time > 0 else 0,
         }
         return translation, metrics
     else:
