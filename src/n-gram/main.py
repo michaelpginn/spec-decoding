@@ -24,7 +24,8 @@ languages: list = [
     "Ojibwe",
     "Quechua",
     "Maya",
-    "Tamazight"
+    "Tamazight",
+    "Chinese"
 ]
 
 def main():
