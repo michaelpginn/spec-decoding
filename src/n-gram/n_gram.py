@@ -12,7 +12,7 @@ class ngram:
             n is the number of gram.
         '''
         self.n = n
-        self.model = defaultdict(lambda: defaultdict(lambda: 0.0))
+        self.gram_freq = defaultdict(lambda: defaultdict(lambda: 0.0))
         try:
             self.tokenizer = AutoTokenizer.from_pretrained(hug_tokenizer, trust_remote_code=True)
         except OSError:
@@ -27,23 +27,18 @@ class ngram:
             if sentence is not None:
                 train_token = self.tokenizer.tokenize(sentence)
                 train_token = [self.tokenizer.bos_token] + train_token + [self.tokenizer.eos_token]
-                gram = []
-                for i in range(self.n):
-                    gram.append(train_token[i:])
 
-                n_gram = zip(*gram)
+                for idx in range(len(train_token) - self.n + 1):
+                  context = tuple(train_token[idx: idx + self.n - 1])
+                  target = train_token[idx + self.n]
+                  self.gram_freq[context][target] += 1.0
 
-                for gram in n_gram:
-                    context = tuple(gram[:-1])
-                    target = gram[-1]
-                    self.model[context][target] += 1.0
-
-        for key, value in self.model.items():
-            total_instances = float(sum(self.model[key].values()))
+        for key, value in self.gram_freq.items():
+            total_instances = float(sum(self.gram_freq[key].values()))
             if total_instances > 0:
                 for inner, count in value.items():
                     self.vocabulary[key][inner] = count / total_instances
-        return self.model, self.vocabulary
+        return self.gram_freq, self.vocabulary
 
     def predict(self, input):
         '''
@@ -56,13 +51,13 @@ class ngram:
 
         size = self.n-1 #gets the size for the lookup
 
-        if len(token)>size:
+        if len(token)<size:
             return self.tokenizer.unk_token
 
         context = token[-size:]
         context_key = tuple(context)
 
-        pred = self.model.get(context_key)
+        pred = self.gram_freq.get(context_key)
 
         if pred:
             return max(pred, key=lambda k: pred[k])
