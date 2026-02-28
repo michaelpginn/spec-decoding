@@ -64,6 +64,17 @@ def crop_kv_cache(past_key_values, new_length):
         return tuple(new_past)
 
 
+def get_kv_cache_length(past_key_values) -> int:
+    """Helper to get the current sequence length of a KV cache."""
+    if past_key_values is None:
+        return 0
+    if hasattr(past_key_values, "get_seq_length"):
+        return past_key_values.get_seq_length()
+    if isinstance(past_key_values, tuple) and len(past_key_values) > 0:
+        return past_key_values[0][0].size(2)
+    return 0
+
+
 def speculative_decode_greedy(
     target_model,
     draft_model,
@@ -143,7 +154,15 @@ def speculative_decode_greedy(
                 device=input_ids.device,
                 dtype=torch.int64
             )
-            draft_input_ids = generated_tokens[:, cur_gen_idx-1:cur_gen_idx]
+            
+            # Determine how many tokens the draft model is missing from its cache
+            cache_len = get_kv_cache_length(draft_kv_cache)
+            expected_len = cur_gen_idx - 1
+            if cache_len < expected_len:
+                draft_input_ids = generated_tokens[:, cache_len:cur_gen_idx]
+            else:
+                draft_input_ids = generated_tokens[:, cur_gen_idx-1:cur_gen_idx]
+            
             for idx in range(new_draft_tokens.size(-1)):
                 draft_out = draft_model(
                     input_ids=draft_input_ids,
@@ -207,22 +226,7 @@ def speculative_decode_greedy(
             # Update kv caches
             # Either cache should not include the last generated tok (either correction or bonus token)
             target_kv_cache = crop_kv_cache(target_kv_cache, new_gen_idx - 1)
-            
-            # Draft KV cache length after step 1 is (old cur_gen_idx) - 1 + n
-            old_cur_gen_idx = new_gen_idx - tokens_to_add.size(-1)
-            current_draft_len = old_cur_gen_idx - 1 + new_draft_tokens.size(-1)
-            required_draft_len = new_gen_idx - 1
-            
-            if required_draft_len > current_draft_len:
-                missing_input_ids = generated_tokens[:, current_draft_len:required_draft_len]
-                draft_out = draft_model(
-                    input_ids=missing_input_ids,
-                    past_key_values=draft_kv_cache,
-                    use_cache=True,
-                )
-                draft_kv_cache = draft_out.past_key_values
-
-            draft_kv_cache = crop_kv_cache(draft_kv_cache, required_draft_len)
+            draft_kv_cache = crop_kv_cache(draft_kv_cache, new_gen_idx - 1)
             
             if track_iterations:
                 # FIXME: If we ever do batching this is wrong
