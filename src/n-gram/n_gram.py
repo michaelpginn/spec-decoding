@@ -30,9 +30,12 @@ class ngram:
                 train_token = [self.tokenizer.bos_token] + train_token + [self.tokenizer.eos_token]
 
                 for idx in range(len(train_token) - self.n + 1):
-                  context = tuple(train_token[idx: idx + self.n - 1])
-                  target = train_token[idx + self.n]
-                  self.gram_freq[context][target] += 1.0
+                    context = tuple(train_token[idx: idx + self.n - 1])
+                    try:
+                        target = train_token[idx + self.n]
+                    except IndexError:
+                        target = train_token[idx]
+                    self.gram_freq[context][target] += 1.0
 
         for key, value in self.gram_freq.items():
             total_instances = float(sum(self.gram_freq[key].values()))
