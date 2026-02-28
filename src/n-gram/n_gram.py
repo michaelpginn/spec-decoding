@@ -1,5 +1,6 @@
 from collections import defaultdict
 
+import torch
 from transformers import AutoTokenizer
 
 """
@@ -54,12 +55,13 @@ class ngram:
         if len(token)<size:
             return self.tokenizer.unk_token
 
+
+        probabilities = torch.zeros(len(self.vocabulary))
         context = token[-size:]
         context_key = tuple(context)
 
-        pred = self.gram_freq.get(context_key)
+        for token, prob in self.gram_freq[context_key]:
+            token_id = self.tokenizer.id_for_token(token)
+            probabilities[token_id] = prob
 
-        if pred:
-            return max(pred, key=lambda k: pred[k])
-        else:
-            return self.tokenizer.unk_token
+        return probabilities
