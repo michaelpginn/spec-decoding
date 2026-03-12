@@ -34,3 +34,20 @@ fi
 
 export HF_HOME="/scratch/alpine/${USER}/.cache/huggingface"
 mkdir -p "$HF_HOME"
+
+echo "============================================"
+echo "Job ID:        $SLURM_JOB_ID"
+echo "Node:          $SLURMD_NODENAME"
+echo "GPUs:          ${CUDA_VISIBLE_DEVICES:-not set}"
+echo "Repo root:     $REPO_ROOT"
+echo "HF cache:      $HF_HOME"
+echo "Python:        $(which python)"
+echo "Started:       $(date)"
+echo "============================================"
+nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
+echo "============================================"
+
+bash experiments/run_baseline_spec.sh
+
+echo ""
+echo "Finished: $(date)"
