@@ -16,15 +16,21 @@ from data_loading import data_prep
 
 def main():
     dataset = data_prep(language=language, text_type="mono")
-    train,test = dataset.prepare_data()
+    train, test = dataset.prepare_data()
 
     print(train)
 
     train = train[dataset.get_col_name(language)]
     test = test[dataset.get_col_name(language)]
 
-    model_bigram = n_gram.ngram(2, "Qwen/Qwen-7B",)
-    model_trigram = n_gram.ngram(3, "Qwen/Qwen-7B",)
+    model_bigram = n_gram.ngram(
+        2,
+        "Qwen/Qwen-7B",
+    )
+    model_trigram = n_gram.ngram(
+        3,
+        "Qwen/Qwen-7B",
+    )
 
     model_bigram.train(train)
     model_trigram.train(train)
