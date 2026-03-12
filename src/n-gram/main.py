@@ -14,7 +14,16 @@ sys.path.append(parent_dir)
 from data_loading import data_prep
 
 
+def get_arg():
+    parser = argparse.ArgumentParser(description="N-gram experiment")
+
+    parser.add_argument('--language', type=str, required=True, help="Language from hugging face dataset")
+
+    return parser.parse_args()
+
 def main():
+    args = get_arg()
+
     dataset = data_prep(language=language, text_type="mono")
     train, test = dataset.prepare_data()
 
