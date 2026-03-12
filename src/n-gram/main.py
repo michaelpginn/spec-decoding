@@ -3,6 +3,7 @@ import os
 import sys
 
 import n_gram
+import torch
 import wandb
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -22,25 +23,28 @@ def get_arg():
     return parser.parse_args()
 
 def main():
+    device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available()  else "cpu")
     args = get_arg()
     language = args.language
 
     dataset = data_prep(language=language, text_type="mono")
-    train, test = dataset.prepare_data()
+    train, test = dataset.prepare_data().to(device)
 
     print(train)
 
-    train = train[dataset.get_col_name(language)]
-    test = test[dataset.get_col_name(language)]
+    train = train[dataset.get_col_name(language)].to(device)
+    test = test[dataset.get_col_name(language)].to(device)
 
     model_bigram = n_gram.ngram(
         2,
         "Qwen/Qwen-7B",
-    )
+        device
+    ).to(device)
     model_trigram = n_gram.ngram(
         3,
         "Qwen/Qwen-7B",
-    )
+        device
+    ).to(device)
 
     model_bigram.train(train)
     model_trigram.train(train)

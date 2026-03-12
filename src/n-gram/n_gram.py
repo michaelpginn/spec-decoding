@@ -20,10 +20,11 @@ class ngram:
             return "Not a hugging face tokenizer"
         self.vocabulary = defaultdict(lambda: defaultdict(lambda: 0.0))
 
-    def train(self, train_list):
+    def train(self, train_list, device):
         '''
         making the n-gram from the training set
         '''
+        train_list = train_list.to(device)
         for sentence in train_list:
             if sentence is not None:
                 train_token = self.tokenizer.tokenize(sentence)
@@ -38,18 +39,21 @@ class ngram:
                     self.gram_freq[context][target] += 1.0
 
         for key, value in self.gram_freq.items():
+            key = key.to(device)
+            value = value.to(device)
             total_instances = float(sum(self.gram_freq[key].values()))
             if total_instances > 0:
                 for inner, count in value.items():
                     self.vocabulary[key][inner] = count / total_instances
         return self.gram_freq, self.vocabulary
 
-    def predict(self, input):
+    def predict(self, input, device):
         '''
             tokenize input text
         '''
+        input = input.to(device)
         if isinstance(input, str):
-            token = self.tokenizer.tokenizer(input)
+            token = self.tokenizer.tokenizer(input).to(device)
         else:
             token = input
 
@@ -59,8 +63,8 @@ class ngram:
             return self.tokenizer.unk_token
 
 
-        probabilities = torch.zeros(len(self.vocabulary))
-        context = token[-size:]
+        probabilities = torch.zeros(len(self.vocabulary)).to(device)
+        context = token[-size:].to(device)
         context_key = tuple(context)
 
         for token, prob in self.gram_freq[context_key]:
