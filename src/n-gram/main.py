@@ -23,6 +23,7 @@ def get_arg():
 
 def main():
     args = get_arg()
+    language = args.language
 
     dataset = data_prep(language=language, text_type="mono")
     train, test = dataset.prepare_data()
