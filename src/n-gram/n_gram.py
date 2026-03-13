@@ -7,7 +7,7 @@ from transformers import AutoTokenizer
 Would need to install tiktoken and transformers
 """
 class ngram:
-    def __init__(self, n, hug_tokenizer):
+    def __init__(self, n, hug_tokenizer, device):
         '''
             takes tokenizer and checks if it is a huggingface and takes the tokenizer from it
             n is the number of gram.
@@ -40,7 +40,7 @@ class ngram:
 
         for key, value in self.gram_freq.items():
             key = key.to(device)
-            value = value.to(device)
+            value = value
             total_instances = float(sum(self.gram_freq[key].values()))
             if total_instances > 0:
                 for inner, count in value.items():

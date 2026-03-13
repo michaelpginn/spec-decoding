@@ -32,22 +32,22 @@ def main():
 
     print(train)
 
-    train = train[dataset.get_col_name(language)].to(device)
-    test = test[dataset.get_col_name(language)].to(device)
+    train = train[dataset.get_col_name(language)]
+    test = test[dataset.get_col_name(language)]
 
     model_bigram = n_gram.ngram(
         2,
         "Qwen/Qwen-7B",
         device
-    ).to(device)
+    )
     model_trigram = n_gram.ngram(
         3,
         "Qwen/Qwen-7B",
         device
-    ).to(device)
+    )
 
-    model_bigram.train(train)
-    model_trigram.train(train)
+    model_bigram.train(train,device)
+    model_trigram.train(train, device)
     return 0
 
 
