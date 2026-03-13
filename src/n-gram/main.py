@@ -28,7 +28,7 @@ def main():
     language = args.language
 
     dataset = data_prep(language=language, text_type="mono")
-    train, test = dataset.prepare_data().to(device)
+    train, test = dataset.prepare_data()
 
     print(train)
 
