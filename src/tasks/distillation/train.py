@@ -42,6 +42,12 @@ def compute_distillation_loss(student_logits, teacher_logits, attention_mask, te
     student_log_probs = F.log_softmax(shift_student_logits / temperature, dim=-1)
     teacher_probs = F.softmax(shift_teacher_logits / temperature, dim=-1)
 
+    # This handles edge cases where the teacher and student vocabularies might differ
+    if student_log_probs.size(-1) != teacher_probs.size(-1):
+        min_vocab = min(student_log_probs.size(-1), teacher_probs.size(-1))
+        student_log_probs = student_log_probs[..., :min_vocab]
+        teacher_probs = teacher_probs[..., :min_vocab]
+
     kl_per_token_vocab = F.kl_div(
         student_log_probs, teacher_probs, reduction="none"
     )
