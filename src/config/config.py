@@ -30,9 +30,8 @@ class DistillConfig:
     language_code: str
 
     # Dataset
-    dataset_name: str = "lecslab/monoling_ber"
+    dataset_name: str | None = None
     dataset_config: str | None = None
-    dataset_text_column: str = "text"
     dataset_split: str = "train"
     dataset_path: str | None = None
     max_samples: int = 50000

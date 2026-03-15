@@ -34,19 +34,23 @@ def build_repo_name(config: DistillConfig, dataset_len: int) -> str:
 
 def compute_distillation_loss(student_logits, teacher_logits, attention_mask, temperature):
     """Compute KL divergence loss between student and teacher distributions."""
-    student_log_probs = F.log_softmax(student_logits / temperature, dim=-1)
-    teacher_probs = F.softmax(teacher_logits / temperature, dim=-1)
+    # Shift so that tokens < n predict n
+    shift_student_logits = student_logits[..., :-1, :].contiguous()
+    shift_teacher_logits = teacher_logits[..., :-1, :].contiguous()
+    shift_mask = attention_mask[..., 1:].contiguous().float()
+
+    student_log_probs = F.log_softmax(shift_student_logits / temperature, dim=-1)
+    teacher_probs = F.softmax(shift_teacher_logits / temperature, dim=-1)
 
     kl_per_token_vocab = F.kl_div(
         student_log_probs, teacher_probs, reduction="none"
     )
 
-    mask = attention_mask.float().to(student_logits.device)
-    expanded_mask = mask.unsqueeze(-1)  # [batch, seq_len, 1]
+    expanded_mask = shift_mask.unsqueeze(-1)  # [batch, seq_len-1, 1]
     kl_per_token = (kl_per_token_vocab * expanded_mask).sum(dim=-1)
 
-    if mask.sum() > 0:
-        loss = (temperature ** 2) * (kl_per_token.sum() / mask.sum())
+    if shift_mask.sum() > 0:
+        loss = (temperature ** 2) * (kl_per_token.sum() / shift_mask.sum())
     else:
         loss = torch.tensor(0.0, device=student_logits.device)
 
@@ -92,13 +96,16 @@ def run_distillation(config: DistillConfig):
     tokenizer.padding_side = "right"
 
     student.train()
+    if hasattr(student, "gradient_checkpointing_enable"):
+        student.gradient_checkpointing_enable()
+        logger.info("Enabled gradient checkpointing for student model")
 
     if len(tokenizer) > student.get_input_embeddings().num_embeddings:
         student.resize_token_embeddings(len(tokenizer))
 
     device = next(student.parameters()).device
 
-    dataset = load_distillation_dataset(config)
+    dataset, text_col = load_distillation_dataset(config)
     dataset_len = len(dataset)
 
     repo_name = build_repo_name(config, dataset_len)
@@ -106,7 +113,7 @@ def run_distillation(config: DistillConfig):
 
     def tokenize_fn(examples):
         return tokenizer(
-            examples[config.dataset_text_column],
+            examples[text_col],
             padding="max_length",
             truncation=True,
             max_length=config.max_length,
@@ -155,6 +162,8 @@ def run_distillation(config: DistillConfig):
     start_time = time.time()
     epoch = 0
 
+    scaler = torch.amp.GradScaler(device.type, enabled=(device.type == "cuda"))
+
     logger.info(f"Training from step {start_step} to {target_step}")
 
     while step < target_step:
@@ -166,15 +175,16 @@ def run_distillation(config: DistillConfig):
             attention_mask = batch["attention_mask"].to(device)
             inputs = {"input_ids": input_ids, "attention_mask": attention_mask}
 
-            with torch.no_grad():
-                teacher_logits = teacher(**inputs).logits
-            student_logits = student(**inputs).logits
+            with torch.amp.autocast(device_type=device.type, enabled=(device.type == "cuda")):
+                with torch.no_grad():
+                    teacher_logits = teacher(**inputs).logits
+                student_logits = student(**inputs).logits
 
-            loss_distill = compute_distillation_loss(
-                student_logits, teacher_logits, attention_mask, config.temperature,
-            )
-            loss_hard = compute_hard_label_loss(student_logits, input_ids, attention_mask)
-            loss = (config.alpha * loss_distill) + ((1 - config.alpha) * loss_hard)
+                loss_distill = compute_distillation_loss(
+                    student_logits, teacher_logits, attention_mask, config.temperature,
+                )
+                loss_hard = compute_hard_label_loss(student_logits, input_ids, attention_mask)
+                loss = (config.alpha * loss_distill) + ((1 - config.alpha) * loss_hard)
 
             if torch.isnan(loss):
                 logger.warning(f"Skipping step {step}: loss is NaN")
@@ -184,15 +194,17 @@ def run_distillation(config: DistillConfig):
                 step += 1
                 continue
 
-            (loss / config.grad_accum_steps).backward()
+            scaler.scale(loss / config.grad_accum_steps).backward()
             accum_loss += loss.item()
             accum_count += 1
             log_accum_loss += loss.item()
             log_step_count += 1
 
             if accum_count >= config.grad_accum_steps:
+                scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(student.parameters(), 1.0)
-                optimizer.step()
+                scaler.step(optimizer)
+                scaler.update()
                 optimizer.zero_grad()
                 accum_loss = 0.0
                 accum_count = 0
