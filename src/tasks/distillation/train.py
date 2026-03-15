@@ -162,7 +162,8 @@ def run_distillation(config: DistillConfig):
     start_time = time.time()
     epoch = 0
 
-    scaler = torch.amp.GradScaler(device.type, enabled=(device.type == "cuda"))
+    use_scaler = (device.type == "cuda" and student.dtype == torch.float16)
+    scaler = torch.amp.GradScaler(device.type, enabled=use_scaler)
 
     logger.info(f"Training from step {start_step} to {target_step}")
 
