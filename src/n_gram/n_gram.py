@@ -6,7 +6,7 @@ from transformers import AutoTokenizer
 """
 Would need to install tiktoken and transformers
 """
-class ngram:
+class NGramModel:
     def __init__(self, n, hug_tokenizer, device):
         '''
             takes tokenizer and checks if it is a huggingface and takes the tokenizer from it

@@ -35,12 +35,12 @@ def main():
     train = train[dataset.get_col_name(language)]
     test = test[dataset.get_col_name(language)]
 
-    model_bigram = n_gram.ngram(
+    model_bigram = n_gram.NGramModel(
         2,
         "Qwen/Qwen-7B",
         device
     )
-    model_trigram = n_gram.ngram(
+    model_trigram = n_gram.NGramModel(
         3,
         "Qwen/Qwen-7B",
         device

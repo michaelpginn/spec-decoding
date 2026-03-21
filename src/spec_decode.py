@@ -265,6 +265,7 @@ def speculative_decode_greedy(
         "matched_tokens": total_matched_tokens,
         "acceptance_rate": acceptance_rate,
         "num_iterations": num_iterations,
+        "toks_per_sec": total_generated_tokens / total_time if total_time > 0 else 0,
     }
 
     if track_iterations:
@@ -288,5 +289,3 @@ def speculative_decode_different_tokenizers():
         "Different tokenizer speculative decoding not implemented yet. "
         "Use HuggingFace's assisted_decode for this case."
     )
-
-

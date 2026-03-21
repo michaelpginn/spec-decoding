@@ -4,17 +4,25 @@ from typing import Literal
 
 @dataclass
 class ExperimentConfig:
+    task: Literal['translation']
+    language_code: str
+
     target_model: str
     draft_model: str | None
-    language_code: str
-    
     draft_model_type: Literal["none", "neural", "statistical"]
     decoding_mode: Literal["greedy", "top_k", "top_p"]
-
-    task: str = "translation"
+    gamma: int = 5
+    track_iterations = False # If true, will log per-iteration of SD
+    
+    use_hf_assisted: bool = False
+    hf_schedule: Literal["heuristic", "constant"] | None = None
+    
     data_source: str = "tatoeba"
     max_samples: int = 5
-    max_new_tokens: int = 256
-    gamma: int = 5
-    use_hf_assisted: bool = False
+    max_new_tokens: int = 512
     device: str = "auto"
+
+    def __post_init__(self):
+        if self.draft_model_type != 'none':
+            assert self.draft_model is None
+            assert self.gamma > 0
