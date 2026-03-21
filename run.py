@@ -99,7 +99,7 @@ def setup_wandb(config: ExperimentConfig):
     is_spec = config.draft_model_type != "none"
     draft_short = (
         config.draft_model.split("/")[-1]
-        if config.draft_model and config.draft_model != "None"
+        if config.draft_model
         else None
     )
     job_type = "spec" if is_spec else "baseline"
