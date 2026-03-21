@@ -108,7 +108,7 @@ def _compute_spec_metrics(
         {
             "sentence/acceptance_rate": m["acceptance_rate"],
             "sentence/draft_tokens": m["draft_tokens"],
-            "sentence/generated_tokens": m["matched_tokens"],
+            "sentence/matched_tokens": m["matched_tokens"],
         }
         for m in spec_results
     ]

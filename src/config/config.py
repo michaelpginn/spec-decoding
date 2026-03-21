@@ -24,5 +24,5 @@ class ExperimentConfig:
 
     def __post_init__(self):
         if self.draft_model_type != 'none':
-            assert self.draft_model is None
+            assert self.draft_model is not None
             assert self.gamma > 0
