@@ -24,7 +24,7 @@ def load_model(model_name: str, device: str = "auto"):
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        torch_dtype=torch.bfloat16 if dev.type == "cuda" else torch.float32,
+        dtype=torch.bfloat16 if dev.type == "cuda" else torch.float32,
         device_map="auto" if dev.type == "cuda" else None,
         trust_remote_code=True,
     )
@@ -32,5 +32,3 @@ def load_model(model_name: str, device: str = "auto"):
     if dev.type == "cpu" and getattr(model, "device", None) != dev:
         model = model.to(dev)
     return model, tokenizer
-
-

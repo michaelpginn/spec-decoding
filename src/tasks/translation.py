@@ -14,7 +14,7 @@ from src.config.config import ExperimentConfig
 
 logger = logging.getLogger(__name__)
 
-DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 REFERENCE_TABLE = DATA_DIR / "reference_table_bilingual.csv"
 
 

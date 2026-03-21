@@ -137,12 +137,12 @@ def load_models(args):
     if args.resume_from and os.path.exists(args.resume_from):
         print(f"Resuming from checkpoint: {args.resume_from}")
         student = AutoModelForCausalLM.from_pretrained(
-            args.resume_from, torch_dtype=dtype, device_map="auto"
+            args.resume_from, dtype=dtype, device_map="auto"
         )
     else:
         print(f"Loading fresh student model: {args.student_model}")
         student = AutoModelForCausalLM.from_pretrained(
-            args.student_model, torch_dtype=dtype, device_map="auto"
+            args.student_model, dtype=dtype, device_map="auto"
         )
     
     student.train()

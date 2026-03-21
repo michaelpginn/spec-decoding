@@ -78,7 +78,7 @@ def run(config: ExperimentConfig):
     per_sentence_metrics, summary_metrics = summarize_metrics(
         all_metrics,
         config.gamma,
-        config.draft_model_type is not None and not config.use_hf_assisted,
+        config.draft_model_type != "none" and not config.use_hf_assisted,
     )
     wandb.summary.update(summary_metrics)
     for entry in per_sentence_metrics:

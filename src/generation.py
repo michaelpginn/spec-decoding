@@ -22,7 +22,7 @@ def generate_output(
     prompt_len = inputs["input_ids"].shape[1]
 
     # Use our custom spec dec implementation
-    if not config.use_hf_assisted:
+    if config.draft_model_type != 'none' and not config.use_hf_assisted:
         output_ids, metrics = speculative_decode_greedy(
             target_model=model,
             draft_model=draft_model,
