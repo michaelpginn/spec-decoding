@@ -23,6 +23,9 @@ class ExperimentConfig:
     device: str = "auto"
 
     def __post_init__(self):
+        if self.draft_model == "None": 
+            self.draft_model = None
+            
         if self.draft_model_type != 'none':
             assert self.draft_model is not None
             assert self.gamma > 0
