@@ -26,5 +26,6 @@ def create_inputs(
     if debug:
         print(f"\n[DEBUG] Prompt:\n{prompt}\n{'=' * 60}")
     inputs = tokenizer(prompt, return_tensors="pt")
-    inputs = {k: v.to(device) for k, v in inputs.items()}
+    if device is not None:
+        inputs = {k: v.to(device) for k, v in inputs.items()}
     return inputs
