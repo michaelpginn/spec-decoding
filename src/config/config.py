@@ -12,7 +12,7 @@ class ExperimentConfig:
     draft_model_type: Literal["none", "neural", "statistical"]
     decoding_mode: Literal["greedy", "top_k", "top_p"]
     gamma: int = 5
-    track_iterations = False # If true, will log per-iteration of SD
+    track_iterations: bool = False # If true, will log per-iteration of SD
     
     use_hf_assisted: bool = False
     hf_schedule: Literal["heuristic", "constant"] | None = None
