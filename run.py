@@ -11,7 +11,9 @@ from tqdm import tqdm
 from src.config.config import ExperimentConfig
 from src.config.config_to_dataclass import config_to_dataclass
 from src.data.create_inputs import create_inputs, create_prompt
+from src.data.dataset import assemble_dataset
 from src.generation import generate_output
+from src.n_gram import NGramModel
 from src.spec_dec_metrics import log_token_flow, summarize_metrics
 from src.utils import load_model
 
@@ -19,6 +21,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="\033[90m%(asctime)s \033[36m[%(levelname)s] \033[1;33m%(module)s\033[0m: %(message)s",
 )
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
@@ -47,15 +50,22 @@ def run(config: ExperimentConfig):
         logger.info("Specified no draft model, running without spec dec")
         draft_model = None
         draft_tokenizer = None
-    elif config.draft_model is not None:
-        logger.info(f"Loading draft model: {config.draft_model}...")
-        draft_model, draft_tokenizer = load_model(
-            config.draft_model, device=config.device
-        )
-    else:
-        logger.info("No draft model specified, using target as draft.")
-        draft_model = target_model
+    elif config.draft_model_type == "neural":
+        if config.draft_model is not None:
+            logger.info(f"Loading draft model: {config.draft_model}...")
+            draft_model, draft_tokenizer = load_model(
+                config.draft_model, device=config.device
+            )
+        else:
+            logger.info("No draft model specified, using target as draft.")
+            draft_model = target_model
+            draft_tokenizer = target_tokenizer
+    elif config.draft_model_type == "ngram":
         draft_tokenizer = target_tokenizer
+        draft_model = NGramModel(n=config.ngram_n, tokenizer=draft_tokenizer)
+        draft_model.train(assemble_dataset(language, 'mono')['train'])
+    else:
+        raise ValueError()
 
     # 4. Decoding loop
     predictions = []
@@ -97,11 +107,13 @@ def run(config: ExperimentConfig):
 def setup_wandb(config: ExperimentConfig):
     target_short = config.target_model.split("/")[-1]
     is_spec = config.draft_model_type != "none"
-    draft_short = (
-        config.draft_model.split("/")[-1]
-        if config.draft_model
-        else None
-    )
+    if config.draft_model_type == 'ngram':
+        draft_short = "ngram"
+    elif config.draft_model_type == 'neural':
+        draft_short = config.draft_model.split("/")[-1] # type:ignore
+    else:
+        draft_short = None
+        
     job_type = "spec" if is_spec else "baseline"
     group = f"{target_short}__{config.language_code}"
     if is_spec:
@@ -114,6 +126,7 @@ def setup_wandb(config: ExperimentConfig):
         tags += [draft_short, f"gamma={config.gamma}", config.draft_model_type]
     else:
         tags.append("baseline")
+    tags = [t for t in tags if t is not None]
 
     wandb_config = asdict(config)
     wandb_config["target_model_short"] = target_short
