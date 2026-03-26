@@ -17,5 +17,5 @@ def assemble_dataset(language: str, type: Literal["mono", "bi"]):
     dataset = concatenate_datasets(datasets_list)
     if language in dataset.column_names:
         dataset = dataset.rename_column(language, "text")
-    dataset.filter(lambda row: row['text'])
+    dataset = dataset.filter(lambda row: row['text'])
     return dataset.train_test_split(test_size=0.2, seed=42)

@@ -57,13 +57,16 @@ def crop_kv_cache(past_key_values, new_length):
     else:
         new_past = []
         for layer_past in past_key_values:
-            if len(layer_past) == 2:
+            # NGramModel-style cache: a single tensor per layer
+            if isinstance(layer_past, torch.Tensor):
+                # Crop along the sequence-length dimension (assumed last)
+                new_past.append(layer_past[..., :new_length])
+            # Standard (key, value) pair cache from HF
+            elif len(layer_past) == 2:
                 key_state, value_state = layer_past
                 k_cropped = key_state[..., :new_length, :]
                 v_cropped = value_state[..., :new_length, :]
                 new_past.append((k_cropped, v_cropped))
-            elif len(layer_past) == 1:
-                new_past.append(layer_past[..., :new_length, :])
         return tuple(new_past)
 
 
@@ -74,7 +77,11 @@ def get_kv_cache_length(past_key_values) -> int:
     if hasattr(past_key_values, "get_seq_length"):
         return past_key_values.get_seq_length()
     if isinstance(past_key_values, tuple) and len(past_key_values) > 0:
-        return past_key_values[0][0].size(-1)
+        if len(past_key_values[0][0].shape) == 4:
+            # HF cache
+            return past_key_values[0][0].size(2)
+        else:
+            return past_key_values[0][0].size(-1)
     return 0
 
 
