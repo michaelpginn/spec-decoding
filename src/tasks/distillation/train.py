@@ -11,7 +11,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 
 from src.config.config import DistillConfig
-from src.decoding.models import load_model
+from src.utils import load_model
 from src.tasks.distillation.data_loader import load_seqkd_dataset, tokenize_seqkd
 
 logger = logging.getLogger(__name__)

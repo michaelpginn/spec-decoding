@@ -13,14 +13,15 @@ import logging
 import os
 import pprint
 
+import torch
 from datasets import Dataset
 from tqdm import tqdm
 
 from src.config.config import DistillConfig
 from src.config.config_to_dataclass import config_to_dataclass
-from src.decoding.models import load_model
-from src.tasks.translation.data_loader import load_tatoeba_data, get_language_name
-from src.tasks.translation.translate import translate_target
+from src.data.create_inputs import create_inputs, create_prompt
+from src.tasks.translation import _get_language_name, _get_hf_dataset_id
+from src.utils import load_model
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,29 +30,67 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _load_english_sources(language_code: str, max_samples: int | None) -> list[str]:
+    """Load English sentences from the bilingual dataset."""
+    from datasets import load_dataset as hf_load
+
+    hf_id, lang_name = _get_hf_dataset_id(language_code)
+    logger.info(f"Loading from HuggingFace: {hf_id}")
+
+    if max_samples and max_samples > 0:
+        split = f"train[:{max_samples}]"
+    else:
+        split = "train"
+    ds = hf_load(hf_id, split=split)
+    columns = ds.column_names
+
+    if "English" in columns:
+        src_col = "English"
+    elif len(columns) == 2:
+        src_col = columns[0]
+    else:
+        raise ValueError(f"Cannot determine English column from {columns}")
+
+    sources = []
+    seen = set()
+    for row in ds:
+        text = str(row[src_col]).strip()
+        if text and text not in seen:
+            seen.add(text)
+            sources.append(text)
+
+    return sources
+
+
+def _translate_with_teacher(model, tokenizer, source: str, lang_name: str,
+                            max_new_tokens: int, device) -> str:
+    """Translate a single sentence using the teacher model."""
+    prompt = create_prompt("translation", lang_name, source)
+    inputs = create_inputs(prompt, tokenizer, device)
+
+    with torch.no_grad():
+        out = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            pad_token_id=tokenizer.eos_token_id,
+        )
+
+    prompt_len = inputs["input_ids"].shape[1]
+    return tokenizer.decode(out[0][prompt_len:], skip_special_tokens=True).strip()
+
+
 def generate_seqkd_dataset(config: DistillConfig) -> Dataset:
     """Translate English sentences with the teacher and return a HF Dataset."""
-    lang_name = get_language_name(config.language_code)
+    lang_name = _get_language_name(config.language_code)
     logger.info(f"Language: {lang_name} ({config.language_code})")
 
     max_samples = config.max_samples if config.max_samples > 0 else None
-    pairs = load_tatoeba_data(config.language_code, max_samples=max_samples)
-    logger.info(f"Loaded {len(pairs)} bilingual pairs (using English column only)")
+    sources = _load_english_sources(config.language_code, max_samples)
+    logger.info(f"Loaded {len(sources)} unique English sentences")
 
-    if not pairs:
+    if not sources:
         raise ValueError(f"No bilingual data found for {config.language_code}")
-
-    seen = set()
-    unique_sources = []
-    for src, _ in pairs:
-        src_stripped = src.strip()
-        if src_stripped and src_stripped not in seen:
-            seen.add(src_stripped)
-            unique_sources.append(src_stripped)
-
-    logger.info(f"After deduplication: {len(unique_sources)} unique English sentences "
-                f"(removed {len(pairs) - len(unique_sources)} duplicates)")
-    sources = unique_sources
 
     logger.info(f"Loading teacher model: {config.teacher_model}")
     model, tokenizer = load_model(config.teacher_model, device=config.device)
@@ -60,7 +99,7 @@ def generate_seqkd_dataset(config: DistillConfig) -> Dataset:
     translations: list[str] = []
     logger.info(f"Generating {len(sources)} teacher translations...")
     for source in tqdm(sources, desc="Teacher translating"):
-        translation, _, _ = translate_target(
+        translation = _translate_with_teacher(
             model, tokenizer, source, lang_name,
             max_new_tokens=config.max_length, device=device,
         )

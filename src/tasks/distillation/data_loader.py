@@ -7,8 +7,8 @@ from datasets import Dataset, load_dataset, load_from_disk
 from transformers import PreTrainedTokenizer
 
 from src.config.config import DistillConfig
-from src.tasks.translation.data_loader import get_language_name
-from src.tasks.translation.translate import create_translation_messages
+from src.data.create_inputs import create_prompt
+from src.tasks.translation import _get_language_name
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ def tokenize_seqkd(
     Builds the full chat string (prompt + translation) for each example,
     tokenizes it, and creates labels where prompt tokens are -100.
     """
-    lang_name = get_language_name(config.language_code)
+    lang_name = _get_language_name(config.language_code)
 
     def _tokenize(examples):
         all_input_ids = []
@@ -68,7 +68,8 @@ def tokenize_seqkd(
         all_labels = []
 
         for source, translation in zip(examples["source"], examples["teacher_translation"]):
-            messages = create_translation_messages(source, lang_name)
+            prompt_text = create_prompt("translation", lang_name, source)
+            messages = [{"role": "user", "content": prompt_text}]
 
             prompt_str = tokenizer.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=True,
