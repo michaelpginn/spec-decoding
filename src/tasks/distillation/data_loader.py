@@ -1,119 +1,116 @@
 """
-Load monolingual datasets for knowledge distillation.
+Load pre-generated teacher translations for SeqKD training.
 """
-import csv
 import logging
-from pathlib import Path
 
-from datasets import Dataset, load_dataset
+from datasets import Dataset, load_dataset, load_from_disk
+from transformers import PreTrainedTokenizer
 
 from src.config.config import DistillConfig
+from src.tasks.translation.data_loader import get_language_name
+from src.tasks.translation.translate import create_translation_messages
 
 logger = logging.getLogger(__name__)
 
-_REFERENCE_TABLE = (
-    Path(__file__).resolve().parent.parent.parent / "data" / "reference_table_monolingual.csv"
-)
 
-
-def _get_text_column(lang_code: str) -> str:
-    """Map a language code to the dataset column name via the reference table."""
-    lang_code = lang_code.strip().lower()
-    with open(_REFERENCE_TABLE, newline="", encoding="utf-8-sig") as f:
-        for row in csv.DictReader(f):
-            if row["Code"].strip().lower() == lang_code:
-                return row["Language"].strip()
-    raise KeyError(
-        f"Language code '{lang_code}' not found in {_REFERENCE_TABLE}. "
-        f"Add it to the reference table or use dataset_text_column override."
-    )
-
-
-def _resolve_dataset_name(config: DistillConfig) -> str:
-    if config.dataset_name and config.dataset_name != "None":
-        return config.dataset_name
-    return f"lecslab/monoling_{config.language_code}"
-
-
-def _load_raw_dataset(config: DistillConfig, *, streaming: bool):
-    """Load the raw HuggingFace dataset."""
-    name = _resolve_dataset_name(config)
-    logger.info(f"Loading dataset: {name}")
-    kwargs = {"split": config.dataset_split, "streaming": streaming}
-    if config.dataset_config and config.dataset_config != "None":
-        kwargs["name"] = config.dataset_config
-    return load_dataset(name, **kwargs)
-
-
-def _stream_and_collect(config: DistillConfig, text_col: str) -> Dataset:
+def load_seqkd_dataset(config: DistillConfig) -> Dataset:
     """
-    Stream the dataset, filtering and deduplicating on the fly,
-    stopping as soon as max_samples unique rows are collected.
+    Load the pre-generated teacher translation dataset.
+
+    Returns a Dataset with columns: source, teacher_translation.
     """
-    stream = _load_raw_dataset(config, streaming=True)
-
-    seen: set[str] = set()
-    kept: list[dict] = []
-    n_short = 0
-    n_dupes = 0
-
-    for row in stream:
-        text = row[text_col]
-        if len(text) <= config.min_text_length:
-            n_short += 1
-            continue
-        if text in seen:
-            n_dupes += 1
-            continue
-        seen.add(text)
-        kept.append(row)
-        if len(kept) >= config.max_samples:
-            break
-
-    if n_short:
-        logger.info(f"Skipped {n_short} short examples (len <= {config.min_text_length})")
-    if n_dupes:
-        logger.info(f"Skipped {n_dupes} duplicate examples")
-
-    return Dataset.from_list(kept)
-
-
-def _deduplicate(dataset, text_column: str):
-    """Remove duplicate texts, keeping the first occurrence."""
-    seen: set[str] = set()
-    keep_indices: list[int] = []
-    for i, text in enumerate(dataset[text_column]):
-        if text not in seen:
-            seen.add(text)
-            keep_indices.append(i)
-
-    n_dupes = len(dataset) - len(keep_indices)
-    if n_dupes > 0:
-        logger.info(f"Removed {n_dupes} duplicate examples")
-        dataset = dataset.select(keep_indices)
-    return dataset
-
-
-def load_distillation_dataset(config: DistillConfig) -> tuple[Dataset, str]:
-    """
-    Load and prepare a monolingual dataset for distillation.
-
-    Returns (dataset, text_column).
-    """
-    if config.dataset_name and config.dataset_name != "None":
-        text_col = "text"
-    else:
-        text_col = _get_text_column(config.language_code)
-    logger.info(f"Using text column: '{text_col}'")
-
-    if config.max_samples > 0:
-        dataset = _stream_and_collect(config, text_col)
-    else:
-        dataset = _load_raw_dataset(config, streaming=False)
-        dataset = dataset.filter(
-            lambda x: len(x[text_col]) > config.min_text_length
+    path = config.seqkd_data_path
+    if not path or path == "None":
+        raise ValueError(
+            "seqkd_data_path must be set. "
+            "Point it to a local path or HF dataset ID with teacher translations."
         )
-        dataset = _deduplicate(dataset, text_col)
 
-    logger.info(f"Dataset ready: {len(dataset)} examples")
-    return dataset, text_col
+    if "/" in path and not path.startswith(".") and not path.startswith("/"):
+        logger.info(f"Loading SeqKD dataset from HF: {path}")
+        ds = load_dataset(path, split="train")
+    else:
+        logger.info(f"Loading SeqKD dataset from disk: {path}")
+        ds = load_from_disk(path)
+
+    required = {"source", "teacher_translation"}
+    missing = required - set(ds.column_names)
+    if missing:
+        raise ValueError(
+            f"SeqKD dataset missing columns: {missing}. "
+            f"Available: {ds.column_names}"
+        )
+
+    if config.max_samples > 0 and len(ds) > config.max_samples:
+        ds = ds.select(range(config.max_samples))
+        logger.info(f"Truncated to {config.max_samples} examples")
+
+    logger.info(f"SeqKD dataset loaded: {len(ds)} examples")
+    return ds
+
+
+def tokenize_seqkd(
+    dataset: Dataset,
+    tokenizer: PreTrainedTokenizer,
+    config: DistillConfig,
+) -> Dataset:
+    """
+    Tokenize the SeqKD dataset with prompt masking.
+
+    Builds the full chat string (prompt + translation) for each example,
+    tokenizes it, and creates labels where prompt tokens are -100.
+    """
+    lang_name = get_language_name(config.language_code)
+
+    def _tokenize(examples):
+        all_input_ids = []
+        all_attention_mask = []
+        all_labels = []
+
+        for source, translation in zip(examples["source"], examples["teacher_translation"]):
+            messages = create_translation_messages(source, lang_name)
+
+            prompt_str = tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True,
+            )
+            full_str = prompt_str + translation + tokenizer.eos_token
+
+            prompt_len = len(tokenizer(prompt_str, add_special_tokens=False)["input_ids"])
+
+            tokenized = tokenizer(
+                full_str,
+                truncation=True,
+                max_length=config.max_length,
+                padding="max_length",
+                add_special_tokens=False,
+            )
+
+            input_ids = tokenized["input_ids"]
+            attention_mask = tokenized["attention_mask"]
+
+            labels = list(input_ids)
+            for i in range(min(prompt_len, len(labels))):
+                labels[i] = -100
+            for i in range(len(labels)):
+                if attention_mask[i] == 0:
+                    labels[i] = -100
+
+            all_input_ids.append(input_ids)
+            all_attention_mask.append(attention_mask)
+            all_labels.append(labels)
+
+        return {
+            "input_ids": all_input_ids,
+            "attention_mask": all_attention_mask,
+            "labels": all_labels,
+        }
+
+    logger.info("Tokenizing SeqKD dataset with prompt masking...")
+    tokenized = dataset.map(
+        _tokenize,
+        batched=True,
+        remove_columns=dataset.column_names,
+        desc="Tokenizing SeqKD",
+    )
+    tokenized.set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
+    return tokenized

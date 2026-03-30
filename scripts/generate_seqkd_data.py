@@ -41,7 +41,17 @@ def generate_seqkd_dataset(config: DistillConfig) -> Dataset:
     if not pairs:
         raise ValueError(f"No bilingual data found for {config.language_code}")
 
-    sources = [src for src, _ in pairs]
+    seen = set()
+    unique_sources = []
+    for src, _ in pairs:
+        src_stripped = src.strip()
+        if src_stripped and src_stripped not in seen:
+            seen.add(src_stripped)
+            unique_sources.append(src_stripped)
+
+    logger.info(f"After deduplication: {len(unique_sources)} unique English sentences "
+                f"(removed {len(pairs) - len(unique_sources)} duplicates)")
+    sources = unique_sources
 
     logger.info(f"Loading teacher model: {config.teacher_model}")
     model, tokenizer = load_model(config.teacher_model, device=config.device)
