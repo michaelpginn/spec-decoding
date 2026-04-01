@@ -30,5 +30,4 @@ class ExperimentConfig:
             self.draft_model = None
             
         if self.draft_model_type == 'neural':
-            assert self.draft_model is not None
             assert self.gamma > 0
