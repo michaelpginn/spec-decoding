@@ -2,13 +2,16 @@
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
-#SBATCH --mem=4000m
+#SBATCH --mem=32G
 #SBATCH --time=1:00:00
 #SBATCH --output=logs/%j.log
 #SBATCH --job-name=specdec
 #SBATCH --partition=blanca-clearlab2
 #SBATCH --account=blanca-clearlab2
 #SBATCH --qos=blanca-clearlab2
+
+export HF_HOME="/projects/lude4390/.cache/huggingface"
+mkdir -p $HF_HOME
 
 module load uv
 uv sync
@@ -24,5 +27,7 @@ if torch.cuda.is_available():
     print("Detected GPUs:", torch.cuda.device_count())
     print("GPU 0:", torch.cuda.get_device_name(0))
 PY
+
+cd ..
 
 uv run python run.py "$1" "${@:2}"
