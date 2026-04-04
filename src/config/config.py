@@ -15,7 +15,7 @@ class ExperimentConfig:
     gamma: int = 5
     track_iterations: bool = False # If true, will log per-iteration of SD
 
-    ngram_n: int = 5
+    ngram_n: int = 3
 
     use_hf_assisted: bool = False
     hf_schedule: Literal["heuristic", "constant"] | None = None
