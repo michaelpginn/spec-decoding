@@ -17,52 +17,69 @@ class NGramModel:
         n is the number of gram.
         """
         self.n = n
-        self.gram_freq: dict[tuple[int, ...], dict[int, int]] = defaultdict(
-            lambda: defaultdict(lambda: 0)
-        )
-        self.conditional_probs: dict[tuple[int, ...], dict[int, float]] = defaultdict(
-            lambda: defaultdict(lambda: 0)
-        )
         self.tokenizer = tokenizer
 
+        # gram_freq[order][(context_tuple)][next_token] = count
+        self.gram_freq: dict[int, dict[tuple[int, ...], dict[int, int]]] = {
+            order: defaultdict(lambda: defaultdict(int)) for order in range(1, n + 1)
+        }
+        # conditional_probs[order][(context_tuple)][next_token] = probability
+        self.conditional_probs: dict[int, dict[tuple[int, ...], dict[int, float]]] = {}
+
     def train(self, train: Dataset):
-        """Learn an n-gram model with gram frequencies"""
+        """Learn n-gram counts for all orders 1..n, then compute conditional probabilities."""
         for sentence in train["text"]:
             token_ids: list[int] = self.tokenizer.convert_tokens_to_ids(
                 self.tokenizer.tokenize(sentence)
             )  # type:ignore
-            for idx in range(len(token_ids) - self.n + 1):
-                context = tuple(token_ids[idx : idx + self.n - 1])
-                target = token_ids[idx + self.n - 1]
-                self.gram_freq[context][target] += 1
-        self.ngram_vocab_size = sum(len(c) for c in self.gram_freq.values())
-        for context_key, token_freqs in self.gram_freq.items():
-            marginal_sum = sum(token_freqs.values())
-            self.conditional_probs[context_key] = {
-                k: freq / marginal_sum for k, freq in token_freqs.items()
-            }
+            for order in range(1, self.n + 1):
+                ctx_len = order - 1
+                for idx in range(len(token_ids) - order + 1):
+                    context = tuple(token_ids[idx : idx + ctx_len])
+                    target = token_ids[idx + ctx_len]
+                    self.gram_freq[order][context][target] += 1
+
+        total_unique = sum(
+            len(targets) for order_freqs in self.gram_freq.values()
+            for targets in order_freqs.values()
+        )
+        for order in range(1, self.n + 1):
+            self.conditional_probs[order] = {}
+            for context_key, token_freqs in self.gram_freq[order].items():
+                marginal_sum = sum(token_freqs.values())
+                self.conditional_probs[order][context_key] = {
+                    k: freq / marginal_sum for k, freq in token_freqs.items()
+                }
         logger.info(
-            f"Tokenizer loaded with {self.ngram_vocab_size} unique {self.n}-grams"
+            f"Trained {self.n}-gram model with {total_unique} unique entries across all orders"
         )
 
     def predict(self, tokens: list[int] | str):
-        """Predict the next token using the last (n-1)-gram. Returns a (vocab_size,) tensor of normalized probabilities."""
+        """Predict next token with Katz-style backoff from order n down to 1.
+        Returns a (vocab_size,) tensor of normalized probabilities."""
         if isinstance(tokens, str):
             tokens = cast(list[int], self.tokenizer.convert_tokens_to_ids(self.tokenizer.tokenize(tokens)))
 
-        if len(tokens) < self.n - 1:
-            # Uniform distribution
-            return torch.full((len(self.tokenizer),), 1 / len(self.tokenizer))
+        vocab_size = len(self.tokenizer)
+        probabilities = torch.zeros(vocab_size)
+        mass_left = 1.0
 
-        probabilities = torch.zeros(len(self.tokenizer))
-        context_key = tuple(tokens[-(self.n - 1) :])
-        for token_id, prob in self.conditional_probs[context_key].items():
-            probabilities[token_id] = prob
-            
-        if probabilities.sum().item() == 0:
-            # Unseen gram
-            return torch.full((len(self.tokenizer),), 1 / len(self.tokenizer))
-        return probabilities
+        for order in range(self.n, 0, -1):
+            ctx_len = order - 1
+            if len(tokens) < ctx_len:
+                continue
+            context_key = tuple(tokens[-ctx_len:]) if ctx_len > 0 else ()
+            cond = self.conditional_probs.get(order, {}).get(context_key)
+            if cond:
+                for token_id, prob in cond.items():
+                    if probabilities[token_id] == 0:
+                        probabilities[token_id] = prob * mass_left
+                mass_left *= 0.4
+
+        total = probabilities.sum()
+        if total.item() == 0:
+            return torch.full((vocab_size,), 1 / vocab_size)
+        return probabilities / total
 
     def __call__(
         self,
