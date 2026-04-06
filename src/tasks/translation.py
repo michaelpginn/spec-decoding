@@ -33,8 +33,17 @@ def load_data(config: ExperimentConfig) -> tuple[list[tuple[str, str]], str]:
     hf_id, lang_name = _get_hf_dataset_id(config.language_code)
     logger.info(f"Loading from HuggingFace: {hf_id}")
 
-    if config.max_samples is not None and config.max_samples > 0:
-        split = f"train[:{config.max_samples}]"
+    start = max(0, int(getattr(config, "data_start", 0) or 0))
+    end = int(getattr(config, "data_end", 0) or 0)
+    if end > 0 and end <= start:
+        raise ValueError(f"Invalid data slice: data_end ({end}) must be > data_start ({start})")
+
+    if end > 0:
+        split = f"train[{start}:{end}]"
+    elif config.max_samples is not None and config.max_samples > 0:
+        split = f"train[{start}:{start + config.max_samples}]"
+    elif start > 0:
+        split = f"train[{start}:]"
     else:
         split = "train"
     ds = load_dataset(hf_id, split=split)

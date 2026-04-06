@@ -30,15 +30,29 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def _load_english_sources(language_code: str, max_samples: int | None) -> list[str]:
+def _load_english_sources(
+    language_code: str,
+    max_samples: int | None,
+    data_start: int = 0,
+    data_end: int = 0,
+) -> list[str]:
     """Load English sentences from the bilingual dataset."""
     from datasets import load_dataset as hf_load
 
     hf_id, lang_name = _get_hf_dataset_id(language_code)
     logger.info(f"Loading from HuggingFace: {hf_id}")
 
-    if max_samples and max_samples > 0:
-        split = f"train[:{max_samples}]"
+    start = max(0, int(data_start or 0))
+    end = int(data_end or 0)
+    if end > 0 and end <= start:
+        raise ValueError(f"Invalid data slice: data_end ({end}) must be > data_start ({start})")
+
+    if end > 0:
+        split = f"train[{start}:{end}]"
+    elif max_samples and max_samples > 0:
+        split = f"train[{start}:{start + max_samples}]"
+    elif start > 0:
+        split = f"train[{start}:]"
     else:
         split = "train"
     ds = hf_load(hf_id, split=split)
@@ -86,7 +100,12 @@ def generate_seqkd_dataset(config: DistillConfig) -> Dataset:
     logger.info(f"Language: {lang_name} ({config.language_code})")
 
     max_samples = config.max_samples if config.max_samples > 0 else None
-    sources = _load_english_sources(config.language_code, max_samples)
+    sources = _load_english_sources(
+        config.language_code,
+        max_samples,
+        data_start=getattr(config, "data_start", 0) or 0,
+        data_end=getattr(config, "data_end", 0) or 0,
+    )
     logger.info(f"Loaded {len(sources)} unique English sentences")
 
     if not sources:
