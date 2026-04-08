@@ -126,10 +126,8 @@ def speculative_decode(
     if device is None:
         device = next(target_model.parameters()).device
 
-    if mode == "greedy":
-        select_index = _greedy
-    elif mode == "sample":
-        select_index = _sample
+    def select_index(logits: torch.Tensor):
+        return sample(logits, mode)
 
     stop_token_ids = torch.tensor(
         list(get_stop_token_ids(tokenizer, eos_token_id)), device=device
@@ -362,12 +360,14 @@ def speculative_decode(
     return generated_tokens, metrics
 
 
-def _greedy(logprobs: torch.Tensor):
-    return logprobs.argmax(dim=-1)
 
-
-def _sample(logprobs: torch.Tensor):
-    return torch.distributions.Categorical(logits=logprobs).sample()
+def sample(logprobs: torch.Tensor, mode: Literal["greedy", "sample"]):
+    # TODO: Add top-k and top-p
+    
+    if mode == "greedy":
+        return logprobs.argmax(dim=-1)
+    else:
+        return torch.distributions.Categorical(logits=logprobs).sample()
 
 
 def speculative_decode_different_tokenizers():
