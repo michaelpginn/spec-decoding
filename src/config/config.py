@@ -39,6 +39,8 @@ class DistillConfig:
     student_model: str
     language_code: str
 
+    distill_mode: Literal["task_specific", "general"] = "task_specific"
+
     # SeqKD dataset — HF dataset ID or local path with teacher translations
     seqkd_data_path: str | None = None
     data_start: int = 0
