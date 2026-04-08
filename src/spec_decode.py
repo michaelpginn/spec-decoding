@@ -136,6 +136,10 @@ def speculative_decode(
     )
     input_ids = input_ids.to(device)
 
+    # This is okay because if we've gotten this far, we know the actual tokenizers are the same length.
+    # Just be aware that logits may have a slightly shorter dimension
+    d_vocab = max(draft_model.config.vocab_size, target_model.config.vocab_size)
+
     # B,S+max_new
     generated_tokens = torch.concat(
         [
@@ -154,7 +158,6 @@ def speculative_decode(
         target_out = target_model(input_ids, use_cache=True)
         target_kv_cache = target_out.past_key_values
         draft_kv_cache = draft_model(input_ids, use_cache=True).past_key_values
-        d_vocab = target_out.logits.size(-1)
 
         # Add the first new token
         last_target_token = select_index(
@@ -182,8 +185,10 @@ def speculative_decode(
                 device=input_ids.device,
                 dtype=torch.int64,
             )
-            new_draft_token_logprobs = torch.zeros(
-                (bs, max_draft_tokens, d_vocab), device=input_ids.device
+            new_draft_token_logprobs = torch.full(
+                (bs, max_draft_tokens, d_vocab),
+                fill_value=float("-inf"),
+                device=input_ids.device,
             )
 
             # Determine how many tokens the draft model is missing from its cache
@@ -206,7 +211,9 @@ def speculative_decode(
                 )
                 next_draft_token = select_index(draft_out_logprobs)  # (bs,)
                 new_draft_tokens[:, idx] = next_draft_token
-                new_draft_token_logprobs[:, idx] = draft_out_logprobs
+                new_draft_token_logprobs[:, idx, : draft_out_logprobs.shape[-1]] = (
+                    draft_out_logprobs
+                )
                 draft_input_ids = next_draft_token.unsqueeze(-1)
                 if torch.isin(next_draft_token, stop_token_ids).any():
                     # Trim draft tokens tensor since it's shorter than usual
@@ -228,12 +235,12 @@ def speculative_decode(
             target_out_logprobs = torch.log_softmax(
                 target_out.logits, dim=-1
             )  # (bs,seq,d_vocab)
-            target_out_chosen_logprobs = target_out_logprobs.gather(
+            target_out_chosen_logprobs = target_out_logprobs[:,:-1,:].gather(
                 -1, new_draft_tokens.unsqueeze(-1)
             ).squeeze(-1)  # (bs,seq)
             draft_out_chosen_logprobs = new_draft_token_logprobs.gather(
                 -1, new_draft_tokens.unsqueeze(-1)
-            ).squeeze(-1) # (bs,seq)
+            ).squeeze(-1)  # (bs,seq)
 
             # First, check if p_draft(t) <= p_target(t)
             lower_draft_prob = draft_out_chosen_logprobs <= target_out_chosen_logprobs
@@ -360,7 +367,7 @@ def _greedy(logprobs: torch.Tensor):
 
 
 def _sample(logprobs: torch.Tensor):
-    return torch.multinomial(torch.exp(logprobs), num_samples=1).squeeze(-1)
+    return torch.distributions.Categorical(logits=logprobs).sample()
 
 
 def speculative_decode_different_tokenizers():

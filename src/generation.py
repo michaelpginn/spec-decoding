@@ -26,6 +26,8 @@ def generate_output(
 
     # Use our custom spec dec implementation
     if config.draft_model_type != "none" and not config.use_hf_assisted:
+        if not same_tokenizer:
+            raise NotImplementedError("SD with different tokenizers not implemented.")
         output_ids, metrics = speculative_decode(
             target_model=model,
             draft_model=draft_model,
