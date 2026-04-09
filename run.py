@@ -51,7 +51,10 @@ def run(config: ExperimentConfig):
         draft_model = None
         draft_tokenizer = None
     elif config.draft_model_type == "neural":
-        assert config.draft_model is not None
+        if config.draft_model is None:
+            raise ValueError(
+                "draft_model must be set when draft_model_type='neural'"
+            )
         logger.info(f"Loading draft model: {config.draft_model}...")
         if config.draft_model != config.target_model:
             draft_model, draft_tokenizer = load_model(
