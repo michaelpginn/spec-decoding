@@ -116,7 +116,7 @@ def speculative_decode(
         max_new_tokens: Maximum new tokens to generate
         gamma: Number of draft tokens to generate per iteration
         top_k: If > 0, only sample from the top k tokens
-        top_p: If > 0 and < 1, only sample from tokens with cumulative prob <= p
+        top_p: If > 0 and < 1, keep the smallest set of tokens whose cumulative prob >= p
         eos_token_id: End of sequence token ID
         device: Device to run on
 
@@ -398,7 +398,7 @@ def apply_top_k(logits: torch.Tensor, k: int) -> torch.Tensor:
     return logits_filtered
 
 def apply_top_p(logits: torch.Tensor, p: float) -> torch.Tensor:
-    """Filters logits only to keep tokens whose cumulative frequency exceeds prob P"""
+    """Filters logits to keep the smallest set of top tokens whose cumulative prob >= p."""
 
     if p >= 1.0:
         return logits
