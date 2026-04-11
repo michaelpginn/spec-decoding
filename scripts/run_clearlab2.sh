@@ -10,7 +10,7 @@
 #SBATCH --account=blanca-clearlab2
 #SBATCH --qos=blanca-clearlab2
 
-export HF_HOME="/projects/lude4390/.cache/huggingface"
+export HF_HOME="/projects/$USER/.cache/huggingface"
 mkdir -p $HF_HOME
 
 module load uv
