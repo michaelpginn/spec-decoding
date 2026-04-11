@@ -97,6 +97,8 @@ def speculative_decode(
     mode: Literal["greedy", "sample"],
     max_new_tokens: int = 256,
     gamma: int = 5,
+    top_k: int = 0,
+    top_p: float = 0.0,
     eos_token_id: int | None = None,
     device=None,
     track_iterations: bool = False,
@@ -113,6 +115,8 @@ def speculative_decode(
         mode: 'greedy' | 'sample'
         max_new_tokens: Maximum new tokens to generate
         gamma: Number of draft tokens to generate per iteration
+        top_k: If > 0, only sample from the top k tokens
+        top_p: If > 0 and < 1, only sample from tokens with cumulative prob <= p
         eos_token_id: End of sequence token ID
         device: Device to run on
 
@@ -127,7 +131,7 @@ def speculative_decode(
         device = next(target_model.parameters()).device
 
     def select_index(logits: torch.Tensor):
-        return sample(logits, mode)
+        return sample(logits, mode, top_k=top_k, top_p=top_p)
 
     stop_token_ids = torch.tensor(
         list(get_stop_token_ids(tokenizer, eos_token_id)), device=device
@@ -361,13 +365,16 @@ def speculative_decode(
 
 
 
-def sample(logprobs: torch.Tensor, mode: Literal["greedy", "sample"]):
-    # TODO: Add top-k and top-p
-    
+def sample(logprobs: torch.Tensor, mode: Literal["greedy", "sample"], top_k: int = 0, top_p: float = 0.0,):
     if mode == "greedy":
         return logprobs.argmax(dim=-1)
-    else:
-        return torch.distributions.Categorical(logits=logprobs).sample()
+
+    if top_k > 0:
+        logprobs = apply_top_k(logprobs, k=top_k)
+    if 0.0 < top_p < 1.0:
+        logprobs = apply_top_p(logprobs, p=top_p)
+
+    return torch.distributions.Categorical(logits=logprobs).sample()
 
 
 def speculative_decode_different_tokenizers():
@@ -376,3 +383,38 @@ def speculative_decode_different_tokenizers():
         "Different tokenizer speculative decoding not implemented yet. "
         "Use HuggingFace's assisted_decode for this case."
     )
+
+def apply_top_k(logits: torch.Tensor, k: int) -> torch.Tensor:
+    """Filters logits to only keep the top k values."""
+    
+    if k >= logits.size(-1):
+        return logits
+    
+    top_values, _ = torch.topk(logits, k, dim=-1)
+    kth_value = top_values[..., -1, None]
+    indices_to_remove = logits < kth_value
+    logits_filtered = logits.masked_fill(indices_to_remove, float('-inf'))
+
+    return logits_filtered
+
+def apply_top_p(logits: torch.Tensor, p: float) -> torch.Tensor:
+    """Filters logits only to keep tokens whose cumulative frequency exceeds prob P"""
+
+    if p >= 1.0:
+        return logits
+
+    sorted_logits, sorted_indices = torch.sort(logits, descending=True, dim=-1)
+    cumulative_probs = torch.cumsum(torch.softmax(sorted_logits, dim=-1), dim=-1)
+    sorted_indices_to_remove = cumulative_probs > p
+
+    # to keep the borderline token 
+    sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+    sorted_indices_to_remove[..., 0] = False
+
+    indices_to_remove = sorted_indices_to_remove.scatter(
+        dim=-1, index=sorted_indices, src=sorted_indices_to_remove
+    )
+
+    logits_filtered = logits.masked_fill(indices_to_remove, float('-inf'))
+
+    return logits_filtered

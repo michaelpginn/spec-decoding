@@ -36,6 +36,8 @@ def generate_output(
             mode=config.decoding_mode,
             max_new_tokens=config.max_new_tokens,
             gamma=config.gamma,  # type:ignore
+            top_k=config.top_k,
+            top_p=config.top_p,
             device=inputs["input_ids"].device,
             track_iterations=config.track_iterations,
         )
