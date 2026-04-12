@@ -386,7 +386,9 @@ def speculative_decode_different_tokenizers():
 
 def apply_top_k(logits: torch.Tensor, k: int) -> torch.Tensor:
     """Filters logits to only keep the top k values."""
-    
+    if k < 1:
+        raise ValueError(f"top_k must be >= 1, got {k}")
+
     if k >= logits.size(-1):
         return logits
     
@@ -399,6 +401,8 @@ def apply_top_k(logits: torch.Tensor, k: int) -> torch.Tensor:
 
 def apply_top_p(logits: torch.Tensor, p: float) -> torch.Tensor:
     """Filters logits to keep the smallest set of top tokens whose cumulative prob >= p."""
+    if p < 0.0 or p > 1.0:
+        raise ValueError(f"top_p must be between 0.0 and 1.0, got {p}")
 
     if p >= 1.0:
         return logits
