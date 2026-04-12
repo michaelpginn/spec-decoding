@@ -27,6 +27,7 @@ class NGramModel:
 
     def train(self, train: Dataset):
         """Learn an n-gram model with gram frequencies"""
+        seen = set()
         for sentence in train["text"]:
             token_ids: list[int] = self.tokenizer.convert_tokens_to_ids(
                 self.tokenizer.tokenize(sentence)
@@ -34,7 +35,10 @@ class NGramModel:
             for idx in range(len(token_ids) - self.n + 1):
                 context = tuple(token_ids[idx : idx + self.n - 1])
                 target = token_ids[idx + self.n - 1]
-                self.gram_freq[context][target] += 1
+                gram = (context, target)
+                if gram not in seen:
+                    self.gram_freq[context][target] += 1
+                    seen.add(gram)
         self.ngram_vocab_size = sum(len(c) for c in self.gram_freq.values())
         for context_key, token_freqs in self.gram_freq.items():
             marginal_sum = sum(token_freqs.values())
@@ -58,7 +62,7 @@ class NGramModel:
         context_key = tuple(tokens[-(self.n - 1) :])
         for token_id, prob in self.conditional_probs[context_key].items():
             probabilities[token_id] = prob
-            
+
         if probabilities.sum().item() == 0:
             # Unseen gram
             return torch.full((len(self.tokenizer),), 1 / len(self.tokenizer))
