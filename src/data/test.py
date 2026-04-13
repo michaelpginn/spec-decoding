@@ -28,17 +28,19 @@ df = df[df['language'].isin(list(lang_code))]
 
 base_dir = Path.home() / "Desktop" / "datas"
 
-for lang in lang_code:
-    print(f"{lang}")
-    lang_folder = base_dir / lang
-    lang_folder.mkdir(parents=True, exist_ok=True)
-    csv_path = lang_folder / f"{lang}.csv"
+print(df[df["language"]=="Dutch"]["language_code"])
 
-    csv_lang = df[df["language"] == lang]
-    csv_lang = pd.DataFrame(csv_lang)
-    new_series = pd.concat(
-        [csv_lang['inputs'], csv_lang['targets']],
-        ignore_index=True
-    )
-    csv_output = new_series.to_frame(name=f'{lang}')
-    csv_output.to_csv(csv_path, index=False)
+# for lang in lang_code:
+#     print(f"{lang}")
+#     lang_folder = base_dir / lang
+#     lang_folder.mkdir(parents=True, exist_ok=True)
+#     csv_path = lang_folder / f"{lang}.csv"
+
+#     csv_lang = df[df["language"] == lang]
+#     csv_lang = pd.DataFrame(csv_lang)
+#     new_series = pd.concat(
+#         [csv_lang['inputs'], csv_lang['targets']],
+#         ignore_index=True
+#     )
+#     csv_output = new_series.to_frame(name=f'{lang}')
+#     csv_output.to_csv(csv_path, index=False)
