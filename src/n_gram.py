@@ -27,7 +27,6 @@ class NGramModel:
 
     def train(self, train: Dataset):
         """Learn an n-gram model with gram frequencies"""
-        seen = set()
         for sentence in train["text"]:
             token_ids: list[int] = self.tokenizer.convert_tokens_to_ids(
                 self.tokenizer.tokenize(sentence)
@@ -35,10 +34,7 @@ class NGramModel:
             for idx in range(len(token_ids) - self.n + 1):
                 context = tuple(token_ids[idx : idx + self.n - 1])
                 target = token_ids[idx + self.n - 1]
-                gram = (context, target)
-                if gram not in seen:
-                    self.gram_freq[context][target] += 1
-                    seen.add(gram)
+                self.gram_freq[context][target] += 1
         self.ngram_vocab_size = sum(len(c) for c in self.gram_freq.values())
         for context_key, token_freqs in self.gram_freq.items():
             marginal_sum = sum(token_freqs.values())
