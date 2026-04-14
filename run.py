@@ -51,13 +51,16 @@ def run(config: ExperimentConfig):
         draft_model = None
         draft_tokenizer = None
     elif config.draft_model_type == "neural":
-        if config.draft_model is not None:
-            logger.info(f"Loading draft model: {config.draft_model}...")
+        if config.draft_model is None:
+            raise ValueError(
+                "draft_model must be set when draft_model_type='neural'"
+            )
+        logger.info(f"Loading draft model: {config.draft_model}...")
+        if config.draft_model != config.target_model:
             draft_model, draft_tokenizer = load_model(
                 config.draft_model, device=config.device
             )
         else:
-            logger.info("No draft model specified, using target as draft.")
             draft_model = target_model
             draft_tokenizer = target_tokenizer
     elif config.draft_model_type == "ngram":
@@ -110,7 +113,10 @@ def setup_wandb(config: ExperimentConfig):
     if config.draft_model_type == 'ngram':
         draft_short = "ngram"
     elif config.draft_model_type == 'neural':
-        draft_short = config.draft_model.split("/")[-1] # type:ignore
+        if config.draft_model:
+            draft_short = config.draft_model.split("/")[-1] # type:ignore
+        else:
+            draft_short = target_short
     else:
         draft_short = None
         

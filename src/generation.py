@@ -6,7 +6,7 @@ from transformers import PreTrainedModel, PreTrainedTokenizer
 
 from src.config.config import ExperimentConfig
 from src.n_gram import NGramModel
-from src.spec_decode import speculative_decode_greedy
+from src.spec_decode import speculative_decode
 
 
 def generate_output(
@@ -26,11 +26,14 @@ def generate_output(
 
     # Use our custom spec dec implementation
     if config.draft_model_type != "none" and not config.use_hf_assisted:
-        output_ids, metrics = speculative_decode_greedy(
+        if not same_tokenizer:
+            raise NotImplementedError("SD with different tokenizers not implemented.")
+        output_ids, metrics = speculative_decode(
             target_model=model,
             draft_model=draft_model,
             tokenizer=tokenizer,
             input_ids=inputs["input_ids"],
+            mode=config.decoding_mode,
             max_new_tokens=config.max_new_tokens,
             gamma=config.gamma,  # type:ignore
             device=inputs["input_ids"].device,
