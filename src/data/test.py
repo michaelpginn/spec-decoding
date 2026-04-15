@@ -6,6 +6,9 @@ import pandas as pd
 splits = {'train': 'data/train-00000-of-00001.parquet', 'test': 'data/test-00000-of-00001.parquet'}
 df = pd.read_parquet("hf://datasets/CohereLabs/aya_dataset/" + splits["train"])
 
+mono_ling_old = pd.read_csv('./reference_table_monolingual.csv')
+mono_ling_old = {lang for lang in set(mono_ling_old['Language'])}
+
 filter_lang = [
     'English',
     'Spanish',
@@ -26,9 +29,14 @@ lang_code: set[str] = {lang for lang in set(df['language']) if lang not in filte
 
 df = df[df['language'].isin(list(lang_code))]
 
-base_dir = Path.home() / "Desktop" / "datas"
+# lang_common = {lang for lang in set(df['language']) if lang in mono_ling_old}
+lang_common: set[str] = set()
+for language in df['language']:
+    if language in mono_ling_old:
+        lang_common.add(language)
 
-print(df[df["language"]=="Dutch"]["language_code"])
+print(lang_common)
+# base_dir = Path.home() / "Desktop" / "datas"
 
 # for lang in lang_code:
 #     print(f"{lang}")
