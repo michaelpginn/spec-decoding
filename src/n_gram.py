@@ -1,5 +1,6 @@
 import logging
 from collections import defaultdict
+from types import SimpleNamespace
 from typing import cast
 
 import torch
@@ -11,10 +12,13 @@ logger = logging.getLogger(__name__)
 
 
 class NGramModel:
-    def __init__(self, n: int, tokenizer: PreTrainedTokenizer):
+    def __init__(self, n: int, tokenizer: PreTrainedTokenizer, vocab_size:int):
         """
-        takes tokenizer and checks if it is a huggingface and takes the tokenizer from it
-        n is the number of gram.
+        Args:
+            n: Gram size
+            tokenizer: Target model's tokenizer
+            vocab_size: The target model's vocab size (which is often rounded up from the tokenizer vocab)
+            
         """
         self.n = n
         self.gram_freq: dict[tuple[int, ...], dict[int, int]] = defaultdict(
@@ -24,6 +28,7 @@ class NGramModel:
             lambda: defaultdict(lambda: 0)
         )
         self.tokenizer = tokenizer
+        self.config = SimpleNamespace(vocab_size=vocab_size)
 
     def train(self, train: Dataset):
         """Learn an n-gram model with gram frequencies"""
@@ -42,7 +47,7 @@ class NGramModel:
                 k: freq / marginal_sum for k, freq in token_freqs.items()
             }
         logger.info(
-            f"Tokenizer loaded with {self.ngram_vocab_size} unique {self.n}-grams"
+            f"N-gram model trained with {self.ngram_vocab_size} unique {self.n}-grams"
         )
 
     def predict(self, tokens: list[int] | str):

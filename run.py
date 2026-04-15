@@ -65,7 +65,7 @@ def run(config: ExperimentConfig):
             draft_tokenizer = target_tokenizer
     elif config.draft_model_type == "ngram":
         draft_tokenizer = target_tokenizer
-        draft_model = NGramModel(n=config.ngram_n, tokenizer=draft_tokenizer)
+        draft_model = NGramModel(n=config.ngram_n, tokenizer=draft_tokenizer, vocab_size=target_model.config.vocab_size)
         draft_model.train(assemble_dataset(language, 'mono', config.include_aya)['train'])
     else:
         raise ValueError()

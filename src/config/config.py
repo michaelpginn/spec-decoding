@@ -11,7 +11,7 @@ class ExperimentConfig:
     target_model: str
     draft_model: str | None
     draft_model_type: Literal["none", "neural", "ngram"]
-    decoding_mode: Literal["greedy", "top_k", "top_p"]
+    decoding_mode: Literal["greedy", "sample"]
     gamma: int = 5
     track_iterations: bool = False # If true, will log per-iteration of SD
 
