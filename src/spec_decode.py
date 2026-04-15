@@ -130,8 +130,11 @@ def speculative_decode(
     if device is None:
         device = next(target_model.parameters()).device
 
-    def select_index(logits: torch.Tensor):
-        return sample(logits, mode, top_k=top_k, top_p=top_p)
+    def apply_filters(logprobs: torch.Tensor) -> torch.Tensor:
+        return filter_logprobs(logprobs, top_k=top_k, top_p=top_p)
+
+    def select_index(logprobs: torch.Tensor):
+        return sample(logprobs, mode)
 
     stop_token_ids = torch.tensor(
         list(get_stop_token_ids(tokenizer, eos_token_id)), device=device
@@ -163,7 +166,7 @@ def speculative_decode(
 
         # Add the first new token
         last_target_token = select_index(
-            torch.log_softmax(target_out.logits[:, -1, :], dim=-1)
+            apply_filters(torch.log_softmax(target_out.logits[:, -1, :], dim=-1))
         )
         generated_tokens[:, cur_gen_idx] = last_target_token
         cur_gen_idx += 1
@@ -208,8 +211,8 @@ def speculative_decode(
                     use_cache=True,
                 )
                 draft_kv_cache = draft_out.past_key_values
-                draft_out_logprobs = torch.log_softmax(
-                    draft_out.logits[:, -1, :], dim=-1
+                draft_out_logprobs = apply_filters(
+                    torch.log_softmax(draft_out.logits[:, -1, :], dim=-1)
                 )
                 next_draft_token = select_index(draft_out_logprobs)  # (bs,)
                 new_draft_tokens[:, idx] = next_draft_token
@@ -234,8 +237,8 @@ def speculative_decode(
                 use_cache=True,
             )
             # Find the first collision, if any
-            target_out_logprobs = torch.log_softmax(
-                target_out.logits, dim=-1
+            target_out_logprobs = apply_filters(
+                torch.log_softmax(target_out.logits, dim=-1)
             )  # (bs,seq,d_vocab)
             target_out_chosen_logprobs = target_out_logprobs[:,:-1,:].gather(
                 -1, new_draft_tokens.unsqueeze(-1)
@@ -365,15 +368,24 @@ def speculative_decode(
 
 
 
-def sample(logprobs: torch.Tensor, mode: Literal["greedy", "sample"], top_k: int = 0, top_p: float = 0.0,):
+def filter_logprobs(
+    logprobs: torch.Tensor, top_k: int = 0, top_p: float = 0.0
+) -> torch.Tensor:
+    """Apply top-k and/or top-p filtering, then renormalize to valid log-probs."""
+    filtered = logprobs
+    if top_k > 0:
+        filtered = apply_top_k(filtered, k=top_k)
+    if 0.0 < top_p < 1.0:
+        filtered = apply_top_p(filtered, p=top_p)
+    if top_k > 0 or 0.0 < top_p < 1.0:
+        filtered = torch.log_softmax(filtered, dim=-1)
+    return filtered
+
+
+def sample(logprobs: torch.Tensor, mode: Literal["greedy", "sample"]):
+    """Sample a token index from (already filtered) log-probs."""
     if mode == "greedy":
         return logprobs.argmax(dim=-1)
-
-    if top_k > 0:
-        logprobs = apply_top_k(logprobs, k=top_k)
-    if 0.0 < top_p < 1.0:
-        logprobs = apply_top_p(logprobs, p=top_p)
-
     return torch.distributions.Categorical(logits=logprobs).sample()
 
 
