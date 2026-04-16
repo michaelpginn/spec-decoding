@@ -3,7 +3,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8000M
-#SBATCH --time=1:00:00
+#SBATCH --time=3-00:00:00
 #SBATCH --output=logs/%j.log
 #SBATCH --job-name=specdec
 #SBATCH --partition=blanca-clearlab1
