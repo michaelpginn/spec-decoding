@@ -1,14 +1,14 @@
 #!/bin/bash
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:h100_3g.40gb
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8000M
 #SBATCH --time=1:00:00
 #SBATCH --output=logs/%j.log
 #SBATCH --job-name=specdec
-#SBATCH --partition=blanca-clearlab2
-#SBATCH --account=blanca-clearlab2
-#SBATCH --qos=blanca-clearlab2
+#SBATCH --partition=blanca-clearlab1
+#SBATCH --account=blanca-clearlab1
+#SBATCH --qos=blanca-clearlab1
 #SBATCH --mail-type=END,FAIL
 
 export HF_HOME="/projects/$USER/.cache/huggingface"
@@ -28,9 +28,21 @@ if torch.cuda.is_available():
     print("Detected GPUs:", torch.cuda.device_count())
     print("GPU 0:", torch.cuda.get_device_name(0))
 PY
-LANGS="ber chr haw ibo lkt mus npi oci oji que yua zgh"
 
-for lang in $LANGS
+LANGS="ber chr haw ibo lkt mus npi oci oji que yua zgh"
+GAMMAS="1 2 3 4 5 6 7"
+DRAFT="Qwen/Qwen2.5-0.5B-Instruct Qwen/Qwen2.5-1.5B-Instruct Qwen/Qwen2.5-3B-Instruct"
+
+for draft in $DRAFT
 do
-    uv run python run.py "$1" "${@:2}"
+    for lang in $LANGS
+    do
+        for gamma in $GAMMAS
+        do
+            uv run python run.py "$1" \
+                -o language_code=$lang \
+                draft_model=$draft \
+                gamma=$gamma
+        done
+    done
 done
