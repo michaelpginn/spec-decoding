@@ -8,9 +8,12 @@ Supports two modes (controlled by DistillConfig.distill_mode):
 import logging
 import os
 import time
+from dataclasses import asdict
+
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
+import wandb
 from torch.amp import GradScaler, autocast  # type: ignore[attr-defined]
 from torch.utils.data import DataLoader
 
@@ -38,9 +41,48 @@ def build_repo_name(config: DistillConfig, dataset_len: int) -> str:
         teacher = _model_short_name(config.teacher_model)
         prefix = f"seqkd-{teacher}"
     name = f"{prefix}-{student}-{config.language_code}-{dataset_len}"
-    if config.hf_repo_id and config.hf_repo_id != "None":
+    if config.hf_repo_id:
         return f"{config.hf_repo_id}/{name}"
     return name
+
+
+def setup_wandb(config: DistillConfig):
+    """Initialize wandb for distillation run tracking."""
+    teacher_short = _model_short_name(config.teacher_model)
+    student_short = _model_short_name(config.student_model)
+
+    name = (
+        f"{config.distill_mode}_{config.language_code}"
+        f"_lr{config.learning_rate}_steps{config.max_steps}_ga{config.grad_accum_steps}"
+    )
+    group = f"distill_{teacher_short}__{config.language_code}"
+
+    tags = [
+        "distillation",
+        config.language_code,
+        config.distill_mode,
+        teacher_short,
+        student_short,
+        f"lr={config.learning_rate}",
+        f"steps={config.max_steps}",
+        f"ga={config.grad_accum_steps}",
+    ]
+    # Set by scripts/sweep_distill.sh: learning_rate_sweep_runs | steps_grad_accum_sweep
+    _sweep_tag = os.environ.get("WANDB_DISTILL_SWEEP_TAG", "").strip()
+    if _sweep_tag:
+        tags.append(_sweep_tag)
+
+    wandb.init(
+        project=os.environ.get("WANDB_PROJECT", "spec-decoding"),
+        entity=os.environ.get("WANDB_ENTITY", "lecs-general"),
+        config=asdict(config),
+        group=group,
+        job_type=f"distill-{config.distill_mode}",
+        name=name,
+        tags=tags,
+    )
+    wandb.define_metric("step")
+    wandb.define_metric("train/*", step_metric="step")
 
 
 def run_distillation(config: DistillConfig):
@@ -50,13 +92,14 @@ def run_distillation(config: DistillConfig):
     - task_specific: cross-entropy on teacher translations (SeqKD).
     - general: causal LM on monolingual text.
     """
+    setup_wandb(config)
 
     os.makedirs(config.output_dir, exist_ok=True)
 
     logger.info(f"Loading student model: {config.student_model}")
     student, tokenizer = load_model(config.student_model, device=config.device)
 
-    if config.resume_from and config.resume_from != "None" and os.path.exists(config.resume_from):
+    if config.resume_from and os.path.exists(config.resume_from):
         logger.info(f"Resuming student from checkpoint: {config.resume_from}")
         student, _ = load_model(config.resume_from, device=config.device)
 
@@ -158,12 +201,16 @@ def run_distillation(config: DistillConfig):
                 avg_loss = log_accum_loss / log_step_count
                 elapsed = time.time() - start_time
                 logger.info(f"Step {step + 1} | Loss: {avg_loss:.4f} | Time: {elapsed:.1f}s")
+                wandb.log({"train/loss": avg_loss, "train/epoch": epoch, "step": step + 1})
                 log_accum_loss = 0.0
                 log_step_count = 0
                 start_time = time.time()
 
             if (step + 1) % config.save_every == 0:
-                _save_checkpoint(student, tokenizer, optimizer, config.output_dir, step + 1, repo_name)
+                _save_checkpoint(
+                    student, tokenizer, optimizer, config.output_dir,
+                    step + 1, repo_name, push_to_hub=bool(config.hf_repo_id),
+                )
 
             step += 1
 
@@ -171,14 +218,21 @@ def run_distillation(config: DistillConfig):
         if step < target_step:
             logger.info(f"Completed epoch {epoch}. Continuing to step {target_step}...")
 
-    logger.info(f"Training complete! Pushing final model to HF Hub: {repo_name}")
-    _save_checkpoint(student, tokenizer, optimizer, config.output_dir, "final", repo_name, push_to_hub=True)
+    if config.hf_repo_id:
+        logger.info(f"Training complete! Pushing final model to HF Hub: {repo_name}")
+    else:
+        logger.info("Training complete! Saving final checkpoint locally (HF Hub push disabled).")
+    _save_checkpoint(
+        student, tokenizer, optimizer, config.output_dir, "final", repo_name,
+        push_to_hub=bool(config.hf_repo_id),
+    )
+    wandb.finish()
 
 
 def _restore_optimizer(config: DistillConfig, optimizer, device) -> int:
     """Restore optimizer state from checkpoint and return the starting step."""
     start_step = 0
-    if config.resume_from and config.resume_from != "None":
+    if config.resume_from:
         checkpoint_name = os.path.basename(config.resume_from)
         if checkpoint_name.startswith("checkpoint-"):
             start_step = int(checkpoint_name.split("-")[1])
@@ -204,7 +258,8 @@ def _save_checkpoint(student, tokenizer, optimizer, output_dir, label,
     logger.info(f"Saved checkpoint: {path}")
 
     if push_to_hub and repo_name:
-        logger.info(f"Pushing to HF Hub: {repo_name}")
-        student.push_to_hub(repo_name, commit_message=f"SeqKD distilled model ({label})")
-        tokenizer.push_to_hub(repo_name, commit_message=f"Tokenizer ({label})")
-        logger.info(f"Pushed: https://huggingface.co/{repo_name}")
+        hub_repo = f"{repo_name}-{label}" if isinstance(label, int) else repo_name
+        logger.info(f"Pushing to HF Hub: {hub_repo}")
+        student.push_to_hub(hub_repo, commit_message=f"Distilled model (step {label})")
+        tokenizer.push_to_hub(hub_repo, commit_message=f"Tokenizer (step {label})")
+        logger.info(f"Pushed: https://huggingface.co/{hub_repo}")
