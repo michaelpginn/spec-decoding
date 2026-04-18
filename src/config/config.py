@@ -36,3 +36,33 @@ class ExperimentConfig:
         if self.draft_model_type == 'neural':
             assert self.gamma > 0
             assert self.draft_model is not None
+
+@dataclass
+class DistillConfig:
+    teacher_model: str
+    student_model: str
+    language_code: str
+
+    distill_mode: Literal["task_specific", "general"] = "task_specific"
+
+    # SeqKD dataset — HF dataset ID or local path with teacher translations
+    seqkd_data_path: str | None = None
+    data_start: int = 0
+    data_end: int = 0  # 0 means "no explicit end"
+    max_samples: int = 5000
+
+    # Training
+    max_steps: int = 3000
+    batch_size: int = 4
+    grad_accum_steps: int = 8
+    learning_rate: float = 2e-5
+    max_length: int = 512
+
+    # Checkpointing & output
+    hf_repo_id: str | None = None
+    output_dir: str = "../distilled_models"
+    resume_from: str | None = None
+    save_every: int = 500
+    log_every: int = 50
+
+    device: str = "auto"
