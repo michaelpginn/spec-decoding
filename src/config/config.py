@@ -47,8 +47,6 @@ class DistillConfig:
 
     # SeqKD dataset — HF dataset ID or local path with teacher translations
     seqkd_data_path: str | None = None
-    data_start: int = 0
-    data_end: int = 0  # 0 means "no explicit end"
     max_samples: int = 5000
 
     # Training
@@ -66,3 +64,11 @@ class DistillConfig:
     log_every: int = 50
 
     device: str = "auto"
+
+    def __post_init__(self):
+        if self.seqkd_data_path == "None":
+            self.seqkd_data_path = None
+        if self.hf_repo_id == "None":
+            self.hf_repo_id = None
+        if self.resume_from == "None":
+            self.resume_from = None
