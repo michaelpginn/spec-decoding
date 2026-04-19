@@ -206,12 +206,6 @@ def run_distillation(config: DistillConfig):
                 log_step_count = 0
                 start_time = time.time()
 
-            if (step + 1) % config.save_every == 0:
-                _save_checkpoint(
-                    student, tokenizer, optimizer, config.output_dir,
-                    step + 1, repo_name, push_to_hub=bool(config.hf_repo_id),
-                )
-
             step += 1
 
         epoch += 1
