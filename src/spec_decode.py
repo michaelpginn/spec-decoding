@@ -258,11 +258,11 @@ def speculative_decode(
 
             # Figure out the first rejected token
             rejected = ~(lower_draft_prob | random_accept)
-            total_draft_tokens += rejected.size(-1)
             if rejected.any():
                 first_collision_idx = rejected.int().argmax(dim=-1).item()
                 assert isinstance(first_collision_idx, int)
                 total_matched_tokens += first_collision_idx
+                total_draft_tokens += first_collision_idx + 1
 
                 # Resample token from p_target(x) - p_draft(x)
                 resample_dist = (
@@ -281,6 +281,8 @@ def speculative_decode(
                     dim=-1,
                 )
             else:
+                total_matched_tokens += new_draft_tokens.size(-1)
+                total_draft_tokens += new_draft_tokens.size(-1)
                 if torch.isin(new_draft_tokens[:, -1], stop_token_ids).any():
                     # If we've reached <eos>, don't add bonus token
                     tokens_to_add = new_draft_tokens
@@ -300,7 +302,7 @@ def speculative_decode(
                     else:
                         tokens_to_add = new_draft_tokens
 
-                total_matched_tokens += new_draft_tokens.size(-1)
+                
 
             # Actually add the new tokens and update idxs
             new_gen_idx = cur_gen_idx + tokens_to_add.size(-1)
@@ -345,7 +347,7 @@ def speculative_decode(
         torch.cuda.synchronize()
     total_time = time.time() - start_time
 
-    # Calculate acceptance rate (matched draft tokens / total draft tokens)
+    # Calculate acceptance rate (matched draft tokens / total verified draft tokens)
     acceptance_rate = (
         total_matched_tokens / total_draft_tokens if total_draft_tokens > 0 else 0.0
     )
