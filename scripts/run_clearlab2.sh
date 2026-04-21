@@ -28,9 +28,7 @@ if torch.cuda.is_available():
     print("Detected GPUs:", torch.cuda.device_count())
     print("GPU 0:", torch.cuda.get_device_name(0))
 PY
-LANGS="ber chr haw ibo lkt mus npi oci oji que yua zgh"
 
-for lang in $LANGS
-do
-    uv run python run.py "$1" "${@:2}"
-done
+cd ..
+
+uv run python run.py "$1" "${@:2}"
