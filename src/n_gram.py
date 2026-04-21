@@ -63,15 +63,15 @@ class NGramModel:
             # Uniform distribution
             return torch.full((len(self.tokenizer),), 1 / len(self.tokenizer))
 
-        probabilities = torch.zeros(len(self.tokenizer))
+        logprobs = torch.full((len(self.tokenizer),),s float("-inf"))
         context_key = tuple(tokens[-(self.n - 1) :])
         for token_id, prob in self.conditional_logprobs[context_key].items():
-            probabilities[token_id] = prob
+            logprobs[token_id] = prob
 
-        if probabilities.sum().item() == 0:
+        if logprobs.sum().item() == 0:
             # Unseen gram
             return torch.full((len(self.tokenizer),), 1 / len(self.tokenizer))
-        return probabilities
+        return logprobs
 
     def __call__(
         self,
