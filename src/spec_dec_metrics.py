@@ -95,6 +95,9 @@ def _compute_spec_metrics(
             - draft_tokens: Draft tokens proposed for this sentence
             - matched_tokens: Draft tokens that matched target for this sentence
             - acceptance_rate: Per-sentence acceptance rate
+            - average_draft_time: Average time (s) of draft forward pass
+            - average_verifier_time:  Average time (s) of verifier forward pass
+            - speedup_factor: Ratio of expected speedup
         gamma: Number of draft tokens per iteration
         verbose: Print metrics to console
 
@@ -134,11 +137,23 @@ def _compute_spec_metrics(
     ) / len(spec_results)
     summary["mean_accepted_tokens"] = mean_accepted
     summary["block_efficiency"] = mean_accepted / gamma if gamma > 0 else 0
+    summary["average_draft_time"] = sum(
+        r["average_draft_time"] for r in spec_results
+    ) / len(spec_results)
+    summary["average_verifier_time"] = sum(
+        r["average_verifier_time"] for r in spec_results
+    ) / len(spec_results)
+    summary["speedup_factor"] = sum(
+        r["speedup_factor"] for r in spec_results
+    ) / len(spec_results)
 
     if verbose:
         print("\n=== Speculative Decoding Metrics ===")
         print(
             f"Acceptance Rate (token-weighted): {summary['token_weighted_acceptance_rate']:.2%}"
+        )
+        print(
+            f"Speedup Factor (sentence-weighted): {summary['speedup_factor']:.2%}"
         )
         print(f"Mean Accepted Tokens (per iteration): {mean_accepted:.2f}")
         print(f"Block Efficiency: {summary['block_efficiency']:.2%}")

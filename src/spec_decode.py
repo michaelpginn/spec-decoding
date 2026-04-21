@@ -157,6 +157,10 @@ def speculative_decode(
     )
     cur_gen_idx = input_ids.size(1)
 
+    # Track average time for draft and verifier forward pass for speedup factor
+    draft_forward_time: tuple[float, float] = (0, 0)  # (sum, num values)
+    verifier_forward_time: tuple[float, float] = (0, 0)
+
     is_cuda = device.type == "cuda"
     with torch.no_grad():
         # Preload kv cache for prompts
@@ -205,10 +209,15 @@ def speculative_decode(
                 draft_input_ids = generated_tokens[:, cur_gen_idx - 1 : cur_gen_idx]
 
             for idx in range(new_draft_tokens.size(-1)):
+                draft_start_time = time.time()
                 draft_out = draft_model(
                     input_ids=draft_input_ids,
                     past_key_values=draft_kv_cache,
                     use_cache=True,
+                )
+                draft_forward_time = (
+                    draft_forward_time[0] + time.time() - draft_start_time,
+                    draft_forward_time[1] + 1,
                 )
                 draft_kv_cache = draft_out.past_key_values
                 draft_out_logprobs = apply_filters(
@@ -231,18 +240,25 @@ def speculative_decode(
                 [generated_tokens[:, cur_gen_idx - 1 : cur_gen_idx], new_draft_tokens],
                 dim=-1,
             )
+            verifier_start_time = time.time()
             target_out = target_model(
                 input_ids=target_input_ids,
                 past_key_values=target_kv_cache,
                 use_cache=True,
             )
+            verifier_forward_time = (
+                verifier_forward_time[0] + time.time() - verifier_start_time,
+                verifier_forward_time[1] + 1,
+            )
             # Find the first collision, if any
             target_out_logprobs = apply_filters(
                 torch.log_softmax(target_out.logits, dim=-1)
             )  # (bs,seq,d_vocab)
-            target_out_chosen_logprobs = target_out_logprobs[:,:-1,:].gather(
-                -1, new_draft_tokens.unsqueeze(-1)
-            ).squeeze(-1)  # (bs,seq)
+            target_out_chosen_logprobs = (
+                target_out_logprobs[:, :-1, :]
+                .gather(-1, new_draft_tokens.unsqueeze(-1))
+                .squeeze(-1)
+            )  # (bs,seq)
             draft_out_chosen_logprobs = new_draft_token_logprobs.gather(
                 -1, new_draft_tokens.unsqueeze(-1)
             ).squeeze(-1)  # (bs,seq)
@@ -302,8 +318,6 @@ def speculative_decode(
                     else:
                         tokens_to_add = new_draft_tokens
 
-                
-
             # Actually add the new tokens and update idxs
             new_gen_idx = cur_gen_idx + tokens_to_add.size(-1)
             generated_tokens[:, cur_gen_idx:new_gen_idx] = tokens_to_add
@@ -347,11 +361,19 @@ def speculative_decode(
         torch.cuda.synchronize()
     total_time = time.time() - start_time
 
-    # Calculate acceptance rate (matched draft tokens / total verified draft tokens)
+    # Acceptance rate (matched draft tokens / total verified draft tokens)
     acceptance_rate = (
         total_matched_tokens / total_draft_tokens if total_draft_tokens > 0 else 0.0
     )
     total_generated_tokens = cur_gen_idx - input_ids.size(1)
+
+    # Speedup factor
+    average_draft_time = draft_forward_time[0] / draft_forward_time[1]
+    average_verifier_time = verifier_forward_time[0] / verifier_forward_time[1]
+    drafter_cost_ratio = average_draft_time / average_verifier_time
+    speedup_factor = (1 - acceptance_rate ** (gamma + 1)) / (
+        (1 - acceptance_rate) * (gamma * drafter_cost_ratio + 1)
+    )
 
     metrics = {
         "time": total_time,
@@ -361,13 +383,15 @@ def speculative_decode(
         "acceptance_rate": acceptance_rate,
         "num_iterations": num_iterations,
         "toks_per_sec": total_generated_tokens / total_time if total_time > 0 else 0,
+        "average_draft_time": average_draft_time,
+        "average_verifier_time": average_verifier_time,
+        "speedup_factor": speedup_factor,
     }
 
     if track_iterations:
         metrics["iteration_history"] = iteration_history
 
     return generated_tokens, metrics
-
 
 
 def filter_logprobs(
@@ -398,6 +422,7 @@ def speculative_decode_different_tokenizers():
         "Use HuggingFace's assisted_decode for this case."
     )
 
+
 def apply_top_k(logits: torch.Tensor, k: int) -> torch.Tensor:
     """Filters logits to only keep the top k values."""
     if k < 1:
@@ -405,13 +430,14 @@ def apply_top_k(logits: torch.Tensor, k: int) -> torch.Tensor:
 
     if k >= logits.size(-1):
         return logits
-    
+
     top_values, _ = torch.topk(logits, k, dim=-1)
     kth_value = top_values[..., -1, None]
     indices_to_remove = logits < kth_value
-    logits_filtered = logits.masked_fill(indices_to_remove, float('-inf'))
+    logits_filtered = logits.masked_fill(indices_to_remove, float("-inf"))
 
     return logits_filtered
+
 
 def apply_top_p(logits: torch.Tensor, p: float) -> torch.Tensor:
     """Filters logits to keep the smallest set of top tokens whose cumulative prob >= p."""
@@ -425,7 +451,7 @@ def apply_top_p(logits: torch.Tensor, p: float) -> torch.Tensor:
     cumulative_probs = torch.cumsum(torch.softmax(sorted_logits, dim=-1), dim=-1)
     sorted_indices_to_remove = cumulative_probs > p
 
-    # to keep the borderline token 
+    # to keep the borderline token
     sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
     sorted_indices_to_remove[..., 0] = False
 
@@ -433,6 +459,6 @@ def apply_top_p(logits: torch.Tensor, p: float) -> torch.Tensor:
         dim=-1, index=sorted_indices, src=sorted_indices_to_remove
     )
 
-    logits_filtered = logits.masked_fill(indices_to_remove, float('-inf'))
+    logits_filtered = logits.masked_fill(indices_to_remove, float("-inf"))
 
     return logits_filtered
