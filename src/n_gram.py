@@ -63,7 +63,7 @@ class NGramModel:
             # Uniform distribution
             return torch.full((len(self.tokenizer),), 1 / len(self.tokenizer))
 
-        logprobs = torch.full((len(self.tokenizer),),s float("-inf"))
+        logprobs = torch.full((len(self.tokenizer),), float("-inf"))
         context_key = tuple(tokens[-(self.n - 1) :])
         for token_id, prob in self.conditional_logprobs[context_key].items():
             logprobs[token_id] = prob
