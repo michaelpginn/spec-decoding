@@ -6,6 +6,12 @@ from datasets import Dataset, concatenate_datasets, load_dataset
 
 DATA_DIR = Path(__file__).resolve().parent
 
+def get_raw_url(url: str) -> str:
+    """Converts a GitHub blob URL to a raw content URL."""
+    if "github.com" in url and "/blob/" in url:
+        return url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
+    return url
+
 def assemble_dataset(language: str, type: Literal["mono", "bi"], include_aya:bool):
     file = "reference_table_monolingual.csv" if type=="mono" else "reference_table_bilingual.csv"
     file_path = DATA_DIR / file
@@ -21,41 +27,54 @@ def assemble_dataset(language: str, type: Literal["mono", "bi"], include_aya:boo
 
     for _, row in paths.iterrows():
         path = row["hugging face "]
-        lang_code = str(row["Code"]) # Fallback split name
+        lang_code = str(row["Code"])
 
-        repo = path
-        config = None
-        split_to_load = "train"
+        if str(path).startswith("http"):
+            raw_url = get_raw_url(str(path))
+            sep = '\t' if raw_url.endswith('.tsv') or 'tatoeba' in raw_url.lower() else ','
+            temp_df = pd.read_csv(raw_url, sep=sep)
+            ds = Dataset.from_pandas(temp_df)
 
-        if ':' in path:
-            parts = path.split(":")
-            repo = parts[0]
-            config = parts[1]
-            if len(parts) > 2:
-                split_to_load = parts[2]
+        else:
+            repo = path
+            config = None
+            split_to_load = "train"
 
-        try:
-            ds = cast(Dataset, load_dataset(repo, config, split=split_to_load))
-        except ValueError as e:
-            # Check the error message for available splits
-            available_splits = str(e)
+            if ':' in path:
+                parts = path.split(":")
+                repo = parts[0]
+                config = parts[1]
+                if len(parts) > 2:
+                    split_to_load = parts[2]
 
-            # Sequence of fallbacks
-            if split_to_load == "train":
-                if "full" in available_splits:
-                    ds = cast(Dataset, load_dataset(repo, config, split="full"))
-                elif lang_code in available_splits:
-                    ds = cast(Dataset, load_dataset(repo, config, split=lang_code))
+            try:
+                ds = cast(Dataset, load_dataset(repo, config, split=split_to_load))
+            except ValueError as e:
+                # Check the error message for available splits
+                available_splits = str(e)
+
+                # Sequence of fallbacks
+                if split_to_load == "train":
+                    if "full" in available_splits:
+                        ds = cast(Dataset, load_dataset(repo, config, split="full"))
+                    elif lang_code in available_splits:
+                        ds = cast(Dataset, load_dataset(repo, config, split=lang_code))
+                    else:
+                        raise e
                 else:
                     raise e
-            else:
-                raise e
 
         # Column standardization logic
         current_cols = ds.column_names
         if "text" not in current_cols:
-            # Check for the full language name, the code, or generic 'sentence'
-            for col in [language, lang_code, language.lower(), "sentence", "text_sentence", "content"]:
+            # Expanded search list to include 'Mayan', 'Source', and 'Target'
+            search_cols = [
+                language, lang_code, language.lower(),
+                "Mayan", "Mayan language",  # Specific to yua datasets
+                "sentence", "text_sentence", "content",
+                "Source", "Target"          # Common in parallel-formatted mono data
+            ]
+            for col in search_cols:
                 if col in current_cols:
                     ds = ds.rename_column(col, "text")
                     break

@@ -1,3 +1,3 @@
 import dataset
 
-print(dataset.assemble_dataset('Cherokee','mono',False))
+print(dataset.assemble_dataset('Maya','mono',False))
