@@ -22,11 +22,23 @@ def assemble_dataset(language: str, type: Literal["mono", "bi"], include_aya:boo
     dataset_list = []
 
     for path in paths:
+        repo = path
+        config = None
+        split_to_load = "train"
+
         if ':' in path:
-            repo, config = path.split(":", 1)
-            ds = cast(Dataset, load_dataset(repo, config, split="train"))
-        else:
-            ds = cast(Dataset, load_dataset(path, split="train"))
+            parts = path.split(":")
+            repo = parts[0]
+            config = parts[1]
+            if len(parts) > 2:
+                split_to_load = parts[2]
+        try:
+            ds = cast(Dataset, load_dataset(repo, config, split=split_to_load))
+        except ValueError as e:
+            if split_to_load == "train" and "full" in str(e):
+                ds = cast(Dataset, load_dataset(repo, config, split="full"))
+            else:
+                raise e
 
         current_cols = ds.column_names
         if "text" not in current_cols:
