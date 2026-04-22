@@ -23,6 +23,11 @@ def generate_output(
     )
     is_cuda = inputs["input_ids"].device.type == "cuda"
     prompt_len = inputs["input_ids"].shape[1]
+    
+    def get_time():
+        if is_cuda:
+            torch.cuda.synchronize()
+        return time.time()
 
     # Use our custom spec dec implementation
     if config.draft_model_type != "none" and not config.use_hf_assisted:
@@ -53,13 +58,9 @@ def generate_output(
     # Otherwise, use HF decoding
     with torch.no_grad():
         # Measure prefill time (one forward pass to fill KV cache)
-        if is_cuda:
-            torch.cuda.synchronize()
-        prefill_start = time.time()
+        prefill_start = get_time()
         model(inputs["input_ids"], use_cache=True)
-        if is_cuda:
-            torch.cuda.synchronize()
-        prefill_time = time.time() - prefill_start
+        prefill_time = get_time() - prefill_start
 
         if config.draft_model_type != "none":
             generate_kwargs = {
@@ -74,9 +75,7 @@ def generate_output(
             generate_kwargs = {}
 
         # Generate (this re-does prefill internally)
-        if is_cuda:
-            torch.cuda.synchronize()
-        gen_start = time.time()
+        gen_start = get_time()
         out = model.generate(
             **inputs,
             max_new_tokens=config.max_new_tokens,
@@ -84,9 +83,7 @@ def generate_output(
             pad_token_id=tokenizer.eos_token_id,
             **generate_kwargs,
         )
-        if is_cuda:
-            torch.cuda.synchronize()
-        total_time = time.time() - gen_start
+        total_time = get_time() - gen_start
 
     decode_time = total_time - prefill_time
 

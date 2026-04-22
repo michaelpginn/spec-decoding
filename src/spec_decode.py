@@ -161,7 +161,11 @@ def speculative_decode(
     draft_forward_time: tuple[float, float] = (0, 0)  # (sum, num values)
     verifier_forward_time: tuple[float, float] = (0, 0)
 
-    is_cuda = device.type == "cuda"
+    def get_time():
+        if device.type == "cuda":
+            torch.cuda.synchronize()
+        return time.time()
+        
     with torch.no_grad():
         # Preload kv cache for prompts
         target_out = target_model(input_ids, use_cache=True)
@@ -180,9 +184,7 @@ def speculative_decode(
         total_matched_tokens = 0
         num_iterations = 0
         iteration_history = []
-        if is_cuda:
-            torch.cuda.synchronize()
-        start_time = time.time()
+        start_time = get_time()
 
         while cur_gen_idx < generated_tokens.size(-1):
             num_iterations += 1
@@ -209,14 +211,14 @@ def speculative_decode(
                 draft_input_ids = generated_tokens[:, cur_gen_idx - 1 : cur_gen_idx]
 
             for idx in range(new_draft_tokens.size(-1)):
-                draft_start_time = time.time()
+                draft_start_time = get_time()
                 draft_out = draft_model(
                     input_ids=draft_input_ids,
                     past_key_values=draft_kv_cache,
                     use_cache=True,
                 )
                 draft_forward_time = (
-                    draft_forward_time[0] + time.time() - draft_start_time,
+                    draft_forward_time[0] + get_time() - draft_start_time,
                     draft_forward_time[1] + 1,
                 )
                 draft_kv_cache = draft_out.past_key_values
@@ -240,14 +242,14 @@ def speculative_decode(
                 [generated_tokens[:, cur_gen_idx - 1 : cur_gen_idx], new_draft_tokens],
                 dim=-1,
             )
-            verifier_start_time = time.time()
+            verifier_start_time = get_time()
             target_out = target_model(
                 input_ids=target_input_ids,
                 past_key_values=target_kv_cache,
                 use_cache=True,
             )
             verifier_forward_time = (
-                verifier_forward_time[0] + time.time() - verifier_start_time,
+                verifier_forward_time[0] + get_time() - verifier_start_time,
                 verifier_forward_time[1] + 1,
             )
             # Find the first collision, if any
@@ -357,9 +359,7 @@ def speculative_decode(
                 generated_tokens = generated_tokens[:, :cur_gen_idx]
                 break
 
-    if is_cuda:
-        torch.cuda.synchronize()
-    total_time = time.time() - start_time
+    total_time = get_time() - start_time
 
     # Acceptance rate (matched draft tokens / total verified draft tokens)
     acceptance_rate = (
