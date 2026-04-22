@@ -143,9 +143,17 @@ def _compute_spec_metrics(
     summary["average_verifier_time"] = sum(
         r["average_verifier_time"] for r in spec_results
     ) / len(spec_results)
-    summary["speedup_factor"] = sum(
-        r["speedup_factor"] for r in spec_results
-    ) / len(spec_results)
+    
+    # Compute overall speedup factor
+    drafter_cost_ratio = summary["average_draft_time"] / summary["average_verifier_time"]
+    if summary["sentence_avg_acceptance_rate"] < 1:
+        speedup_factor = (1 - summary["sentence_avg_acceptance_rate"] ** (gamma + 1)) / (
+            (1 - summary["sentence_avg_acceptance_rate"]) * (gamma * drafter_cost_ratio + 1)
+        )
+    else:
+        speedup_factor = float("inf")
+        
+    summary["speedup_factor"] = speedup_factor
 
     if verbose:
         print("\n=== Speculative Decoding Metrics ===")

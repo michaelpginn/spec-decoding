@@ -370,10 +370,6 @@ def speculative_decode(
     # Speedup factor
     average_draft_time = draft_forward_time[0] / draft_forward_time[1]
     average_verifier_time = verifier_forward_time[0] / verifier_forward_time[1]
-    drafter_cost_ratio = average_draft_time / average_verifier_time
-    speedup_factor = (1 - acceptance_rate ** (gamma + 1)) / (
-        (1 - acceptance_rate) * (gamma * drafter_cost_ratio + 1)
-    )
 
     metrics = {
         "time": total_time,
@@ -385,7 +381,6 @@ def speculative_decode(
         "toks_per_sec": total_generated_tokens / total_time if total_time > 0 else 0,
         "average_draft_time": average_draft_time,
         "average_verifier_time": average_verifier_time,
-        "speedup_factor": speedup_factor,
     }
 
     if track_iterations:
