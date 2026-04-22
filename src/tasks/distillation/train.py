@@ -220,9 +220,8 @@ def run_distillation(config: DistillConfig):
         },
     ]
     optimizer = optim.AdamW(param_groups, lr=config.learning_rate)
-    start_step = _restore_optimizer(config, optimizer, device)
-
     scheduler = _build_scheduler(optimizer, config)
+    start_step = _restore_training_state(config, optimizer, scheduler, device)
 
     # AMP scaler (only needed for float16, not bfloat16)
     use_scaler = device.type == "cuda" and student.dtype == torch.float16
@@ -233,12 +232,12 @@ def run_distillation(config: DistillConfig):
     target_step = start_step + config.max_steps
     accum_count = 0
     log_accum_loss = 0.0
-    log_step_count = 0
+    log_micro_count = 0
     best_eval_loss = float("inf")
     start_time = time.time()
     epoch = 0
 
-    logger.info(f"Training from step {start_step} to {target_step}")
+    logger.info(f"Training from step {start_step} to {target_step} (optimizer steps)")
 
     while step < target_step:
         for batch in dataloader:
@@ -260,56 +259,60 @@ def run_distillation(config: DistillConfig):
                 )
 
             if torch.isnan(loss):
-                logger.warning(f"Skipping step {step}: loss is NaN")
+                logger.warning(f"Step {step}, micro-batch NaN — skipping accumulation window")
                 optimizer.zero_grad()
                 accum_count = 0
-                step += 1
                 continue
 
             scaler.scale(loss / config.grad_accum_steps).backward()
             accum_count += 1
             log_accum_loss += loss.item()
-            log_step_count += 1
+            log_micro_count += 1
 
-            if accum_count >= config.grad_accum_steps:
-                scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(student.parameters(), 1.0)
-                scaler.step(optimizer)
-                scaler.update()
-                scheduler.step()
-                optimizer.zero_grad()
-                accum_count = 0
+            if accum_count < config.grad_accum_steps:
+                continue
 
-            if (step + 1) % config.log_every == 0 and log_step_count > 0:
-                avg_loss = log_accum_loss / log_step_count
+            # Optimizer step (this is one "step")
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(student.parameters(), 1.0)
+            scaler.step(optimizer)
+            scaler.update()
+            scheduler.step()
+            optimizer.zero_grad()
+            accum_count = 0
+            step += 1
+
+            if step % config.log_every == 0 and log_micro_count > 0:
+                avg_loss = log_accum_loss / log_micro_count
                 current_lr = scheduler.get_last_lr()[0]
                 elapsed = time.time() - start_time
                 logger.info(
-                    f"Step {step + 1} | Loss: {avg_loss:.4f} | "
+                    f"Step {step} | Loss: {avg_loss:.4f} | "
                     f"LR: {current_lr:.2e} | Time: {elapsed:.1f}s"
                 )
                 wandb.log({
                     "train/loss": avg_loss,
                     "train/lr": current_lr,
                     "train/epoch": epoch,
-                    "step": step + 1,
+                    "step": step,
                 })
                 log_accum_loss = 0.0
-                log_step_count = 0
+                log_micro_count = 0
                 start_time = time.time()
 
-            if (step + 1) % config.eval_every == 0 and len(eval_dataset) > 0:
+            if step % config.eval_every == 0 and len(eval_dataset) > 0:
                 eval_loss = _compute_eval_loss(student, eval_dataloader, device)
-                logger.info(f"Step {step + 1} | Eval loss: {eval_loss:.4f}")
-                wandb.log({"eval/loss": eval_loss, "step": step + 1})
+                logger.info(f"Step {step} | Eval loss: {eval_loss:.4f}")
+                wandb.log({"eval/loss": eval_loss, "step": step})
                 if eval_loss < best_eval_loss:
                     best_eval_loss = eval_loss
                     _save_checkpoint(
                         student, tokenizer, optimizer, config.output_dir, "best", repo_name,
-                        push_to_hub=False,
+                        push_to_hub=False, scheduler=scheduler,
                     )
 
-            step += 1
+            if step >= target_step:
+                break
 
         epoch += 1
         if step < target_step:
@@ -323,13 +326,13 @@ def run_distillation(config: DistillConfig):
         logger.info("Training complete! Saving final checkpoint locally (HF Hub push disabled).")
     _save_checkpoint(
         student, tokenizer, optimizer, config.output_dir, "final", repo_name,
-        push_to_hub=bool(config.hf_repo_id),
+        push_to_hub=bool(config.hf_repo_id), scheduler=scheduler,
     )
     wandb.finish()
 
 
-def _restore_optimizer(config: DistillConfig, optimizer, device) -> int:
-    """Restore optimizer state from checkpoint and return the starting step."""
+def _restore_training_state(config: DistillConfig, optimizer, scheduler, device) -> int:
+    """Restore optimizer and scheduler state from checkpoint; return starting step."""
     start_step = 0
     if config.resume_from:
         checkpoint_name = os.path.basename(config.resume_from)
@@ -342,18 +345,31 @@ def _restore_optimizer(config: DistillConfig, optimizer, device) -> int:
             optimizer.load_state_dict(torch.load(opt_path, map_location=device))
         else:
             logger.warning("No optimizer state found — learning rates will reset")
+
+        sched_path = os.path.join(config.resume_from, "scheduler.pt")
+        if os.path.exists(sched_path):
+            logger.info(f"Loading scheduler state from {sched_path}")
+            scheduler.load_state_dict(torch.load(sched_path, map_location=device))
+        elif start_step > 0:
+            logger.warning(
+                f"No scheduler state found — fast-forwarding scheduler to step {start_step}"
+            )
+            for _ in range(start_step):
+                scheduler.step()
     return start_step
 
 
 def _save_checkpoint(student, tokenizer, optimizer, output_dir, label,
-                     repo_name=None, push_to_hub=False):
-    """Save model, tokenizer, and optimizer state; optionally push to HF Hub."""
+                     repo_name=None, push_to_hub=False, scheduler=None):
+    """Save model, tokenizer, optimizer, and scheduler state; optionally push to HF Hub."""
     path = os.path.join(output_dir, f"checkpoint-{label}" if isinstance(label, int) else str(label))
     os.makedirs(path, exist_ok=True)
 
     student.save_pretrained(path)
     tokenizer.save_pretrained(path)
     torch.save(optimizer.state_dict(), os.path.join(path, "optimizer.pt"))
+    if scheduler is not None:
+        torch.save(scheduler.state_dict(), os.path.join(path, "scheduler.pt"))
     logger.info(f"Saved checkpoint: {path}")
 
     if push_to_hub and repo_name:
