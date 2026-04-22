@@ -137,23 +137,25 @@ def _compute_spec_metrics(
     ) / len(spec_results)
     summary["mean_accepted_tokens"] = mean_accepted
     summary["block_efficiency"] = mean_accepted / gamma if gamma > 0 else 0
-    summary["average_draft_time"] = sum(
-        r["average_draft_time"] for r in spec_results
-    ) / len(spec_results)
-    summary["average_verifier_time"] = sum(
-        r["average_verifier_time"] for r in spec_results
-    ) / len(spec_results)
     
-    # Compute overall speedup factor
-    drafter_cost_ratio = summary["average_draft_time"] / summary["average_verifier_time"]
-    if summary["sentence_avg_acceptance_rate"] < 1:
-        speedup_factor = (1 - summary["sentence_avg_acceptance_rate"] ** (gamma + 1)) / (
-            (1 - summary["sentence_avg_acceptance_rate"]) * (gamma * drafter_cost_ratio + 1)
-        )
-    else:
-        speedup_factor = float("inf")
+    # Compute speedup factor (CUDA only)
+    if "average_draft_time" in summary and "average_verifier_time" in summary:
+        summary["average_draft_time"] = sum(
+            r["average_draft_time"] for r in spec_results
+        ) / len(spec_results)
+        summary["average_verifier_time"] = sum(
+            r["average_verifier_time"] for r in spec_results
+        ) / len(spec_results)
         
-    summary["speedup_factor"] = speedup_factor
+        # Compute overall speedup factor
+        drafter_cost_ratio = summary["average_draft_time"] / summary["average_verifier_time"]
+        if summary["sentence_avg_acceptance_rate"] < 1:
+            speedup_factor = (1 - summary["sentence_avg_acceptance_rate"] ** (gamma + 1)) / (
+                (1 - summary["sentence_avg_acceptance_rate"]) * (gamma * drafter_cost_ratio + 1)
+            )
+        else:
+            speedup_factor = float("inf")
+        summary["speedup_factor"] = speedup_factor
 
     if verbose:
         print("\n=== Speculative Decoding Metrics ===")

@@ -158,9 +158,16 @@ def speculative_decode(
     cur_gen_idx = input_ids.size(1)
 
     # Track average time for draft and verifier forward pass for speedup factor
-    draft_forward_time: tuple[float, float] = (0, 0)  # (sum, num values)
-    verifier_forward_time: tuple[float, float] = (0, 0)
+    draft_start,draft_end,verifier_start, verifier_end   = None, None, None, None
+    draft_times_acc = (0., 0)
+    verifier_times_acc = (0., 0)
+    if device.type == 'cuda':
+        draft_start = torch.cuda.Event(enable_timing=True)
+        draft_end = torch.cuda.Event(enable_timing=True)
+        verifier_start = torch.cuda.Event(enable_timing=True)
+        verifier_end = torch.cuda.Event(enable_timing=True)
 
+    
     def get_time():
         if device.type == "cuda":
             torch.cuda.synchronize()
@@ -210,16 +217,12 @@ def speculative_decode(
             else:
                 draft_input_ids = generated_tokens[:, cur_gen_idx - 1 : cur_gen_idx]
 
+            _ = draft_start and draft_start.record()
             for idx in range(new_draft_tokens.size(-1)):
-                draft_start_time = get_time()
                 draft_out = draft_model(
                     input_ids=draft_input_ids,
                     past_key_values=draft_kv_cache,
                     use_cache=True,
-                )
-                draft_forward_time = (
-                    draft_forward_time[0] + get_time() - draft_start_time,
-                    draft_forward_time[1] + 1,
                 )
                 draft_kv_cache = draft_out.past_key_values
                 draft_out_logprobs = apply_filters(
@@ -236,22 +239,27 @@ def speculative_decode(
                     new_draft_tokens = new_draft_tokens[:, : idx + 1]
                     new_draft_token_logprobs = new_draft_token_logprobs[:, : idx + 1, :]
                     break
+            _ = draft_end and draft_end.record()
 
             #  Step 2: Target model verifies
             target_input_ids = torch.concat(
                 [generated_tokens[:, cur_gen_idx - 1 : cur_gen_idx], new_draft_tokens],
                 dim=-1,
             )
-            verifier_start_time = get_time()
+            _ = verifier_start and verifier_start.record()
             target_out = target_model(
                 input_ids=target_input_ids,
                 past_key_values=target_kv_cache,
                 use_cache=True,
             )
-            verifier_forward_time = (
-                verifier_forward_time[0] + get_time() - verifier_start_time,
-                verifier_forward_time[1] + 1,
-            )
+            _ = verifier_end and verifier_end.record()
+            
+            # Record times (CUDA only)
+            if draft_start and draft_end and verifier_start and verifier_end:
+                torch.cuda.synchronize()
+                draft_times_acc = (draft_times_acc[0] + draft_start.elapsed_time(draft_end), draft_times_acc[1] + new_draft_tokens.size(-1))
+                verifier_times_acc = (verifier_times_acc[0] + verifier_start.elapsed_time(verifier_end), verifier_times_acc[1] + 1)
+            
             # Find the first collision, if any
             target_out_logprobs = apply_filters(
                 torch.log_softmax(target_out.logits, dim=-1)
@@ -367,9 +375,7 @@ def speculative_decode(
     )
     total_generated_tokens = cur_gen_idx - input_ids.size(1)
 
-    # Speedup factor
-    average_draft_time = draft_forward_time[0] / draft_forward_time[1]
-    average_verifier_time = verifier_forward_time[0] / verifier_forward_time[1]
+
 
     metrics = {
         "time": total_time,
@@ -379,9 +385,14 @@ def speculative_decode(
         "acceptance_rate": acceptance_rate,
         "num_iterations": num_iterations,
         "toks_per_sec": total_generated_tokens / total_time if total_time > 0 else 0,
-        "average_draft_time": average_draft_time,
-        "average_verifier_time": average_verifier_time,
     }
+    
+    # Forward pass times for speedup factor
+    if draft_times_acc[1] > 0 and verifier_times_acc[1] > 0:
+        average_draft_time = draft_times_acc[0] / draft_times_acc[1]
+        average_verifier_time = verifier_times_acc[0] / verifier_times_acc[1]
+        metrics["average_draft_time"] = average_draft_time
+        metrics["average_verifier_time"] = average_verifier_time
 
     if track_iterations:
         metrics["iteration_history"] = iteration_history
