@@ -12,16 +12,17 @@ def assemble_dataset(language: str, type: Literal["mono", "bi"], include_aya:boo
     df = pd.read_csv(file_path)
     aya = load_dataset("CohereLabs/aya_dataset", split="train")
 
-    df = df[df["Language"] == language]
-    df = df[df["hugging face "].notna()]
-    paths = df["hugging face "].tolist()
+    paths = df[(df["Language"] == language) & (df["hugging face "].notna())]
 
     """
     Just like how load data was but checking for the new cherokee data
     """
     dataset_list = []
 
-    for path in paths:
+    for _, row in paths.iterrows():
+        path = row["hugging face "]
+        lang_code = str(row["Code"]) # Fallback split name
+
         repo = path
         config = None
         split_to_load = "train"
@@ -32,20 +33,35 @@ def assemble_dataset(language: str, type: Literal["mono", "bi"], include_aya:boo
             config = parts[1]
             if len(parts) > 2:
                 split_to_load = parts[2]
+
         try:
             ds = cast(Dataset, load_dataset(repo, config, split=split_to_load))
         except ValueError as e:
-            if split_to_load == "train" and "full" in str(e):
-                ds = cast(Dataset, load_dataset(repo, config, split="full"))
+            # Check the error message for available splits
+            available_splits = str(e)
+
+            # Sequence of fallbacks
+            if split_to_load == "train":
+                if "full" in available_splits:
+                    ds = cast(Dataset, load_dataset(repo, config, split="full"))
+                elif lang_code in available_splits:
+                    ds = cast(Dataset, load_dataset(repo, config, split=lang_code))
+                else:
+                    raise e
             else:
                 raise e
 
+        # Column standardization logic
         current_cols = ds.column_names
         if "text" not in current_cols:
-            for col in [language, language.lower(), "sentence", "content"]:
+            # Check for the full language name, the code, or generic 'sentence'
+            for col in [language, lang_code, language.lower(), "sentence", "content"]:
                 if col in current_cols:
                     ds = ds.rename_column(col, "text")
                     break
+
+        # Ensure we only keep the 'text' column to avoid concatenation errors
+        ds = ds.select_columns(["text"])
         dataset_list.append(ds)
 
     """
