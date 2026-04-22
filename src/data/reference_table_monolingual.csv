@@ -14,8 +14,8 @@ Igbo,ibo,https://wortschatz.uni-leipzig.de/en/download/ibo,14624,data/monolingua
 Igbo,ibo,https://wortschatz.uni-leipzig.de/en/download/ibo,10000,data/monolingual/ibo/ibo_wikipedia_2021_10K-sentences.txt,
 Igbo,ibo,https://wortschatz.uni-leipzig.de/en/download/ibo,23685,data/monolingual/ibo/ibo_wikipedia_2021_10K-words.txt,
 Igbo,ibo,tatoeba,46,data/monolingual/ibo/tatoeba.tsv,
-Lakota,lkt,tatoeba,22,data/monolingual/lkt/tatoeba.tsv,lecslab/monoling_lkt
-Muskogee (Creek),mus,tatoeba,640,data/monolingual/mus/tatoeba.tsv,lecslab/monoling_mus
+Amharic,amh,https://huggingface.co/datasets/CohereLabs/aya_dataset,,,CohereLabs/aya_dataset
+Yoruba,yor,https://huggingface.co/datasets/CohereLabs/aya_dataset,,,CohereLabs/aya_dataset
 Nepali,npi,tatoeba,4504,data/monolingual/npi/tatoeba.tsv,lecslab/monoling_npi
 Occitan,oci,https://wortschatz-leipzig.de/en/download/oci#oci_community_2017,10000,data/monolingual/oci/oci-fr_web_2020_10K-sentences.txt,lecslab/monoling_oci
 Occitan,oci,https://wortschatz-leipzig.de/en/download/oci#oci_community_2017,25982,data/monolingual/oci/oci-fr_web_2020_10K-words.txt,
