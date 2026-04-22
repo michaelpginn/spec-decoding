@@ -88,7 +88,7 @@ def assemble_dataset(language: str, type: Literal["mono", "bi"], include_aya:boo
     """
     Handling the aya data
     """
-    lang_aya = cast(Dataset, aya.filter(lambda x: x["language"] == language.lower()))
+    lang_aya = cast(Dataset, aya.filter(lambda x: x["language"].lower() == language.lower()))
     if include_aya:
         if not dataset_list:
             dataset = lang_aya
