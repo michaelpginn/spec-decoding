@@ -62,14 +62,14 @@ class NGramModel:
 
         if len(tokens) < self.n - 1:
             # Uniform distribution
-            return torch.full((self.vocab_size,), 1 / len(self.tokenizer))
+            return torch.full((len(self.tokenizer),), 1 / len(self.tokenizer))
 
         context_key = tuple(tokens[-(self.n - 1) :])
         if context_key not in self.conditional_logprobs:
             # Unseen gram
-            return torch.full((self.vocab_size,), 1 / len(self.tokenizer))
+            return torch.full((len(self.tokenizer),), 1 / len(self.tokenizer))
             
-        logprobs = torch.full((self.vocab_size,), float("-inf"))
+        logprobs = torch.full((len(self.tokenizer),), float("-inf"))
         for token_id, prob in self.conditional_logprobs[context_key].items():
             logprobs[token_id] = prob
         return logprobs
