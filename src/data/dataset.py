@@ -27,7 +27,10 @@ def assemble_dataset(language: str, type: Literal["mono", "bi"], include_aya:boo
         df = df[df["Language"] == language]
         df = df[df["hugging face "].notna()]
         paths = df["hugging face "].tolist()
-        datasets_list = [cast(Dataset, load_dataset(path, split="train")) for path in paths]
+        try:
+            datasets_list = [cast(Dataset, load_dataset(path, split="train")) for path in paths]
+        except ValueError:
+            datasets_list = [cast(Dataset, load_dataset(path)) for path in paths]
         dataset = concatenate_datasets(datasets_list)
     if language in dataset.column_names:
             dataset = dataset.rename_column(language, "text")
