@@ -15,3 +15,8 @@ Quechua,que,tatoeba,279,data/bilingual/que/tatoeba.tsv,lecslab/biling_que
 Maya,yua,tatoeba,25,data/bilingual/yua/tatoeba.tsv,lecslab/biling_yua
 Tamazight,zgh,tatoeba,15760,data/bilingual/zgh/tatoeba.tsv,lecslab/biling_zgh
 Chinese,zh,hugging face,1000000,,Helsinki-NLP/opus-100
+Amharic,amh,tatoeba,230,,lecslab/bilingal_amh
+Amharic,amh,https://github.com/wubet/unified-amharic-english-corpus,195378,,
+Yoruba,yor,UdS-LSV/menyo20k_mt,"10,070",,https://raw.githubusercontent.com/uds-lsv/menyo-20k_MT/master/data/train.tsv
+Yoruba,yor,UdS-LSV/menyo20k_mt,"3,397",,https://raw.githubusercontent.com/uds-lsv/menyo-20k_MT/master/data/dev.tsv
+Yoruba,yor,UdS-LSV/menyo20k_mt,"6,633",,https://raw.githubusercontent.com/uds-lsv/menyo-20k_MT/master/data/test.tsv
