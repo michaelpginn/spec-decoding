@@ -11,28 +11,45 @@ def assemble_dataset(language: str, type: Literal["mono", "bi"], include_aya:boo
     file_path = DATA_DIR / file
     df = pd.read_csv(file_path)
     aya = load_dataset("CohereLabs/aya_dataset", split="train")
-    if include_aya:
-        if language not in df["Language"].values:
-            dataset = cast(Dataset, aya.filter(lambda lang: lang["language"] == language))
-        else:
-            df = df[df["Language"] == language]
-            df = df[df["hugging face "].notna()]
-            paths = df["hugging face "].tolist()
 
-            lang_aya = cast(Dataset, aya.filter(lambda lang: lang["language"] == language))
-            datasets_list = [load_dataset(path, split="train") for path in paths]
-            other_datasets = concatenate_datasets(datasets_list)
+    df = df[df["Language"] == language]
+    df = df[df["hugging face "].notna()]
+    paths = df["hugging face "].tolist()
+
+    """
+    Just like how load data was but checking for the new cherokee data
+    """
+    dataset_list = []
+
+    for path in paths:
+        if ':' in path:
+            repo, config = path.split(":", 1)
+            ds = cast(Dataset, load_dataset(repo, config, split="train"))
+        else:
+            ds = cast(Dataset, load_dataset(path, split="train"))
+
+        current_cols = ds.column_names
+        if "text" not in current_cols:
+            for col in [language, language.lower(), "sentence", "content"]:
+                if col in current_cols:
+                    ds = ds.rename_column(col, "text")
+                    break
+        dataset_list.append(ds)
+
+    """
+    Handling the aya data
+    """
+    lang_aya = cast(Dataset, aya.filter(lambda x: x["language"] == language.lower()))
+    if include_aya:
+        if not dataset_list:
+            dataset = lang_aya
+        else:
+            other_datasets = concatenate_datasets(dataset_list)
             dataset = concatenate_datasets([lang_aya, other_datasets])
     else:
-        df = df[df["Language"] == language]
-        df = df[df["hugging face "].notna()]
-        paths = df["hugging face "].tolist()
-        try:
-            datasets_list = [cast(Dataset, load_dataset(path, split="train")) for path in paths]
-        except ValueError:
-            datasets_list = [cast(Dataset, load_dataset(path)) for path in paths]
-        dataset = concatenate_datasets(datasets_list)
-    if language in dataset.column_names:
-            dataset = dataset.rename_column(language, "text")
+        if not dataset_list:
+            raise ValueError(f"No datasets found for {language} and include_aya is False.")
+        dataset = concatenate_datasets(dataset_list)
+
     dataset = dataset.filter(lambda row: row['text'])
     return dataset.train_test_split(test_size=0.2, seed=42)
