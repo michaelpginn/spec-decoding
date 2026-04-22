@@ -72,7 +72,7 @@ def assemble_dataset(language: str, type: Literal["mono", "bi"], include_aya:boo
                 language, lang_code, language.lower(),
                 "Mayan", "Mayan language",  # Specific to yua datasets
                 "sentence", "text_sentence", "content",
-                "Source", "Target"          # Common in parallel-formatted mono data
+                "Source", "Target","inputs"          # Common in parallel-formatted mono data
             ]
             for col in search_cols:
                 if col in current_cols:
@@ -91,7 +91,18 @@ def assemble_dataset(language: str, type: Literal["mono", "bi"], include_aya:boo
     lang_aya = cast(Dataset, aya.filter(lambda x: x["language"].lower() == language.lower()))
     if include_aya:
         if not dataset_list:
+            search_cols = [
+                language, language.lower(),
+                "Mayan", "Mayan language",  # Specific to yua datasets
+                "sentence", "text_sentence", "content",
+                "Source", "Target","inputs","language_code","language"          # Common in parallel-formatted mono data
+            ]
             dataset = lang_aya
+            current_cols = dataset.column_names
+            for col in search_cols:
+                if col in current_cols:
+                    ds = dataset.rename_column(col, "text")
+                    break
         else:
             other_datasets = concatenate_datasets(dataset_list)
             dataset = concatenate_datasets([lang_aya, other_datasets])
