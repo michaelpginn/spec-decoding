@@ -55,14 +55,16 @@ def assemble_dataset(language: str, type: Literal["mono", "bi"], include_aya:boo
         current_cols = ds.column_names
         if "text" not in current_cols:
             # Check for the full language name, the code, or generic 'sentence'
-            for col in [language, lang_code, language.lower(), "sentence", "content"]:
+            for col in [language, lang_code, language.lower(), "sentence", "text_sentence", "content"]:
                 if col in current_cols:
                     ds = ds.rename_column(col, "text")
                     break
 
-        # Ensure we only keep the 'text' column to avoid concatenation errors
-        ds = ds.select_columns(["text"])
-        dataset_list.append(ds)
+        if "text" in ds.column_names:
+            ds = ds.select_columns(["text"])
+            dataset_list.append(ds)
+        else:
+            print(f"Warning: Could not find text column in {repo}. Available: {current_cols}")
 
     """
     Handling the aya data
