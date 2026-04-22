@@ -1,47 +1,40 @@
 #!/usr/bin/env bash
 #
-# Two-stage hyperparameter sweep for distillation.
+# Full grid search for distillation hyperparameters.
 #
-# Stage 1 (--stage 1): Sweep learning rate with default steps/grad_accum.
-#   Pick the best LR from wandb, then run stage 2.
-#
-# Stage 2 (--stage 2): Fix LR (--lr), sweep max_steps x grad_accum_steps.
+# Sweeps over: learning_rate x max_steps x grad_accum_steps x warmup_ratio x weight_decay
+# Each run trains from scratch and logs to wandb with the tag "grid_search".
 #
 # Usage:
-#   # Stage 1: sweep LR for general KD on Berber
-#   bash scripts/sweep_distill.sh --mode general --lang ber --stage 1
-#
-#   # Stage 2: fix best LR, sweep steps x grad_accum
-#   bash scripts/sweep_distill.sh --mode general --lang ber --stage 2 --lr 5e-5
+#   # General KD, full grid search for Berber
+#   bash scripts/sweep_distill.sh --mode general --lang ber
 #
 #   # Task-specific (SeqKD) — needs seqkd_data_path override
-#   bash scripts/sweep_distill.sh --mode task_specific --lang ber --stage 1 \
+#   bash scripts/sweep_distill.sh --mode task_specific --lang ber \
 #       --extra "seqkd_data_path=lecslab/seqkd-Qwen2.5-7B-Instruct-ber-5000"
 #
-#   # Stage 1 for several languages at once:
-#   for lang in ber npi haw; do
-#     bash scripts/sweep_distill.sh --mode general --lang "$lang" --stage 1
-#   done
+#   # Quick sweep (fewer combos, good for initial exploration)
+#   bash scripts/sweep_distill.sh --mode general --lang ber --quick
 #
-# W&B: each stage sets WANDB_DISTILL_SWEEP_TAG so runs are tagged
-#   learning_rate_sweep_runs (stage 1) or steps_grad_accum_sweep (stage 2).
+#   # Multiple languages:
+#   for lang in ber npi haw; do
+#     bash scripts/sweep_distill.sh --mode general --lang "$lang" &
+#   done
 #
 set -euo pipefail
 
 MODE="general"
 LANG_CODE="ber"
-STAGE=1
-BEST_LR=""
 EXTRA_OVERRIDES=""
 HF_REPO_ID="${HF_REPO_ID:-lecslab}"
+QUICK=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --mode)  MODE="$2";       shift 2 ;;
         --lang)  LANG_CODE="$2";  shift 2 ;;
-        --stage) STAGE="$2";      shift 2 ;;
-        --lr)    BEST_LR="$2";    shift 2 ;;
         --extra) EXTRA_OVERRIDES="$2"; shift 2 ;;
+        --quick) QUICK=1;         shift   ;;
         *) echo "Unknown flag: $1"; exit 1 ;;
     esac
 done
@@ -53,6 +46,41 @@ else
 fi
 
 SWEEP_BASE="../distilled_models/sweep/${MODE}/${LANG_CODE}"
+export WANDB_DISTILL_SWEEP_TAG="grid_search"
+
+# ── Hyperparameter grids ─────────────────────────────────────────────────
+if [[ "$QUICK" == "1" ]]; then
+    LR_GRID=(3e-5 5e-5)
+    STEPS_GRID=(2000 3000)
+    GA_GRID=(4 8)
+    WARMUP_GRID=(0.06)
+    WD_GRID=(0.01)
+else
+    LR_GRID=(1e-5 3e-5 5e-5 8e-5)
+    STEPS_GRID=(1500 2000 3000)
+    GA_GRID=(4 8 16)
+    WARMUP_GRID=(0.03 0.06 0.10)
+    WD_GRID=(0.0 0.01 0.05)
+fi
+
+TOTAL=0
+for lr in "${LR_GRID[@]}"; do
+for steps in "${STEPS_GRID[@]}"; do
+for ga in "${GA_GRID[@]}"; do
+for warmup in "${WARMUP_GRID[@]}"; do
+for wd in "${WD_GRID[@]}"; do
+    TOTAL=$((TOTAL + 1))
+done; done; done; done; done
+
+echo "============================================================"
+echo "  Grid search: ${MODE} | ${LANG_CODE}"
+echo "  LR:       ${LR_GRID[*]}"
+echo "  Steps:    ${STEPS_GRID[*]}"
+echo "  GradAcc:  ${GA_GRID[*]}"
+echo "  Warmup:   ${WARMUP_GRID[*]}"
+echo "  WD:       ${WD_GRID[*]}"
+echo "  Total runs: ${TOTAL}"
+echo "============================================================"
 
 run_one() {
     local label="$1"
@@ -66,53 +94,34 @@ run_one() {
         full_overrides="${full_overrides} ${EXTRA_OVERRIDES}"
     fi
 
-    echo "============================================"
+    echo "------------------------------------------------------------"
     echo "  Run: ${label}"
-    echo "  Config: ${CONFIG}"
     echo "  Overrides: ${full_overrides}"
-    echo "============================================"
+    echo "------------------------------------------------------------"
 
     python scripts/distill.py "${CONFIG}" -o ${full_overrides}
 }
 
-if [[ "$STAGE" == "1" ]]; then
-    export WANDB_DISTILL_SWEEP_TAG="learning_rate_sweep_runs"
-    echo "=== STAGE 1: Learning Rate Sweep ==="
-    echo "Mode: ${MODE} | Language: ${LANG_CODE}"
+RUN_NUM=0
+for lr in "${LR_GRID[@]}"; do
+for steps in "${STEPS_GRID[@]}"; do
+for ga in "${GA_GRID[@]}"; do
+for warmup in "${WARMUP_GRID[@]}"; do
+for wd in "${WD_GRID[@]}"; do
+    RUN_NUM=$((RUN_NUM + 1))
+    LABEL="lr${lr}_s${steps}_ga${ga}_wu${warmup}_wd${wd}"
     echo ""
+    echo ">>> Run ${RUN_NUM}/${TOTAL}: ${LABEL}"
+    run_one "$LABEL" \
+        "learning_rate=${lr} max_steps=${steps} grad_accum_steps=${ga} warmup_ratio=${warmup} weight_decay=${wd}"
+done; done; done; done; done
 
-    for lr in 1e-5 2e-5 5e-5; do
-        run_one "lr${lr}" "learning_rate=${lr}"
-    done
-
-    echo ""
-    echo "Stage 1 complete. Check wandb to pick the best LR, then run:"
-    echo "  bash scripts/sweep_distill.sh --mode ${MODE} --lang ${LANG_CODE} --stage 2 --lr <best_lr>"
-
-elif [[ "$STAGE" == "2" ]]; then
-    if [[ -z "$BEST_LR" ]]; then
-        echo "ERROR: Stage 2 requires --lr <best_lr> from stage 1"
-        exit 1
-    fi
-
-    export WANDB_DISTILL_SWEEP_TAG="steps_grad_accum_sweep"
-    echo "=== STAGE 2: Steps x Grad Accum Sweep (LR=${BEST_LR}) ==="
-    echo "Mode: ${MODE} | Language: ${LANG_CODE}"
-    echo ""
-
-    for steps in 2000 3000 5000; do
-        for ga in 4 8 16; do
-            run_one "lr${BEST_LR}_steps${steps}_ga${ga}" \
-                "learning_rate=${BEST_LR} max_steps=${steps} grad_accum_steps=${ga}"
-        done
-    done
-
-    echo ""
-    echo "Stage 2 complete. Check wandb to pick the best combo."
-
-else
-    echo "ERROR: --stage must be 1 or 2"
-    exit 1
-fi
+echo ""
+echo "============================================================"
+echo "  Grid search complete. ${TOTAL} runs finished."
+echo "  Check wandb (tag: grid_search) to find the best combo."
+echo "  Then evaluate with:"
+echo "    python scripts/eval_distill_sweep.py --sweep-dir ${SWEEP_BASE} --language ${LANG_CODE}"
+echo "============================================================"
 
 unset WANDB_DISTILL_SWEEP_TAG 2>/dev/null || true

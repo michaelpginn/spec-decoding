@@ -53,8 +53,13 @@ class DistillConfig:
     max_steps: int = 3000
     batch_size: int = 4
     grad_accum_steps: int = 8
-    learning_rate: float = 2e-5
+    learning_rate: float = 5e-5
+    weight_decay: float = 0.01
+    warmup_ratio: float = 0.06
+    lr_scheduler: Literal["cosine", "linear", "constant"] = "cosine"
     max_length: int = 512
+    eval_split_ratio: float = 0.05
+    eval_every: int = 200
 
     # Checkpointing & output
     hf_repo_id: str | None = None

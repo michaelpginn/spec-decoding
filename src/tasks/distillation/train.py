@@ -6,6 +6,7 @@ Supports two modes (controlled by DistillConfig.distill_mode):
   - general: causal LM fine-tuning on raw monolingual text.
 """
 import logging
+import math
 import os
 import time
 from dataclasses import asdict
@@ -15,6 +16,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import wandb
 from torch.amp import GradScaler, autocast  # type: ignore[attr-defined]
+from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 
 from src.config.config import DistillConfig
@@ -85,6 +87,50 @@ def setup_wandb(config: DistillConfig):
     wandb.define_metric("train/*", step_metric="step")
 
 
+def _build_scheduler(optimizer, config: DistillConfig) -> LambdaLR:
+    """Build LR scheduler with linear warmup then cosine/linear/constant decay."""
+    warmup_steps = max(1, int(config.max_steps * config.warmup_ratio))
+
+    def lr_lambda(current_step: int) -> float:
+        if current_step < warmup_steps:
+            return current_step / warmup_steps
+        if config.lr_scheduler == "constant":
+            return 1.0
+        progress = (current_step - warmup_steps) / max(1, config.max_steps - warmup_steps)
+        if config.lr_scheduler == "cosine":
+            return max(0.0, 0.5 * (1.0 + math.cos(math.pi * progress)))
+        # linear
+        return max(0.0, 1.0 - progress)
+
+    return LambdaLR(optimizer, lr_lambda)
+
+
+@torch.no_grad()
+def _compute_eval_loss(student, eval_dataloader, device) -> float:
+    """Run a forward pass over the eval split and return average loss."""
+    student.eval()
+    total_loss = 0.0
+    count = 0
+    for batch in eval_dataloader:
+        input_ids = batch["input_ids"].to(device)
+        attention_mask = batch["attention_mask"].to(device)
+        labels = batch["labels"].to(device)
+
+        with autocast(device_type=device.type, enabled=(device.type == "cuda")):
+            logits = student(input_ids=input_ids, attention_mask=attention_mask).logits
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            loss = F.cross_entropy(
+                shift_logits.view(-1, shift_logits.size(-1)),
+                shift_labels.view(-1),
+                ignore_index=-100,
+            )
+        total_loss += loss.item()
+        count += 1
+    student.train()
+    return total_loss / max(count, 1)
+
+
 def run_distillation(config: DistillConfig):
     """
     Train student via distillation.
@@ -131,17 +177,44 @@ def run_distillation(config: DistillConfig):
     repo_name = build_repo_name(config, dataset_len)
     logger.info(f"HF repo: {repo_name}")
 
+    # Train / eval split
+    eval_size = max(1, int(len(tokenized) * config.eval_split_ratio))
+    train_size = len(tokenized) - eval_size
+    train_dataset = tokenized.select(range(train_size))
+    eval_dataset = tokenized.select(range(train_size, len(tokenized)))
+    logger.info(f"Split: {train_size} train, {eval_size} eval examples")
+
     dataloader = DataLoader(
-        tokenized,  # type: ignore[arg-type]
+        train_dataset,  # type: ignore[arg-type]
         batch_size=config.batch_size,
         shuffle=True,
         num_workers=0,
         pin_memory=(device.type == "cuda"),
     )
+    eval_dataloader = DataLoader(
+        eval_dataset,  # type: ignore[arg-type]
+        batch_size=config.batch_size,
+        shuffle=False,
+        num_workers=0,
+        pin_memory=(device.type == "cuda"),
+    )
 
-    # Optimizer
-    optimizer = optim.AdamW(student.parameters(), lr=config.learning_rate)
+    # Optimizer with weight decay (exclude bias and LayerNorm)
+    no_decay = {"bias", "LayerNorm.weight", "layernorm.weight"}
+    param_groups = [
+        {
+            "params": [p for n, p in student.named_parameters() if not any(nd in n for nd in no_decay)],
+            "weight_decay": config.weight_decay,
+        },
+        {
+            "params": [p for n, p in student.named_parameters() if any(nd in n for nd in no_decay)],
+            "weight_decay": 0.0,
+        },
+    ]
+    optimizer = optim.AdamW(param_groups, lr=config.learning_rate)
     start_step = _restore_optimizer(config, optimizer, device)
+
+    scheduler = _build_scheduler(optimizer, config)
 
     # AMP scaler (only needed for float16, not bfloat16)
     use_scaler = device.type == "cuda" and student.dtype == torch.float16
@@ -153,6 +226,7 @@ def run_distillation(config: DistillConfig):
     accum_count = 0
     log_accum_loss = 0.0
     log_step_count = 0
+    best_eval_loss = float("inf")
     start_time = time.time()
     epoch = 0
 
@@ -194,23 +268,46 @@ def run_distillation(config: DistillConfig):
                 torch.nn.utils.clip_grad_norm_(student.parameters(), 1.0)
                 scaler.step(optimizer)
                 scaler.update()
+                scheduler.step()
                 optimizer.zero_grad()
                 accum_count = 0
 
             if (step + 1) % config.log_every == 0 and log_step_count > 0:
                 avg_loss = log_accum_loss / log_step_count
+                current_lr = scheduler.get_last_lr()[0]
                 elapsed = time.time() - start_time
-                logger.info(f"Step {step + 1} | Loss: {avg_loss:.4f} | Time: {elapsed:.1f}s")
-                wandb.log({"train/loss": avg_loss, "train/epoch": epoch, "step": step + 1})
+                logger.info(
+                    f"Step {step + 1} | Loss: {avg_loss:.4f} | "
+                    f"LR: {current_lr:.2e} | Time: {elapsed:.1f}s"
+                )
+                wandb.log({
+                    "train/loss": avg_loss,
+                    "train/lr": current_lr,
+                    "train/epoch": epoch,
+                    "step": step + 1,
+                })
                 log_accum_loss = 0.0
                 log_step_count = 0
                 start_time = time.time()
+
+            if (step + 1) % config.eval_every == 0 and len(eval_dataset) > 0:
+                eval_loss = _compute_eval_loss(student, eval_dataloader, device)
+                logger.info(f"Step {step + 1} | Eval loss: {eval_loss:.4f}")
+                wandb.log({"eval/loss": eval_loss, "step": step + 1})
+                if eval_loss < best_eval_loss:
+                    best_eval_loss = eval_loss
+                    _save_checkpoint(
+                        student, tokenizer, optimizer, config.output_dir, "best", repo_name,
+                        push_to_hub=False,
+                    )
 
             step += 1
 
         epoch += 1
         if step < target_step:
             logger.info(f"Completed epoch {epoch}. Continuing to step {target_step}...")
+
+    wandb.log({"eval/best_loss": best_eval_loss})
 
     if config.hf_repo_id:
         logger.info(f"Training complete! Pushing final model to HF Hub: {repo_name}")
