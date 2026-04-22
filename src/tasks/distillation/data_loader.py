@@ -140,7 +140,8 @@ def load_general_dataset(config: DistillConfig) -> Dataset:
     logger.info(f"Loading monolingual data for {lang_name} ({config.language_code})")
 
     splits = assemble_dataset(lang_name, "mono", include_aya=False)
-    ds = concatenate_datasets([splits["train"], splits["test"]])
+
+    ds = concatenate_datasets([splits["train"], splits["test"]]).shuffle(seed=42)
 
     cols = ds.column_names
     text_col = None

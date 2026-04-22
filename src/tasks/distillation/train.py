@@ -69,7 +69,7 @@ def setup_wandb(config: DistillConfig):
         f"steps={config.max_steps}",
         f"ga={config.grad_accum_steps}",
     ]
-    # Set by scripts/sweep_distill.sh: learning_rate_sweep_runs | steps_grad_accum_sweep
+    # Optional tag set by sweep runners (e.g. "grid_search").
     _sweep_tag = os.environ.get("WANDB_DISTILL_SWEEP_TAG", "").strip()
     if _sweep_tag:
         tags.append(_sweep_tag)
@@ -85,6 +85,7 @@ def setup_wandb(config: DistillConfig):
     )
     wandb.define_metric("step")
     wandb.define_metric("train/*", step_metric="step")
+    wandb.define_metric("eval/*", step_metric="step")
 
 
 def _build_scheduler(optimizer, config: DistillConfig) -> LambdaLR:
@@ -177,12 +178,19 @@ def run_distillation(config: DistillConfig):
     repo_name = build_repo_name(config, dataset_len)
     logger.info(f"HF repo: {repo_name}")
 
-    # Train / eval split
-    eval_size = max(1, int(len(tokenized) * config.eval_split_ratio))
-    train_size = len(tokenized) - eval_size
-    train_dataset = tokenized.select(range(train_size))
-    eval_dataset = tokenized.select(range(train_size, len(tokenized)))
-    logger.info(f"Split: {train_size} train, {eval_size} eval examples")
+    # Train / eval split (randomized, seeded for reproducibility).
+    if config.eval_split_ratio > 0 and len(tokenized) > 1:
+        split = tokenized.train_test_split(
+            test_size=config.eval_split_ratio, seed=42,
+        )
+        train_dataset = split["train"]
+        eval_dataset = split["test"]
+    else:
+        train_dataset = tokenized
+        eval_dataset = tokenized.select([])
+    logger.info(
+        f"Split: {len(train_dataset)} train, {len(eval_dataset)} eval examples"
+    )
 
     dataloader = DataLoader(
         train_dataset,  # type: ignore[arg-type]

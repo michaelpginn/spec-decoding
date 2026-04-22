@@ -10,18 +10,19 @@
 #                           (21 jobs run simultaneously, so 324/21 ≈ 16 waves)
 #
 # ── Quick sweep (8 runs) ────
-#   sbatch --array=0-7   scripts/slurm_sweep.sh
+#   sbatch --array=0-7   scripts/run_params_sweep_alpine.sh
 #
 # ── Full sweep (324 runs) ────
-#   sbatch --array=0-323 scripts/slurm_sweep.sh
+#   sbatch --array=0-323 scripts/run_params_sweep_alpine.sh
 #
 # ── Override language / mode ─────
-#   sbatch --array=0-323 --export=LANG_CODE=oci,MODE=general scripts/slurm_sweep.sh
+#   sbatch --array=0-323 --export=LANG_CODE=oci,MODE=general \
+#          scripts/run_params_sweep_alpine.sh
 #
 # ── Multiple languages (each language = its own array batch) ───
 #   for lang in ber npi haw smo; do
 #     sbatch --array=0-323 --export=LANG_CODE=$lang,MODE=general \
-#            --job-name=distill-${lang} scripts/slurm_sweep.sh
+#            --job-name=distill-${lang} scripts/run_params_sweep_alpine.sh
 #   done
 #
 
