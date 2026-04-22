@@ -99,7 +99,7 @@ run_one() {
     echo "  Overrides: ${full_overrides}"
     echo "------------------------------------------------------------"
 
-    python scripts/distill.py "${CONFIG}" -o ${full_overrides}
+    PYTHONPATH="$(pwd)" python scripts/distill.py "${CONFIG}" -o ${full_overrides}
 }
 
 RUN_NUM=0
