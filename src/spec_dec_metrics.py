@@ -153,7 +153,7 @@ def _compute_spec_metrics(
             f"Acceptance Rate (token-weighted): {summary['token_weighted_acceptance_rate']:.2%}"
         )
         print(
-            f"Speedup Factor (sentence-weighted): {summary['speedup_factor']:.2%}"
+            f"Speedup Factor (sentence-weighted): {summary['speedup_factor']:.2f}x"
         )
         print(f"Mean Accepted Tokens (per iteration): {mean_accepted:.2f}")
         print(f"Block Efficiency: {summary['block_efficiency']:.2%}")
