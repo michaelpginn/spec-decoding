@@ -31,6 +31,15 @@ PY
 
 cd ..
 
-langs=("chr" "amh" "yor" "npi" "grn" "yua")
+declare -a langs=("chr" "amh" "yor" "npi" "grn" "yua")
+
+for item in "${my_list[@]}"; do
+    echo "running ${item}"
+    if [[ $item == "yor" || $item == "amh" ]]; then
+        uv run puthon run.py --override language_code=$item include_aya=True
+    else
+        uv run puthon run.py --override language_code=$item include_aya=False
+    fi
+done
 
 uv run python run.py "$1" "${@:2}"
