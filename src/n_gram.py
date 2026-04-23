@@ -29,6 +29,7 @@ class NGramModel:
             defaultdict(lambda: defaultdict(lambda: 0))
         )
         self.tokenizer = tokenizer
+        self.vocab_size = vocab_size
         self.config = SimpleNamespace(vocab_size=vocab_size)
 
     def train(self, train: Dataset):
@@ -63,15 +64,15 @@ class NGramModel:
             # Uniform distribution
             return torch.full((len(self.tokenizer),), 1 / len(self.tokenizer))
 
-        probabilities = torch.zeros(len(self.tokenizer))
         context_key = tuple(tokens[-(self.n - 1) :])
-        for token_id, prob in self.conditional_logprobs[context_key].items():
-            probabilities[token_id] = prob
-
-        if probabilities.sum().item() == 0:
+        if context_key not in self.conditional_logprobs:
             # Unseen gram
             return torch.full((len(self.tokenizer),), 1 / len(self.tokenizer))
-        return probabilities
+            
+        logprobs = torch.full((len(self.tokenizer),), float("-inf"))
+        for token_id, prob in self.conditional_logprobs[context_key].items():
+            logprobs[token_id] = prob
+        return logprobs
 
     def __call__(
         self,
