@@ -28,6 +28,8 @@ class ExperimentConfig:
     max_samples: int = 5
     max_new_tokens: int = 512
     device: str = "auto"
+    
+    wandb_tag: str | None = None
 
     def __post_init__(self):
         if self.draft_model == "None":

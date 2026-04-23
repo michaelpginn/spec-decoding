@@ -95,6 +95,8 @@ def _compute_spec_metrics(
             - draft_tokens: Draft tokens proposed for this sentence
             - matched_tokens: Draft tokens that matched target for this sentence
             - acceptance_rate: Per-sentence acceptance rate
+            - average_draft_time: Average time (s) of draft forward pass
+            - average_verifier_time:  Average time (s) of verifier forward pass
         gamma: Number of draft tokens per iteration
         verbose: Print metrics to console
 
@@ -134,12 +136,34 @@ def _compute_spec_metrics(
     ) / len(spec_results)
     summary["mean_accepted_tokens"] = mean_accepted
     summary["block_efficiency"] = mean_accepted / gamma if gamma > 0 else 0
+    
+    # Compute speedup factor (CUDA only)
+    summary["average_draft_time"] = sum(
+        r.get("average_draft_time", 0) for r in spec_results
+    ) / len(spec_results)
+    summary["average_verifier_time"] = sum(
+        r.get("average_verifier_time", 0) for r in spec_results
+    ) / len(spec_results)
+    if summary["average_verifier_time"] > 0 and summary["average_draft_time"] > 0:
+        # Compute overall speedup factor
+        drafter_cost_ratio = summary["average_draft_time"] / summary["average_verifier_time"]
+        if summary["sentence_avg_acceptance_rate"] < 1:
+            speedup_factor = (1 - summary["sentence_avg_acceptance_rate"] ** (gamma + 1)) / (
+                (1 - summary["sentence_avg_acceptance_rate"]) * (gamma * drafter_cost_ratio + 1)
+            )
+        else:
+            speedup_factor = float("inf")
+        summary["speedup_factor"] = speedup_factor
 
     if verbose:
         print("\n=== Speculative Decoding Metrics ===")
         print(
             f"Acceptance Rate (token-weighted): {summary['token_weighted_acceptance_rate']:.2%}"
         )
+        if "speedup_factor" in summary:
+            print(
+                f"Speedup Factor (sentence-weighted): {summary['speedup_factor']:.2f}x"
+            )
         print(f"Mean Accepted Tokens (per iteration): {mean_accepted:.2f}")
         print(f"Block Efficiency: {summary['block_efficiency']:.2%}")
         print(f"Tokens/sec:  {summary['tokens_per_second']:.2f}")
