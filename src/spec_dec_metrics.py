@@ -97,7 +97,6 @@ def _compute_spec_metrics(
             - acceptance_rate: Per-sentence acceptance rate
             - average_draft_time: Average time (s) of draft forward pass
             - average_verifier_time:  Average time (s) of verifier forward pass
-            - speedup_factor: Ratio of expected speedup
         gamma: Number of draft tokens per iteration
         verbose: Print metrics to console
 
