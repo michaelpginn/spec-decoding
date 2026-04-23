@@ -6,30 +6,110 @@ from datasets import Dataset, concatenate_datasets, load_dataset
 
 DATA_DIR = Path(__file__).resolve().parent
 
+def get_raw_url(url: str) -> str:
+    """Converts a GitHub blob URL to a raw content URL."""
+    if "github.com" in url and "/blob/" in url:
+        return url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
+    return url
+
 def assemble_dataset(language: str, type: Literal["mono", "bi"], include_aya:bool):
     file = "reference_table_monolingual.csv" if type=="mono" else "reference_table_bilingual.csv"
     file_path = DATA_DIR / file
     df = pd.read_csv(file_path)
     aya = load_dataset("CohereLabs/aya_dataset", split="train")
-    if include_aya:
-        if language not in df["Language"].values:
-            dataset = cast(Dataset, aya.filter(lambda lang: lang["language"] == language))
-        else:
-            df = df[df["Language"] == language]
-            df = df[df["hugging face "].notna()]
-            paths = df["hugging face "].tolist()
 
-            lang_aya = cast(Dataset, aya.filter(lambda lang: lang["language"] == language))
-            datasets_list = [load_dataset(path, split="train") for path in paths]
-            other_datasets = concatenate_datasets(datasets_list)
+    paths = df[(df["Language"] == language) & (df["hugging face "].notna())]
+
+    """
+    Just like how load data was but checking for the new cherokee data
+    """
+    dataset_list = []
+
+    for _, row in paths.iterrows():
+        path = row["hugging face "]
+        lang_code = str(row["Code"])
+
+        if str(path).startswith("http"):
+            raw_url = get_raw_url(str(path))
+            sep = '\t' if raw_url.endswith('.tsv') or 'tatoeba' in raw_url.lower() else ','
+            temp_df = pd.read_csv(raw_url, sep=sep)
+            ds = Dataset.from_pandas(temp_df)
+
+        else:
+            repo = path
+            config = None
+            split_to_load = "train"
+
+            if ':' in path:
+                parts = path.split(":")
+                repo = parts[0]
+                config = parts[1]
+                if len(parts) > 2:
+                    split_to_load = parts[2]
+
+            try:
+                ds = cast(Dataset, load_dataset(repo, config, split=split_to_load))
+            except ValueError as e:
+                # Check the error message for available splits
+                available_splits = str(e)
+
+                # Sequence of fallbacks
+                if split_to_load == "train":
+                    if "full" in available_splits:
+                        ds = cast(Dataset, load_dataset(repo, config, split="full"))
+                    elif lang_code in available_splits:
+                        ds = cast(Dataset, load_dataset(repo, config, split=lang_code))
+                    else:
+                        raise e
+                else:
+                    raise e
+
+        # Column standardization logic
+        current_cols = ds.column_names
+        if "text" not in current_cols:
+            # Expanded search list to include 'Mayan', 'Source', and 'Target'
+            search_cols = [
+                language, lang_code, language.lower(),
+                "Mayan", "Mayan language",  # Specific to yua datasets
+                "sentence", "text_sentence", "content",
+                "Source", "Target","inputs"          # Common in parallel-formatted mono data
+            ]
+            for col in search_cols:
+                if col in current_cols:
+                    ds = ds.rename_column(col, "text")
+                    break
+
+        if "text" in ds.column_names:
+            ds = ds.select_columns(["text"])
+            dataset_list.append(ds)
+        else:
+            print(f"Warning: Could not find text column in {repo}. Available: {current_cols}")
+
+    """
+    Handling the aya data
+    """
+    lang_aya = cast(Dataset, aya.filter(lambda x: x["language"].lower() == language.lower()))
+    if include_aya:
+        if not dataset_list:
+            search_cols = [
+                language, language.lower(),
+                "Mayan", "Mayan language",  # Specific to yua datasets
+                "sentence", "text_sentence", "content",
+                "Source", "Target","inputs","language_code","language"          # Common in parallel-formatted mono data
+            ]
+            dataset = lang_aya
+            current_cols = dataset.column_names
+            for col in search_cols:
+                if col in current_cols:
+                    ds = dataset.rename_column(col, "text")
+                    break
+        else:
+            other_datasets = concatenate_datasets(dataset_list)
             dataset = concatenate_datasets([lang_aya, other_datasets])
     else:
-        df = df[df["Language"] == language]
-        df = df[df["hugging face "].notna()]
-        paths = df["hugging face "].tolist()
-        datasets_list = [cast(Dataset, load_dataset(path, split="train")) for path in paths]
-        dataset = concatenate_datasets(datasets_list)
-    if language in dataset.column_names:
-            dataset = dataset.rename_column(language, "text")
+        if not dataset_list:
+            raise ValueError(f"No datasets found for {language} and include_aya is False.")
+        dataset = concatenate_datasets(dataset_list)
+
     dataset = dataset.filter(lambda row: row['text'])
     return dataset.train_test_split(test_size=0.2, seed=42)

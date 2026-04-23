@@ -1,6 +1,8 @@
 Language,Code,source,# of units,original path,hugging face 
 Berber,ber,tatoeba,52834,data/monolingual/ber/tatoeba.tsv,lecslab/monoling_ber
 Cherokee,chr,tatoeba,31,data/monolingual/chr/tatoeba.tsv,lecslab/monoling_chr
+Cherokee,chr,hugging face,,,shiyue/chr_en:monolingual_raw:full
+Cherokee,chr,hugging face,,,shiyue/chr_en:monolingual:chr
 Hawaiian,haw,https://dohliam.github.io/corpus/haw/,91984,data/monolingual/haw/2grams_haw.txt,lecslab/monoling_haw
 Hawaiian,haw,https://dohliam.github.io/corpus/haw/,5461,data/monolingual/haw/3grams_haw.txt,
 Hawaiian,haw,https://dohliam.github.io/corpus/haw/,12612,data/monolingual/haw/4grams_haw.txt,
@@ -12,8 +14,8 @@ Igbo,ibo,https://wortschatz.uni-leipzig.de/en/download/ibo,14624,data/monolingua
 Igbo,ibo,https://wortschatz.uni-leipzig.de/en/download/ibo,10000,data/monolingual/ibo/ibo_wikipedia_2021_10K-sentences.txt,
 Igbo,ibo,https://wortschatz.uni-leipzig.de/en/download/ibo,23685,data/monolingual/ibo/ibo_wikipedia_2021_10K-words.txt,
 Igbo,ibo,tatoeba,46,data/monolingual/ibo/tatoeba.tsv,
-Lakota,lkt,tatoeba,22,data/monolingual/lkt/tatoeba.tsv,lecslab/monoling_lkt
-Muskogee (Creek),mus,tatoeba,640,data/monolingual/mus/tatoeba.tsv,lecslab/monoling_mus
+Amharic,amh,https://huggingface.co/datasets/CohereLabs/aya_dataset,,,CohereLabs/aya_dataset
+Yoruba,yor,https://huggingface.co/datasets/CohereLabs/aya_dataset,,,CohereLabs/aya_dataset
 Nepali,npi,tatoeba,4504,data/monolingual/npi/tatoeba.tsv,lecslab/monoling_npi
 Occitan,oci,https://wortschatz-leipzig.de/en/download/oci#oci_community_2017,10000,data/monolingual/oci/oci-fr_web_2020_10K-sentences.txt,lecslab/monoling_oci
 Occitan,oci,https://wortschatz-leipzig.de/en/download/oci#oci_community_2017,25982,data/monolingual/oci/oci-fr_web_2020_10K-words.txt,
@@ -26,6 +28,9 @@ Ojibwe,oji,tatoeba,111,data/monolingual/oji/tatoeba.tsv,lecslab/monoling_oji
 Quechua,que,tatoeba,435,data/monolingual/que/tatoeba.tsv,lecslab/monoling_que
 Quechua,que,hugging face,175408,data/monolingual/que/hugging_face.py,Llamacha/monolingual-quechua-iic
 Maya,yua,tatoeba,33,data/monolingual/yua/tatoeba.tsv,lecslab/monoling_yua
+Maya,yua,Americas NLP github,,,https://github.com/AmericasNLP/americasnlp2024/blob/master/ST2_EducationalMaterials/data/maya-train.tsv
+Maya,yua,Americas NLP github,,,https://github.com/AmericasNLP/americasnlp2024/blob/master/ST2_EducationalMaterials/data/maya-dev.tsv
+Maya,yua,Americas NLP github,,,https://github.com/AmericasNLP/americasnlp2024/blob/master/ST2_EducationalMaterials/data/maya-test.tsv
 Tamazight,zgh,tatoeba,20665,data/monolingual/zgh/tatoeba.tsv,lecslab/monoling_zgh
 Tamazight,zgh,hugging face,55,data/monolingual/zgh/hugging_face.py,Tamazight-NLP/IRCAM-CORPUS
 Chinese,zh,hugging face,958000000,,opencsg/Fineweb-Edu-Chinese-V2.1
