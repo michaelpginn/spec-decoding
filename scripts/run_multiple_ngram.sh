@@ -31,6 +31,6 @@ PY
 
 cd ..
 
-langs=()
+langs=("chr" "amh" "yor" "npi" "grn" "yua")
 
 uv run python run.py "$1" "${@:2}"

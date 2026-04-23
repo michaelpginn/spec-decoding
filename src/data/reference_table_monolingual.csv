@@ -24,7 +24,6 @@ Occitan,oci,https://wortschatz-leipzig.de/en/download/oci#oci_community_2017,257
 Occitan,oci,https://wortschatz-leipzig.de/en/download/oci#oci_community_2017,99981,data/monolingual/oci/oci_wikipedia_2021_100K-sentences.txt,
 Occitan,oci,https://wortschatz-leipzig.de/en/download/oci#oci_community_2017,161875,data/monolingual/oci/oci_wikipedia_2021_100K-words.txt,
 Occitan,oci,tatoeba,24157,data/monolingual/oci/tatoeba.tsv,
-Ojibwe,oji,tatoeba,111,data/monolingual/oji/tatoeba.tsv,lecslab/monoling_oji
 Quechua,que,tatoeba,435,data/monolingual/que/tatoeba.tsv,lecslab/monoling_que
 Quechua,que,hugging face,175408,data/monolingual/que/hugging_face.py,Llamacha/monolingual-quechua-iic
 Maya,yua,tatoeba,33,data/monolingual/yua/tatoeba.tsv,lecslab/monoling_yua
@@ -34,3 +33,4 @@ Maya,yua,Americas NLP github,,,https://github.com/AmericasNLP/americasnlp2024/bl
 Tamazight,zgh,tatoeba,20665,data/monolingual/zgh/tatoeba.tsv,lecslab/monoling_zgh
 Tamazight,zgh,hugging face,55,data/monolingual/zgh/hugging_face.py,Tamazight-NLP/IRCAM-CORPUS
 Chinese,zh,hugging face,958000000,,opencsg/Fineweb-Edu-Chinese-V2.1
+Guarani,grn,https://wortschatz-leipzig.de/en/download/grn#grn_wikipedia_2021,10000,,lecslab/monolingual_guarani
