@@ -37,15 +37,15 @@ export REQUESTS_CA_BUNDLE=$SSL_CERT_FILE
 cd ..
 
 langs=("chr" "amh" "yor" "npi" "grn" "yua")
-ngram_ns=("2" "3" "4" "5")
+ngram_ns=(2 4 5)
 for item in "${langs[@]}"; do
     echo "-----------------------------------"
     echo "running ${item}"
     for n in "${ngram_ns}"; do
         if [[ $item == "yor" || $item == "amh" ]]; then
-            uv run python run.py "$CONFIG_FILE" --override language_code=$item include_aya=True ngram_n=n
+            uv run python run.py "$CONFIG_FILE" --override language_code=$item include_aya=True ngram_n=$n
         else
-            uv run python run.py "$CONFIG_FILE" --override language_code=$item include_aya=False ngram_n=n
+            uv run python run.py "$CONFIG_FILE" --override language_code=$item include_aya=False ngram_n=$n
         fi
     done
 done
