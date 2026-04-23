@@ -390,8 +390,8 @@ def speculative_decode(
     if draft_times_acc[1] > 0 and verifier_times_acc[1] > 0:
         average_draft_time = draft_times_acc[0] / draft_times_acc[1]
         average_verifier_time = verifier_times_acc[0] / verifier_times_acc[1]
-        metrics["average_draft_time"] = average_draft_time
-        metrics["average_verifier_time"] = average_verifier_time
+        metrics["average_draft_time"] = average_draft_time / 1000 # seconds
+        metrics["average_verifier_time"] = average_verifier_time / 1000
 
     if track_iterations:
         metrics["iteration_history"] = iteration_history
