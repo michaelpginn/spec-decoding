@@ -167,7 +167,6 @@ def speculative_decode(
         verifier_start = torch.cuda.Event(enable_timing=True)
         verifier_end = torch.cuda.Event(enable_timing=True)
 
-    
     def get_time():
         if device.type == "cuda":
             torch.cuda.synchronize()

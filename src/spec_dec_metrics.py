@@ -139,14 +139,13 @@ def _compute_spec_metrics(
     summary["block_efficiency"] = mean_accepted / gamma if gamma > 0 else 0
     
     # Compute speedup factor (CUDA only)
-    if "average_draft_time" in summary and "average_verifier_time" in summary:
-        summary["average_draft_time"] = sum(
-            r["average_draft_time"] for r in spec_results
-        ) / len(spec_results)
-        summary["average_verifier_time"] = sum(
-            r["average_verifier_time"] for r in spec_results
-        ) / len(spec_results)
-        
+    summary["average_draft_time"] = sum(
+        r.get("average_draft_time", 0) for r in spec_results
+    ) / len(spec_results)
+    summary["average_verifier_time"] = sum(
+        r.get("average_verifier_time", 0) for r in spec_results
+    ) / len(spec_results)
+    if summary["average_verifier_time"] > 0 and summary["average_draft_time"] > 0:
         # Compute overall speedup factor
         drafter_cost_ratio = summary["average_draft_time"] / summary["average_verifier_time"]
         if summary["sentence_avg_acceptance_rate"] < 1:
