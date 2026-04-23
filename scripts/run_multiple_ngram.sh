@@ -15,7 +15,7 @@ if [ -z "$1" ]; then
     echo "Error: No config file provided. Usage: sbatch run_multiple_ngram.sh path/to/config.yaml"
     exit 1
 fi
-CONFIG_PATH=$1
+CONFIG_FILE=$1
 
 export HF_HOME="/projects/$USER/.cache/huggingface"
 mkdir -p $HF_HOME
@@ -35,18 +35,16 @@ if torch.cuda.is_available():
     print("GPU 0:", torch.cuda.get_device_name(0))
 PY
 
-export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
-export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
-
 cd ..
 
 langs=("chr" "amh" "yor" "npi" "grn" "yua")
 
 for item in "${langs[@]}"; do
+    echo "-----------------------------------"
     echo "running ${item}"
     if [[ $item == "yor" || $item == "amh" ]]; then
-        uv run python run.py "$CONFIG_PATH" --override language_code=$item include_aya=True
+        uv run python run.py "$CONFIG_FILE" --override language_code=$item include_aya=True
     else
-        uv run python run.py "$CONFIG_PATH" --override language_code=$item include_aya=False
+        uv run python run.py "$CONFIG_FILE" --override language_code=$item include_aya=False
     fi
 done
