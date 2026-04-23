@@ -3,13 +3,19 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8000M
-#SBATCH --time=1:00:00
+#SBATCH --time=4:00:00
 #SBATCH --output=logs/%j.log
 #SBATCH --job-name=specdec
 #SBATCH --partition=blanca-clearlab2
 #SBATCH --account=blanca-clearlab2
 #SBATCH --qos=blanca-clearlab2
 #SBATCH --mail-type=END,FAIL
+
+if [ -z "$1" ]; then
+    echo "Error: No config file provided. Usage: sbatch run_multiple_ngram.sh path/to/config.yaml"
+    exit 1
+fi
+CONFIG_PATH=$1
 
 export HF_HOME="/projects/$USER/.cache/huggingface"
 mkdir -p $HF_HOME
@@ -29,17 +35,18 @@ if torch.cuda.is_available():
     print("GPU 0:", torch.cuda.get_device_name(0))
 PY
 
+export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+
 cd ..
 
-declare -a langs=("chr" "amh" "yor" "npi" "grn" "yua")
+langs=("chr" "amh" "yor" "npi" "grn" "yua")
 
-for item in "${my_list[@]}"; do
+for item in "${langs[@]}"; do
     echo "running ${item}"
     if [[ $item == "yor" || $item == "amh" ]]; then
-        uv run puthon run.py --override language_code=$item include_aya=True
+        uv run python run.py "$CONFIG_PATH" --override language_code=$item include_aya=True
     else
-        uv run puthon run.py --override language_code=$item include_aya=False
+        uv run python run.py "$CONFIG_PATH" --override language_code=$item include_aya=False
     fi
 done
-
-uv run python run.py "$1" "${@:2}"
