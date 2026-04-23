@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 import pandas as pd
-from datasets import Dataset, concatenate_datasets, load_dataset
+from datasets import Dataset, Features, Value, concatenate_datasets, load_dataset
 
 DATA_DIR = Path(__file__).resolve().parent
 
@@ -32,7 +32,7 @@ def assemble_dataset(language: str, type: Literal["mono", "bi"], include_aya:boo
         if str(path).startswith("http"):
             raw_url = get_raw_url(str(path))
             sep = '\t' if raw_url.endswith('.tsv') or 'tatoeba' in raw_url.lower() else ','
-            temp_df = pd.read_csv(raw_url, sep=sep)
+            temp_df = pd.read_csv(raw_url, sep=sep, storage_options={'ssl': False})
             ds = Dataset.from_pandas(temp_df)
 
         else:
@@ -88,24 +88,25 @@ def assemble_dataset(language: str, type: Literal["mono", "bi"], include_aya:boo
     """
     Handling the aya data
     """
+
+    standard_features = Features({"text": Value("string")})
+    dataset_list = [ds.cast(standard_features) for ds in dataset_list]
+
     lang_aya = cast(Dataset, aya.filter(lambda x: x["language"].lower() == language.lower()))
     if include_aya:
+        current_cols = lang_aya.column_names
+        search_cols = ["inputs", "targets", "text", "sentence"]
+        for col in search_cols:
+            if col in current_cols:
+                lang_aya = lang_aya.rename_column(col, "text")
+                break
+
+        lang_aya = lang_aya.select_columns(["text"]).cast(standard_features)
+
         if not dataset_list:
-            search_cols = [
-                language, language.lower(),
-                "Mayan", "Mayan language",  # Specific to yua datasets
-                "sentence", "text_sentence", "content",
-                "Source", "Target","inputs","language_code","language"          # Common in parallel-formatted mono data
-            ]
             dataset = lang_aya
-            current_cols = dataset.column_names
-            for col in search_cols:
-                if col in current_cols:
-                    ds = dataset.rename_column(col, "text")
-                    break
         else:
-            other_datasets = concatenate_datasets(dataset_list)
-            dataset = concatenate_datasets([lang_aya, other_datasets])
+            dataset = concatenate_datasets([lang_aya] + dataset_list)
     else:
         if not dataset_list:
             raise ValueError(f"No datasets found for {language} and include_aya is False.")

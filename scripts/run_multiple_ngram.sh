@@ -28,12 +28,11 @@ uv run python - <<'PY'
 import torch, os
 print("CUDA visible devices:", os.environ.get("CUDA_VISIBLE_DEVICES"))
 print("Torch CUDA version:", torch.version.cuda)
-print("Torch built with:", torch.__config__.show())
 print("CUDA available:", torch.cuda.is_available())
-if torch.cuda.is_available():
-    print("Detected GPUs:", torch.cuda.device_count())
-    print("GPU 0:", torch.cuda.get_device_name(0))
 PY
+
+export SSL_CERT_FILE=$(uv run python -m certifi)
+export REQUESTS_CA_BUNDLE=$SSL_CERT_FILE
 
 cd ..
 
