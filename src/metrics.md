@@ -13,6 +13,9 @@ N = number of sentences (max_samples). All times exclude prompt prefill.
 | median_time_per_sentence | median(sentence times) | seconds |
 | avg_time_per_token | mean of (time_i / tokens_i) for each sentence | seconds |
 | tokens_per_second | sum(all generated tokens) / sum(all sentence times) | tok/s |
+| average_draft_time | mean time for single forward pass | s |
+| average_verifier_time | mean time for single forward pass | s |
+
 
 ### Quality
 | Metric | Formula | Range |
@@ -28,7 +31,7 @@ N = number of sentences (max_samples). All times exclude prompt prefill.
 | mean_accepted_tokens | sum(matched tokens) / sum(iterations) across all N sentences | 0–gamma |
 | block_efficiency | mean_accepted_tokens / gamma | 0.0–1.0 |
 | draft_to_output_ratio | sum(draft tokens) / sum(generated tokens) across all N sentences | >= 1.0 |
-
+| speedup_factor | Expected time without spec decoding / with | >= 0.0 |
 ---
 
 ## Per-Sentence Charts (sentence/*, one value per sentence, x-axis = sentence_idx)

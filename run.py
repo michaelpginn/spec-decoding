@@ -133,6 +133,8 @@ def setup_wandb(config: ExperimentConfig):
     else:
         tags.append("baseline")
     tags = [t for t in tags if t is not None]
+    if config.wandb_tag:
+        tags.append(config.wandb_tag)
 
     wandb_config = asdict(config)
     wandb_config["target_model_short"] = target_short
