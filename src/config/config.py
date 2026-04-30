@@ -39,15 +39,15 @@ class ExperimentConfig:
 
 @dataclass
 class DistillConfig:
+    task: Literal['general', 'translation']
     teacher_model: str
     student_model: str
     language_code: str
 
-    distill_mode: Literal["task_specific", "general"] = "task_specific"
-
-    # SeqKD dataset — HF dataset ID or local path with teacher translations
-    seqkd_data_path: str | None = None
+    # SeqKD dataset — HF dataset ID or local path with teacher logits, created with generate_
+    dataset_path: str | None = None
     max_samples: int = 5000
+    top_k: int = 20 # How many teacher logits to keep per token
 
     # Training
     max_steps: int = 3000
@@ -70,8 +70,8 @@ class DistillConfig:
     device: str = "auto"
 
     def __post_init__(self):
-        if self.seqkd_data_path == "None":
-            self.seqkd_data_path = None
+        if self.dataset_path == "None":
+            self.dataset_path = None
         if self.hf_repo_id == "None":
             self.hf_repo_id = None
         if self.resume_from == "None":

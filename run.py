@@ -4,6 +4,7 @@ import os
 import pprint
 from dataclasses import asdict
 from pathlib import Path
+from typing import Mapping
 
 import wandb
 from tqdm import tqdm
@@ -11,7 +12,7 @@ from tqdm import tqdm
 from src.config.config import ExperimentConfig
 from src.config.config_to_dataclass import config_to_dataclass
 from src.data.create_inputs import create_inputs, create_prompt
-from src.data.dataset import assemble_dataset
+from src.data.dataset import load_monolingual_dataset
 from src.generation import generate_output
 from src.n_gram import NGramModel
 from src.spec_dec_metrics import log_token_flow, summarize_metrics
@@ -33,10 +34,11 @@ def run(config: ExperimentConfig):
         raise NotImplementedError()
 
     # 1. Load data
-    logger.info(f"Loading data for {config.language_code}...")
-    data, language = load_data(config)
-    logger.info(f"Loaded {len(data)} examples")
-    assert data and len(data) > 0
+    logger.info(f"Loading test split for {config.language_code}...")
+    dataset, language = load_data(config)
+    dataset = dataset['test']
+    logger.info(f"Loaded {len(dataset)} examples")
+    assert dataset and len(dataset) > 0
 
     # 2. Load target model
     logger.info(f"Loading target model: {config.target_model}...")
@@ -66,15 +68,16 @@ def run(config: ExperimentConfig):
     elif config.draft_model_type == "ngram":
         draft_tokenizer = target_tokenizer
         draft_model = NGramModel(n=config.ngram_n, tokenizer=draft_tokenizer, vocab_size=target_model.config.vocab_size)
-        draft_model.train(assemble_dataset(language, 'mono', config.include_aya)['train'])
+        draft_model.train(load_monolingual_dataset(language, 'mono', config.include_aya)['train'])
     else:
         raise ValueError()
 
     # 4. Decoding loop
     predictions = []
     all_metrics: list[dict] = []
-    for input, _ in tqdm(data, desc="Decoding"):
-        prompt = create_prompt(config.task, language, input)
+    for row in tqdm(dataset, desc="Decoding"):
+        assert isinstance(row, Mapping)
+        prompt = create_prompt(config.task, language, row['source'])
         inputs = create_inputs(prompt, target_tokenizer, device)
         predicted, metrics = generate_output(
             inputs,
@@ -100,10 +103,10 @@ def run(config: ExperimentConfig):
     for key in list(wandb.summary.keys()):
         if key.startswith("sentence/") or key == "sentence_idx":
             del wandb.summary[key]
-    log_token_flow([inp for inp, _ in data], all_metrics, config)
+    log_token_flow([inp for inp, _ in dataset], all_metrics, config)
 
     # 6. Log evaluation metrics
-    eval_metrics = compute_eval_metrics([ref for _, ref in data], predictions)
+    eval_metrics = compute_eval_metrics([ref for _, ref in dataset], predictions)
     wandb.summary.update(eval_metrics)
 
 

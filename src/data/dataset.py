@@ -61,7 +61,7 @@ def get_raw_url(url: str) -> str:
         return url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
     return url
 
-def assemble_dataset(language: str, type: Literal["mono", "bi"], include_aya:bool):
+def load_monolingual_dataset(language: str, type: Literal["mono", "bi"], include_aya:bool) -> DatasetDict:
     file = "reference_table_monolingual.csv" if type=="mono" else "reference_table_bilingual.csv"
     file_path = DATA_DIR / file
     df = pd.read_csv(file_path)

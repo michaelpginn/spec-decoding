@@ -1,3 +1,3 @@
 import dataset
 
-print(dataset.assemble_dataset('Yoruba','mono',True))
+print(dataset.load_monolingual_dataset('Yoruba','mono',True))

@@ -11,6 +11,7 @@ import os
 import time
 from dataclasses import asdict
 
+import datasets
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
@@ -21,12 +22,6 @@ from torch.utils.data import DataLoader
 
 from src.config.config import DistillConfig
 from src.utils import load_model
-from src.tasks.distillation.data_loader import (
-    load_general_dataset,
-    load_seqkd_dataset,
-    tokenize_general,
-    tokenize_seqkd,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -37,12 +32,8 @@ def _model_short_name(model_id: str) -> str:
 
 def build_repo_name(config: DistillConfig, dataset_len: int) -> str:
     student = _model_short_name(config.student_model)
-    if config.distill_mode == "general":
-        prefix = "general-kd"
-    else:
-        teacher = _model_short_name(config.teacher_model)
-        prefix = f"seqkd-{teacher}"
-    name = f"{prefix}-{student}-{config.language_code}-{dataset_len}"
+    teacher = _model_short_name(config.teacher_model)
+    name = f"{config.task}-{teacher}-{student}-{config.language_code}-{dataset_len}"
     if config.hf_repo_id:
         return f"{config.hf_repo_id}/{name}"
     return name
@@ -54,7 +45,7 @@ def setup_wandb(config: DistillConfig):
     student_short = _model_short_name(config.student_model)
 
     name = (
-        f"{config.distill_mode}_{config.language_code}"
+        f"{config.task}_{config.language_code}"
         f"_lr{config.learning_rate}_steps{config.max_steps}_ga{config.grad_accum_steps}"
     )
     group = f"distill_{teacher_short}__{config.language_code}"
@@ -62,7 +53,7 @@ def setup_wandb(config: DistillConfig):
     tags = [
         "distillation",
         config.language_code,
-        config.distill_mode,
+        config.task,
         teacher_short,
         student_short,
         f"lr={config.learning_rate}",
@@ -79,7 +70,7 @@ def setup_wandb(config: DistillConfig):
         entity=os.environ.get("WANDB_ENTITY", "lecs-general"),
         config=asdict(config),
         group=group,
-        job_type=f"distill-{config.distill_mode}",
+        job_type=f"distill-{config.task}",
         name=name,
         tags=tags,
     )
@@ -163,34 +154,29 @@ def run_distillation(config: DistillConfig):
         student.resize_token_embeddings(len(tokenizer))
 
     device = next(student.parameters()).device
-
-    # Data — dispatch on distill_mode
-    logger.info(f"Distillation mode: {config.distill_mode}")
-    if config.distill_mode == "general":
-        raw_dataset = load_general_dataset(config)
-        dataset_len = len(raw_dataset)
-        tokenized = tokenize_general(raw_dataset, tokenizer, config)
-    else:
-        raw_dataset = load_seqkd_dataset(config)
-        dataset_len = len(raw_dataset)
-        tokenized = tokenize_seqkd(raw_dataset, tokenizer, config)
-
-    repo_name = build_repo_name(config, dataset_len)
+    
+    assert config.dataset_path
+    dataset = datasets.Dataset.from_parquet(config.dataset_path)
+    assert isinstance(dataset, datasets.Dataset)
+    repo_name = build_repo_name(config, len(dataset))
     logger.info(f"HF repo: {repo_name}")
 
     # Train / eval split (randomized, seeded for reproducibility).
-    if config.eval_split_ratio > 0 and len(tokenized) > 1:
-        split = tokenized.train_test_split(
+    if config.eval_split_ratio > 0 and len(dataset) > 1:
+        split = dataset.train_test_split(
             test_size=config.eval_split_ratio, seed=42,
         )
         train_dataset = split["train"]
         eval_dataset = split["test"]
     else:
-        train_dataset = tokenized
-        eval_dataset = tokenized.select([])
+        train_dataset = dataset
+        eval_dataset = dataset.select([])
     logger.info(
         f"Split: {len(train_dataset)} train, {len(eval_dataset)} eval examples"
     )
+    
+    def collate_fn(batch):
+        breakpoint()
 
     dataloader = DataLoader(
         train_dataset,  # type: ignore[arg-type]
@@ -198,6 +184,7 @@ def run_distillation(config: DistillConfig):
         shuffle=True,
         num_workers=0,
         pin_memory=(device.type == "cuda"),
+        collate_fn=collate_fn,
     )
     eval_dataloader = DataLoader(
         eval_dataset,  # type: ignore[arg-type]
@@ -205,6 +192,7 @@ def run_distillation(config: DistillConfig):
         shuffle=False,
         num_workers=0,
         pin_memory=(device.type == "cuda"),
+        collate_fn=collate_fn,
     )
 
     # Optimizer with weight decay (exclude bias and LayerNorm)
@@ -241,6 +229,7 @@ def run_distillation(config: DistillConfig):
 
     while step < target_step:
         for batch in dataloader:
+            breakpoint()
             if step >= target_step:
                 break
 

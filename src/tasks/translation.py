@@ -6,15 +6,16 @@ import csv
 import logging
 from typing import cast
 
+from datasets import DatasetDict
 import sacrebleu
 
-from src.config.config import ExperimentConfig
+from src.config.config import DistillConfig, ExperimentConfig
 from src.data.dataset import REFERENCE_TABLE, load_bilingual_dataset
 
 logger = logging.getLogger(__name__)
 
 
-def load_data(config: ExperimentConfig) -> tuple[list[tuple[str, str]], str]:
+def load_data(config: ExperimentConfig | DistillConfig) -> tuple[DatasetDict, str]:
     """
     Load (source, target) pairs from the bilingual train split.
 
@@ -23,12 +24,10 @@ def load_data(config: ExperimentConfig) -> tuple[list[tuple[str, str]], str]:
         - Language name
     """
     max_samples = config.max_samples if config.max_samples > 0 else None
-    splits = load_bilingual_dataset(config.language_code, max_samples)
-    ds = splits["train"]
-
+    dataset = load_bilingual_dataset(config.language_code, max_samples)
     lang_name = _get_language_name(config.language_code)
-    columns = cast(list[str], ds.column_names)
-
+    
+    columns = cast(list[str], dataset["train"].column_names)
     if "English" in columns and lang_name in columns:
         src_col, tgt_col = "English", lang_name
     elif len(columns) == 2:
@@ -39,17 +38,13 @@ def load_data(config: ExperimentConfig) -> tuple[list[tuple[str, str]], str]:
             f"Expected either an 'English' column and a '{lang_name}' column, "
             f"or exactly two columns."
         )
-
     logger.info(f"Using columns: '{src_col}' (source) -> '{tgt_col}' (target)")
-
-    pairs = []
-    for row in ds:
-        source = str(row.get(src_col, "")).strip()  # type:ignore
-        target = str(row.get(tgt_col, "")).strip()  # type:ignore
-        if not source or not target:
-            continue
-        pairs.append((source, target))
-    return pairs, lang_name
+    dataset = dataset.rename_columns({
+        src_col: "source",
+        tgt_col: "target"
+    })
+    dataset = dataset.filter(lambda row: row['source'].strip() and row['target'].strip())
+    return dataset, lang_name
 
 
 def compute_eval_metrics(
@@ -88,5 +83,3 @@ def _get_language_name(lang_code: str) -> str:
                 return row["Language"].strip()
     # Fallback: return the code itself if not found
     return lang_code
-
-
