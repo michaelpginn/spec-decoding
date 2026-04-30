@@ -5,14 +5,15 @@ Data loading for distillation training.
 - General: loads raw monolingual text for causal LM fine-tuning.
 """
 import logging
+from pathlib import Path
 from typing import Any, cast
 
-from datasets import Dataset, load_dataset, load_from_disk
+from datasets import Dataset, concatenate_datasets, load_dataset, load_from_disk
 from transformers import PreTrainedTokenizer
 
 from src.config.config import DistillConfig
 from src.data.create_inputs import create_prompt
-from src.data.hugging_face_data import get_data
+from src.data.dataset import assemble_dataset
 from src.tasks.translation import _get_language_name
 
 logger = logging.getLogger(__name__)
@@ -25,14 +26,18 @@ def load_seqkd_dataset(config: DistillConfig) -> Dataset:
     Returns a Dataset with columns: source, teacher_translation.
     """
     path = config.seqkd_data_path
-    if not path or path == "None":
+    if not path:
         raise ValueError(
             "seqkd_data_path must be set. "
             "Point it to a local path or HF dataset ID with teacher translations."
         )
 
+    local = Path(path).expanduser()
     ds: Dataset
-    if "/" in path and not path.startswith(".") and not path.startswith("/"):
+    if local.is_dir():
+        logger.info(f"Loading SeqKD dataset from disk: {local}")
+        ds = cast(Dataset, load_from_disk(str(local)))
+    elif "/" in path and not path.startswith(".") and not path.startswith("/"):
         logger.info(f"Loading SeqKD dataset from HF: {path}")
         ds = cast(Dataset, load_dataset(path, split="train"))
     else:
@@ -128,13 +133,15 @@ def load_general_dataset(config: DistillConfig) -> Dataset:
     """
     Load monolingual text for the target language.
 
-    Uses the monolingual reference table via hugging_face_data.get_data().
+    Uses the monolingual reference table via assemble_dataset.
     Returns a Dataset with a 'text' column.
     """
     lang_name = _get_language_name(config.language_code)
     logger.info(f"Loading monolingual data for {lang_name} ({config.language_code})")
 
-    ds = cast(Dataset, get_data(lang_name, "mono"))
+    splits = assemble_dataset(lang_name, "mono", include_aya=False)
+
+    ds = concatenate_datasets([splits["train"], splits["test"]]).shuffle(seed=42)
 
     cols = ds.column_names
     text_col = None

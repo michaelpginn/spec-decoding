@@ -6,12 +6,17 @@ Supports two modes (controlled by DistillConfig.distill_mode):
   - general: causal LM fine-tuning on raw monolingual text.
 """
 import logging
+import math
 import os
 import time
+from dataclasses import asdict
+
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
+import wandb
 from torch.amp import GradScaler, autocast  # type: ignore[attr-defined]
+from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 
 from src.config.config import DistillConfig
@@ -38,9 +43,93 @@ def build_repo_name(config: DistillConfig, dataset_len: int) -> str:
         teacher = _model_short_name(config.teacher_model)
         prefix = f"seqkd-{teacher}"
     name = f"{prefix}-{student}-{config.language_code}-{dataset_len}"
-    if config.hf_repo_id and config.hf_repo_id != "None":
+    if config.hf_repo_id:
         return f"{config.hf_repo_id}/{name}"
     return name
+
+
+def setup_wandb(config: DistillConfig):
+    """Initialize wandb for distillation run tracking."""
+    teacher_short = _model_short_name(config.teacher_model)
+    student_short = _model_short_name(config.student_model)
+
+    name = (
+        f"{config.distill_mode}_{config.language_code}"
+        f"_lr{config.learning_rate}_steps{config.max_steps}_ga{config.grad_accum_steps}"
+    )
+    group = f"distill_{teacher_short}__{config.language_code}"
+
+    tags = [
+        "distillation",
+        config.language_code,
+        config.distill_mode,
+        teacher_short,
+        student_short,
+        f"lr={config.learning_rate}",
+        f"steps={config.max_steps}",
+        f"ga={config.grad_accum_steps}",
+    ]
+    # Optional tag set by sweep runners (e.g. "grid_search").
+    _sweep_tag = os.environ.get("WANDB_DISTILL_SWEEP_TAG", "").strip()
+    if _sweep_tag:
+        tags.append(_sweep_tag)
+
+    wandb.init(
+        project=os.environ.get("WANDB_PROJECT", "spec-decoding"),
+        entity=os.environ.get("WANDB_ENTITY", "lecs-general"),
+        config=asdict(config),
+        group=group,
+        job_type=f"distill-{config.distill_mode}",
+        name=name,
+        tags=tags,
+    )
+    wandb.define_metric("step")
+    wandb.define_metric("train/*", step_metric="step")
+    wandb.define_metric("eval/*", step_metric="step")
+
+
+def _build_scheduler(optimizer, config: DistillConfig) -> LambdaLR:
+    """Build LR scheduler with linear warmup then cosine/linear/constant decay."""
+    warmup_steps = max(1, int(config.max_steps * config.warmup_ratio))
+
+    def lr_lambda(current_step: int) -> float:
+        if current_step < warmup_steps:
+            return current_step / warmup_steps
+        if config.lr_scheduler == "constant":
+            return 1.0
+        progress = (current_step - warmup_steps) / max(1, config.max_steps - warmup_steps)
+        if config.lr_scheduler == "cosine":
+            return max(0.0, 0.5 * (1.0 + math.cos(math.pi * progress)))
+        # linear
+        return max(0.0, 1.0 - progress)
+
+    return LambdaLR(optimizer, lr_lambda)
+
+
+@torch.no_grad()
+def _compute_eval_loss(student, eval_dataloader, device) -> float:
+    """Run a forward pass over the eval split and return average loss."""
+    student.eval()
+    total_loss = 0.0
+    count = 0
+    for batch in eval_dataloader:
+        input_ids = batch["input_ids"].to(device)
+        attention_mask = batch["attention_mask"].to(device)
+        labels = batch["labels"].to(device)
+
+        with autocast(device_type=device.type, enabled=(device.type == "cuda")):
+            logits = student(input_ids=input_ids, attention_mask=attention_mask).logits
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            loss = F.cross_entropy(
+                shift_logits.view(-1, shift_logits.size(-1)),
+                shift_labels.view(-1),
+                ignore_index=-100,
+            )
+        total_loss += loss.item()
+        count += 1
+    student.train()
+    return total_loss / max(count, 1)
 
 
 def run_distillation(config: DistillConfig):
@@ -50,13 +139,14 @@ def run_distillation(config: DistillConfig):
     - task_specific: cross-entropy on teacher translations (SeqKD).
     - general: causal LM on monolingual text.
     """
+    setup_wandb(config)
 
     os.makedirs(config.output_dir, exist_ok=True)
 
     logger.info(f"Loading student model: {config.student_model}")
     student, tokenizer = load_model(config.student_model, device=config.device)
 
-    if config.resume_from and config.resume_from != "None" and os.path.exists(config.resume_from):
+    if config.resume_from and os.path.exists(config.resume_from):
         logger.info(f"Resuming student from checkpoint: {config.resume_from}")
         student, _ = load_model(config.resume_from, device=config.device)
 
@@ -88,17 +178,50 @@ def run_distillation(config: DistillConfig):
     repo_name = build_repo_name(config, dataset_len)
     logger.info(f"HF repo: {repo_name}")
 
+    # Train / eval split (randomized, seeded for reproducibility).
+    if config.eval_split_ratio > 0 and len(tokenized) > 1:
+        split = tokenized.train_test_split(
+            test_size=config.eval_split_ratio, seed=42,
+        )
+        train_dataset = split["train"]
+        eval_dataset = split["test"]
+    else:
+        train_dataset = tokenized
+        eval_dataset = tokenized.select([])
+    logger.info(
+        f"Split: {len(train_dataset)} train, {len(eval_dataset)} eval examples"
+    )
+
     dataloader = DataLoader(
-        tokenized,  # type: ignore[arg-type]
+        train_dataset,  # type: ignore[arg-type]
         batch_size=config.batch_size,
         shuffle=True,
         num_workers=0,
         pin_memory=(device.type == "cuda"),
     )
+    eval_dataloader = DataLoader(
+        eval_dataset,  # type: ignore[arg-type]
+        batch_size=config.batch_size,
+        shuffle=False,
+        num_workers=0,
+        pin_memory=(device.type == "cuda"),
+    )
 
-    # Optimizer
-    optimizer = optim.AdamW(student.parameters(), lr=config.learning_rate)
-    start_step = _restore_optimizer(config, optimizer, device)
+    # Optimizer with weight decay (exclude bias and LayerNorm)
+    no_decay = {"bias", "LayerNorm.weight", "layernorm.weight"}
+    param_groups = [
+        {
+            "params": [p for n, p in student.named_parameters() if not any(nd in n for nd in no_decay)],
+            "weight_decay": config.weight_decay,
+        },
+        {
+            "params": [p for n, p in student.named_parameters() if any(nd in n for nd in no_decay)],
+            "weight_decay": 0.0,
+        },
+    ]
+    optimizer = optim.AdamW(param_groups, lr=config.learning_rate)
+    scheduler = _build_scheduler(optimizer, config)
+    start_step = _restore_training_state(config, optimizer, scheduler, device)
 
     # AMP scaler (only needed for float16, not bfloat16)
     use_scaler = device.type == "cuda" and student.dtype == torch.float16
@@ -109,11 +232,12 @@ def run_distillation(config: DistillConfig):
     target_step = start_step + config.max_steps
     accum_count = 0
     log_accum_loss = 0.0
-    log_step_count = 0
+    log_micro_count = 0
+    best_eval_loss = float("inf")
     start_time = time.time()
     epoch = 0
 
-    logger.info(f"Training from step {start_step} to {target_step}")
+    logger.info(f"Training from step {start_step} to {target_step} (optimizer steps)")
 
     while step < target_step:
         for batch in dataloader:
@@ -135,50 +259,82 @@ def run_distillation(config: DistillConfig):
                 )
 
             if torch.isnan(loss):
-                logger.warning(f"Skipping step {step}: loss is NaN")
+                logger.warning(f"Step {step}, micro-batch NaN — skipping accumulation window")
                 optimizer.zero_grad()
                 accum_count = 0
-                step += 1
                 continue
 
             scaler.scale(loss / config.grad_accum_steps).backward()
             accum_count += 1
             log_accum_loss += loss.item()
-            log_step_count += 1
+            log_micro_count += 1
 
-            if accum_count >= config.grad_accum_steps:
-                scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(student.parameters(), 1.0)
-                scaler.step(optimizer)
-                scaler.update()
-                optimizer.zero_grad()
-                accum_count = 0
+            if accum_count < config.grad_accum_steps:
+                continue
 
-            if (step + 1) % config.log_every == 0 and log_step_count > 0:
-                avg_loss = log_accum_loss / log_step_count
+            # Optimizer step (this is one "step")
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(student.parameters(), 1.0)
+            scaler.step(optimizer)
+            scaler.update()
+            scheduler.step()
+            optimizer.zero_grad()
+            accum_count = 0
+            step += 1
+
+            if step % config.log_every == 0 and log_micro_count > 0:
+                avg_loss = log_accum_loss / log_micro_count
+                current_lr = scheduler.get_last_lr()[0]
                 elapsed = time.time() - start_time
-                logger.info(f"Step {step + 1} | Loss: {avg_loss:.4f} | Time: {elapsed:.1f}s")
+                logger.info(
+                    f"Step {step} | Loss: {avg_loss:.4f} | "
+                    f"LR: {current_lr:.2e} | Time: {elapsed:.1f}s"
+                )
+                wandb.log({
+                    "train/loss": avg_loss,
+                    "train/lr": current_lr,
+                    "train/epoch": epoch,
+                    "step": step,
+                })
                 log_accum_loss = 0.0
-                log_step_count = 0
+                log_micro_count = 0
                 start_time = time.time()
 
-            if (step + 1) % config.save_every == 0:
-                _save_checkpoint(student, tokenizer, optimizer, config.output_dir, step + 1, repo_name)
+            if step % config.eval_every == 0 and len(eval_dataset) > 0:
+                eval_loss = _compute_eval_loss(student, eval_dataloader, device)
+                logger.info(f"Step {step} | Eval loss: {eval_loss:.4f}")
+                wandb.log({"eval/loss": eval_loss, "step": step})
+                if eval_loss < best_eval_loss:
+                    best_eval_loss = eval_loss
+                    _save_checkpoint(
+                        student, tokenizer, optimizer, config.output_dir, "best", repo_name,
+                        push_to_hub=False, scheduler=scheduler,
+                    )
 
-            step += 1
+            if step >= target_step:
+                break
 
         epoch += 1
         if step < target_step:
             logger.info(f"Completed epoch {epoch}. Continuing to step {target_step}...")
 
-    logger.info(f"Training complete! Pushing final model to HF Hub: {repo_name}")
-    _save_checkpoint(student, tokenizer, optimizer, config.output_dir, "final", repo_name, push_to_hub=True)
+    wandb.log({"eval/best_loss": best_eval_loss})
+
+    if config.hf_repo_id:
+        logger.info(f"Training complete! Pushing final model to HF Hub: {repo_name}")
+    else:
+        logger.info("Training complete! Saving final checkpoint locally (HF Hub push disabled).")
+    _save_checkpoint(
+        student, tokenizer, optimizer, config.output_dir, "final", repo_name,
+        push_to_hub=bool(config.hf_repo_id), scheduler=scheduler,
+    )
+    wandb.finish()
 
 
-def _restore_optimizer(config: DistillConfig, optimizer, device) -> int:
-    """Restore optimizer state from checkpoint and return the starting step."""
+def _restore_training_state(config: DistillConfig, optimizer, scheduler, device) -> int:
+    """Restore optimizer and scheduler state from checkpoint; return starting step."""
     start_step = 0
-    if config.resume_from and config.resume_from != "None":
+    if config.resume_from:
         checkpoint_name = os.path.basename(config.resume_from)
         if checkpoint_name.startswith("checkpoint-"):
             start_step = int(checkpoint_name.split("-")[1])
@@ -189,22 +345,36 @@ def _restore_optimizer(config: DistillConfig, optimizer, device) -> int:
             optimizer.load_state_dict(torch.load(opt_path, map_location=device))
         else:
             logger.warning("No optimizer state found — learning rates will reset")
+
+        sched_path = os.path.join(config.resume_from, "scheduler.pt")
+        if os.path.exists(sched_path):
+            logger.info(f"Loading scheduler state from {sched_path}")
+            scheduler.load_state_dict(torch.load(sched_path, map_location=device))
+        elif start_step > 0:
+            logger.warning(
+                f"No scheduler state found — fast-forwarding scheduler to step {start_step}"
+            )
+            for _ in range(start_step):
+                scheduler.step()
     return start_step
 
 
 def _save_checkpoint(student, tokenizer, optimizer, output_dir, label,
-                     repo_name=None, push_to_hub=False):
-    """Save model, tokenizer, and optimizer state; optionally push to HF Hub."""
+                     repo_name=None, push_to_hub=False, scheduler=None):
+    """Save model, tokenizer, optimizer, and scheduler state; optionally push to HF Hub."""
     path = os.path.join(output_dir, f"checkpoint-{label}" if isinstance(label, int) else str(label))
     os.makedirs(path, exist_ok=True)
 
     student.save_pretrained(path)
     tokenizer.save_pretrained(path)
     torch.save(optimizer.state_dict(), os.path.join(path, "optimizer.pt"))
+    if scheduler is not None:
+        torch.save(scheduler.state_dict(), os.path.join(path, "scheduler.pt"))
     logger.info(f"Saved checkpoint: {path}")
 
     if push_to_hub and repo_name:
-        logger.info(f"Pushing to HF Hub: {repo_name}")
-        student.push_to_hub(repo_name, commit_message=f"SeqKD distilled model ({label})")
-        tokenizer.push_to_hub(repo_name, commit_message=f"Tokenizer ({label})")
-        logger.info(f"Pushed: https://huggingface.co/{repo_name}")
+        hub_repo = f"{repo_name}-{label}" if isinstance(label, int) else repo_name
+        logger.info(f"Pushing to HF Hub: {hub_repo}")
+        student.push_to_hub(hub_repo, commit_message=f"Distilled model (step {label})")
+        tokenizer.push_to_hub(hub_repo, commit_message=f"Tokenizer (step {label})")
+        logger.info(f"Pushed: https://huggingface.co/{hub_repo}")

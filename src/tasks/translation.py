@@ -4,52 +4,30 @@ Load translation data from various sources.
 
 import csv
 import logging
-from pathlib import Path
 from typing import cast
 
 import sacrebleu
-from datasets import load_dataset
 
 from src.config.config import ExperimentConfig
+from src.data.dataset import REFERENCE_TABLE, load_bilingual_dataset
 
 logger = logging.getLogger(__name__)
-
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
-REFERENCE_TABLE = DATA_DIR / "reference_table_bilingual.csv"
 
 
 def load_data(config: ExperimentConfig) -> tuple[list[tuple[str, str]], str]:
     """
-    Load (source, target) pairs from Tatoeba via HuggingFace.
-
-    Args:
-        target_lang: Language code, e.g. 'ber', 'chr', 'haw', 'npi'
-        max_samples: Maximum number of samples to load (None for all)
+    Load (source, target) pairs from the bilingual train split.
 
     Returns:
         - List of (source_text, target_text) tuples
         - Language name
     """
-    hf_id, lang_name = _get_hf_dataset_id(config.language_code)
-    logger.info(f"Loading from HuggingFace: {hf_id}")
+    max_samples = config.max_samples if config.max_samples > 0 else None
+    splits = load_bilingual_dataset(config.language_code, max_samples)
+    ds = splits["train"]
 
-    start = max(0, int(getattr(config, "data_start", 0) or 0))
-    end = int(getattr(config, "data_end", 0) or 0)
-    if end > 0 and end <= start:
-        raise ValueError(f"Invalid data slice: data_end ({end}) must be > data_start ({start})")
-
-    if end > 0:
-        split = f"train[{start}:{end}]"
-    elif config.max_samples is not None and config.max_samples > 0:
-        split = f"train[{start}:{start + config.max_samples}]"
-    elif start > 0:
-        split = f"train[{start}:]"
-    else:
-        split = "train"
-    ds = load_dataset(hf_id, split=split)
-    columns = ds.column_names
-    columns = cast(list[str], columns)
-    pairs = []
+    lang_name = _get_language_name(config.language_code)
+    columns = cast(list[str], ds.column_names)
 
     if "English" in columns and lang_name in columns:
         src_col, tgt_col = "English", lang_name
@@ -64,13 +42,14 @@ def load_data(config: ExperimentConfig) -> tuple[list[tuple[str, str]], str]:
 
     logger.info(f"Using columns: '{src_col}' (source) -> '{tgt_col}' (target)")
 
+    pairs = []
     for row in ds:
         source = str(row.get(src_col, "")).strip()  # type:ignore
         target = str(row.get(tgt_col, "")).strip()  # type:ignore
         if not source or not target:
             continue
         pairs.append((source, target))
-    return pairs, _get_language_name(config.language_code)
+    return pairs, lang_name
 
 
 def compute_eval_metrics(
@@ -111,20 +90,3 @@ def _get_language_name(lang_code: str) -> str:
     return lang_code
 
 
-def _get_hf_dataset_id(target_lang: str) -> tuple[str, str]:
-    """Resolve HuggingFace dataset ID and language name for a given language code."""
-    target_lang = target_lang.strip().lower()
-    with open(REFERENCE_TABLE, newline="", encoding="utf-8-sig") as f:
-        r = csv.DictReader(f)
-        for row in r:
-            if (
-                row["Code"].strip().lower() == target_lang
-                and row["source"].strip().lower() == "tatoeba"
-            ):
-                hf_id = row.get("Hugging face", "").strip()
-                lang_name = row["Language"].strip()
-                if hf_id:
-                    return hf_id, lang_name
-    raise FileNotFoundError(
-        f"No HuggingFace dataset for language '{target_lang}' in {REFERENCE_TABLE}"
-    )
