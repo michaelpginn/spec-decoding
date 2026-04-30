@@ -1,9 +1,5 @@
 """
-Distillation training loop.
-
-Supports two modes (controlled by DistillConfig.distill_mode):
-  - task_specific: SeqKD on pre-generated teacher translations (bilingual).
-  - general: causal LM fine-tuning on raw monolingual text.
+Distillation training loop. Uses a parquet data file created with `scripts/generate_teacher_logprobs`.
 """
 import logging
 import math
@@ -13,7 +9,6 @@ from dataclasses import asdict
 
 import datasets
 import torch
-import torch.nn.functional as F
 import torch.optim as optim
 import wandb
 from torch.amp import GradScaler, autocast  # type: ignore[attr-defined]

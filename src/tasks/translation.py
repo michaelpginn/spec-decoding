@@ -20,7 +20,7 @@ def load_data(config: ExperimentConfig | DistillConfig) -> tuple[DatasetDict, st
     Load (source, target) pairs from the bilingual train split.
 
     Returns:
-        - List of (source_text, target_text) tuples
+        - Dataset with 'source' and 'target' column
         - Language name
     """
     max_samples = config.max_samples if config.max_samples > 0 else None

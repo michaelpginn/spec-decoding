@@ -100,7 +100,7 @@ def generate_teacher_logprobs(config: DistillConfig) -> Dataset:
     for row in tqdm(dataset, desc="Generating logprobs"):
         assert isinstance(row, Mapping)
         if config.task == 'general':
-            inputs = tokenizer(row['text'], return_tensors="pt")
+            inputs = tokenizer(row['text'], return_tensors="pt").to(device)
             outputs = compute_logprobs(model, inputs, top_k=config.top_k)
         else:
             prompt = create_prompt(config.task, language, row["source"])

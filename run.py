@@ -103,7 +103,7 @@ def run(config: ExperimentConfig):
     for key in list(wandb.summary.keys()):
         if key.startswith("sentence/") or key == "sentence_idx":
             del wandb.summary[key]
-    log_token_flow([inp for inp, _ in dataset], all_metrics, config)
+    log_token_flow([row['source'] for row in dataset], all_metrics, config) # type:ignore
 
     # 6. Log evaluation metrics
     eval_metrics = compute_eval_metrics([ref for _, ref in dataset], predictions)
