@@ -6,4 +6,4 @@ experiments/submit_alpine.sh
 .zed
 wandb
 outputs
-logits
+logprobs

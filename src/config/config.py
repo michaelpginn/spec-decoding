@@ -65,7 +65,7 @@ class DistillConfig:
     hf_repo_id: str | None = None
     output_dir: str = "../distilled_models"
     resume_from: str | None = None
-    log_every: int = 50
+    log_every: int = 5
 
     device: str = "auto"
 
