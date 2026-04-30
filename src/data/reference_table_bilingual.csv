@@ -5,6 +5,7 @@ Cherokee,chr,cherokeedictionary.net/,11395,data/bilingual/chr/dictionary.csv,
 Cherokee,chr,hugging face,45,data/bilingual/chr/hugging_face.py,wang4067/cherokee-english-45
 Hawaiian,haw,tatoeba,121,data/bilingual/haw/tatoeba.tsv,lecslab/biling_haw
 Igbo,ibo,tatoeba,43,data/bilingual/ibo/tatoeba.tsv,lecslab/biling_ibo
+Igbo,ibo,Open Subtitles,1706,opus,
 Lakota,lkt,tatoeba,22,data/bilingual/lkt/tatoeba.tsv,lecslab/biling_lkt
 Muskogee (Creek),mus,tatoeba,512,data/bilingual/mus/tatoeba.tsv,lecslab/biling_mus
 Nepali,npi,tatoeba,3917,data/bilingual/npi/tatoeba.tsv,lecslab/biling_npi
@@ -12,7 +13,7 @@ Nepali,npi,hugging face,6391117,data/bilingualnpi/hugging_face.py,IRIIS-RESEARCH
 Occitan,oci,tatoeba,4540,data/bilingual/oci/tatoeba.tsv,lecslab/biling_oci
 Ojibwe,oji,tatoeba,116,data/bilingual/oji/tatoeba.tsv,lecslab/biling_oji
 Quechua,que,tatoeba,279,data/bilingual/que/tatoeba.tsv,lecslab/biling_que
-Maya,yua,tatoeba,25,data/bilingual/yua/tatoeba.tsv,lecslab/biling_yua
+Quechua,que,NLLB,2874090,opus,
 Tamazight,zgh,tatoeba,15760,data/bilingual/zgh/tatoeba.tsv,lecslab/biling_zgh
 Chinese,zh,hugging face,1000000,,Helsinki-NLP/opus-100
 Amharic,amh,tatoeba,230,,lecslab/bilingal_amh
