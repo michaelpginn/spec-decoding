@@ -25,7 +25,7 @@ from tqdm import tqdm
 from src.config.config import DistillConfig
 from src.config.config_to_dataclass import config_to_dataclass
 from src.data.create_inputs import create_inputs, create_prompt
-from src.data.dataset import load_monolingual_dataset
+from src.data.dataset import assemble_dataset
 from src.utils import load_model
 from src.tasks.translation import _get_language_name
 
@@ -79,7 +79,7 @@ def generate_teacher_logprobs(config: DistillConfig) -> Dataset:
     logger.info(f"Loading train split for {config.language_code}...")
     if config.task == 'general':
         language = _get_language_name(config.language_code)
-        dataset = load_monolingual_dataset(language, 'mono', True)['train']
+        dataset = assemble_dataset(language, 'mono', config.max_samples)['train']
         if config.max_samples and config.max_samples <= len(dataset):
             dataset = dataset.select(range(config.max_samples))
     elif config.task == "translation":

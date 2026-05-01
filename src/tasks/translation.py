@@ -10,7 +10,7 @@ from datasets import DatasetDict
 import sacrebleu
 
 from src.config.config import DistillConfig, ExperimentConfig
-from src.data.dataset import REFERENCE_TABLE, load_bilingual_dataset
+from src.data.dataset import REFERENCE_TABLE, assemble_dataset
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +24,9 @@ def load_data(config: ExperimentConfig | DistillConfig) -> tuple[DatasetDict, st
         - Language name
     """
     max_samples = config.max_samples if config.max_samples > 0 else None
-    dataset = load_bilingual_dataset(config.language_code, max_samples)
+    dataset = assemble_dataset(config.language_code, 'bi', max_samples)
     lang_name = _get_language_name(config.language_code)
-    
+
     columns = cast(list[str], dataset["train"].column_names)
     if "English" in columns and lang_name in columns:
         src_col, tgt_col = "English", lang_name

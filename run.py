@@ -12,7 +12,7 @@ from tqdm import tqdm
 from src.config.config import ExperimentConfig
 from src.config.config_to_dataclass import config_to_dataclass
 from src.data.create_inputs import create_inputs, create_prompt
-from src.data.dataset import load_monolingual_dataset
+from src.data.dataset import assemble_dataset
 from src.generation import generate_output
 from src.n_gram import NGramModel
 from src.spec_dec_metrics import log_token_flow, summarize_metrics
@@ -68,7 +68,7 @@ def run(config: ExperimentConfig):
     elif config.draft_model_type == "ngram":
         draft_tokenizer = target_tokenizer
         draft_model = NGramModel(n=config.ngram_n, tokenizer=draft_tokenizer, vocab_size=target_model.config.vocab_size)
-        draft_model.train(load_monolingual_dataset(language, 'mono', config.include_aya)['train'])
+        draft_model.train(assemble_dataset(language, 'mono', config.max_samples)['train'])
     else:
         raise ValueError()
 
