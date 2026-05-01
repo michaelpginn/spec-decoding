@@ -22,7 +22,8 @@ class ExperimentConfig:
     hf_schedule: Literal["heuristic", "constant"] | None = None
 
     data_source: str = "tatoeba"
-    max_samples: int = 5
+    max_samples: int = 6000
+    max_samples_mono: int = 20000
     max_new_tokens: int = 512
     device: str = "auto"
 
