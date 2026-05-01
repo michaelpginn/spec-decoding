@@ -35,6 +35,12 @@ def get_language_name(lang_code: str) -> str:
     return lang_code
 
 
+def load_with_max(repo, config, split, max_samples: int | None):
+    if max_samples is None:
+        return cast(Dataset, load_dataset(repo, config, split=split))
+    stream = load_dataset(repo, config, split=split, streaming=True).take(max_samples) # type:ignore
+    return Dataset.from_list(list(stream))
+
 def assemble_dataset(lang_code: str, type: Literal["mono", "bi"], max_samples: int | None = None, include_aya=True):
     file = "reference_table_monolingual.csv" if type=="mono" else "reference_table_bilingual.csv"
     file_path = DATA_DIR / file
@@ -42,7 +48,6 @@ def assemble_dataset(lang_code: str, type: Literal["mono", "bi"], max_samples: i
     df = pd.read_csv(file_path)
     paths = df[(df["Language"] == language) & (df["hugging face"].notna())]
     dataset_list = []
-
     for _, row in paths.iterrows():
         path = row["hugging face"]
         assert isinstance(path, str)
@@ -63,22 +68,15 @@ def assemble_dataset(lang_code: str, type: Literal["mono", "bi"], max_samples: i
                 config = parts[1]
                 if len(parts) > 2:
                     split_to_load = parts[2]
-            try:
-                ds = cast(Dataset, load_dataset(repo, config, split=split_to_load))
-            except ValueError as e:
-                # Check the error message for available splits
-                available_splits = str(e)
 
-                # Sequence of fallbacks
-                if split_to_load == "train":
-                    if "full" in available_splits:
-                        ds = cast(Dataset, load_dataset(repo, config, split="full"))
-                    elif lang_code in available_splits:
-                        ds = cast(Dataset, load_dataset(repo, config, split=lang_code))
-                    else:
-                        raise e
-                else:
-                    raise e
+            for split in [split_to_load, 'full', lang_code]:
+                try:
+                    ds = load_with_max(repo, config, split, max_samples)
+                    break
+                except:
+                    continue
+            else:
+                raise ValueError(f"No split matching {[split_to_load, 'full', lang_code]} in {repo}")
 
         # Column standardization logic
         current_cols = ds.column_names
@@ -122,7 +120,7 @@ def assemble_dataset(lang_code: str, type: Literal["mono", "bi"], max_samples: i
             dataset_list.append(aya_dataset)
 
     if not dataset_list:
-        raise ValueError(f"No datasets found for {language} and include_aya is False.")
+        raise ValueError(f"No datasets found for {language}")
     dataset: Dataset = concatenate_datasets(dataset_list)
     dataset = dataset.filter(lambda row: row['text'])
     if max_samples and max_samples > 0 and len(dataset) > max_samples:
