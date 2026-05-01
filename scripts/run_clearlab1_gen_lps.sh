@@ -17,7 +17,7 @@ mkdir -p $HF_HOME
 module load uv
 uv sync
 
-for lang in ber chr haw ibo lkt mus npi oci oji que yua zgh
+for lang in ber chr haw ibo lkt mus npi oci oji que zgh zh amh yor grn
 do
     uv run scripts/generate_teacher_logprobs.py "$1" \
         -o language_code=$lang
