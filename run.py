@@ -106,7 +106,7 @@ def run(config: ExperimentConfig):
     log_token_flow([row['source'] for row in dataset], all_metrics, config) # type:ignore
 
     # 6. Log evaluation metrics
-    eval_metrics = compute_eval_metrics([ref for _, ref in dataset], predictions)
+    eval_metrics = compute_eval_metrics([row['target'] for row in dataset], predictions) # type:ignore
     wandb.summary.update(eval_metrics)
 
 

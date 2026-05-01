@@ -98,7 +98,7 @@ def compute_loss(student, batch, device) -> torch.Tensor:
     topk_logprobs = batch["topk_logprobs"].to(device, non_blocking=True)
     topk_logprobs_idx = batch["topk_logprobs_indices"].to(device, non_blocking=True)
     label_mask = batch["label_mask"].to(device, non_blocking=True)
-    
+
     with autocast(device_type=device.type, enabled=(device.type == "cuda")):
         logits = student(input_ids=input_ids, attention_mask=attention_mask).logits
         logprobs = torch.nn.functional.log_softmax(logits[..., :-1, :].contiguous(), dim=-1)
@@ -152,7 +152,7 @@ def run_distillation(config: DistillConfig):
         student.resize_token_embeddings(len(tokenizer))
 
     device = next(student.parameters()).device
-    
+
     assert config.dataset_path
     dataset = datasets.Dataset.from_parquet(config.dataset_path)
     assert isinstance(dataset, datasets.Dataset)
@@ -173,20 +173,20 @@ def run_distillation(config: DistillConfig):
         f"Split: {len(train_dataset)} train, {len(eval_dataset)} eval examples"
     )
 
-    
+
     def collate_fn(batch):
         # Build input IDs and full logits
         bs = len(batch)
         seq_len = max([len(r["token_ids"]) for r in batch])
         topk = len(batch[0]["logprobs"][0])
-        
+
         input_ids = torch.full((bs, seq_len), tokenizer.pad_token_id, dtype=torch.long)
         attention_mask = torch.zeros((bs, seq_len), dtype=torch.long)
         # Avoid materializing these as full vocab dim
         # Note: shifted on seq dim (first item is logprobs for second token)
-        topk_logprobs = torch.zeros((bs, seq_len - 1, topk)) 
+        topk_logprobs = torch.zeros((bs, seq_len - 1, topk), dtype=student.dtype)
         topk_logprobs_indices = torch.zeros((bs, seq_len - 1, topk), dtype=torch.long)
-        label_mask = torch.zeros((bs, seq_len - 1)) # Mask positions that shouldn't be trained
+        label_mask = torch.zeros((bs, seq_len - 1), dtype=student.dtype) # Mask positions that shouldn't be trained
 
         for idx in range(bs):
             item_seq_len = len(batch[idx]["token_ids"])
@@ -281,7 +281,7 @@ def run_distillation(config: DistillConfig):
             optimizer.zero_grad()
             accum_count = 0
             step += 1
-            
+
             if step % config.log_every == 0 and log_micro_count > 0:
                 avg_loss = log_accum_loss / log_micro_count
                 current_lr = scheduler.get_last_lr()[0]

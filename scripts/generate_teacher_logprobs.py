@@ -123,7 +123,7 @@ def _teacher_short_name(model_id: str) -> str:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Generate SeqKD teacher translations")
+    parser = argparse.ArgumentParser(description="Generate teacher logprobs")
     parser.add_argument("config", help="Config file (cfg/ini)")
     parser.add_argument(
         "--overrides",
