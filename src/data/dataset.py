@@ -1,3 +1,5 @@
+from collections import Counter
+import csv
 import logging
 from pathlib import Path
 from typing import Literal, cast
@@ -16,9 +18,27 @@ def get_raw_url(url: str) -> str:
         return url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
     return url
 
-def assemble_dataset(language: str, type: Literal["mono", "bi"], max_samples: int | None = None, include_aya=True):
+
+def get_language_name(lang_code: str) -> str:
+    """
+    Get full language name from language code using reference_table_bilingual.csv.
+    e.g. 'npi' -> 'Nepali', 'chr' -> 'Cherokee'
+    """
+    lang_code = lang_code.strip().lower()
+    # Use utf-8-sig
+    with open(REFERENCE_TABLE, newline="", encoding="utf-8-sig") as f:
+        r = csv.DictReader(f)
+        for row in r:
+            if row["Code"].strip().lower() == lang_code:
+                return row["Language"].strip()
+    # Fallback: return the code itself if not found
+    return lang_code
+
+
+def assemble_dataset(lang_code: str, type: Literal["mono", "bi"], max_samples: int | None = None, include_aya=True):
     file = "reference_table_monolingual.csv" if type=="mono" else "reference_table_bilingual.csv"
     file_path = DATA_DIR / file
+    language = get_language_name(lang_code)
     df = pd.read_csv(file_path)
     paths = df[(df["Language"] == language) & (df["hugging face"].notna())]
     dataset_list = []
@@ -26,7 +46,6 @@ def assemble_dataset(language: str, type: Literal["mono", "bi"], max_samples: in
     for _, row in paths.iterrows():
         path = row["hugging face"]
         assert isinstance(path, str)
-        lang_code = str(row["Code"])
 
         if str(path).startswith("http"):
             raw_url = get_raw_url(str(path))
@@ -89,22 +108,28 @@ def assemble_dataset(language: str, type: Literal["mono", "bi"], max_samples: in
     dataset_list = [ds.cast(standard_features) for ds in dataset_list]
 
     if include_aya:
-        aya = load_dataset("CohereLabs/aya_dataset", split="train")
-        lang_aya = cast(Dataset, aya.filter(lambda x: x["language"].lower() == language.lower()))
-        current_cols = lang_aya.column_names
-        search_cols = ["inputs", "targets", "text", "sentence"]
-        for col in search_cols:
-            if col in current_cols:
-                lang_aya = lang_aya.rename_column(col, "text")
-                break
-        lang_aya = lang_aya.select_columns(["text"]).cast(standard_features)
-        dataset_list.append(lang_aya)
+        aya_dataset = load_dataset("CohereLabs/aya_dataset", split="train")
+        aya_dataset = cast(Dataset, aya_dataset.filter(lambda x: x["language"].lower() == language.lower()))
+        if len(aya_dataset) != 0:
+            current_cols = aya_dataset.column_names
+            search_cols = ["inputs", "targets", "text", "sentence"]
+            for col in search_cols:
+                if col in current_cols:
+                    aya_dataset = aya_dataset.rename_column(col, "text")
+                    break
+            aya_dataset = aya_dataset.map(lambda r: {"source": "CohereLabs/aya_dataset"})
+            aya_dataset = aya_dataset.select_columns(["text", "source"]).cast(standard_features)
+            dataset_list.append(aya_dataset)
 
     if not dataset_list:
         raise ValueError(f"No datasets found for {language} and include_aya is False.")
-    dataset = concatenate_datasets(dataset_list)
+    dataset: Dataset = concatenate_datasets(dataset_list)
     dataset = dataset.filter(lambda row: row['text'])
     if max_samples and max_samples > 0 and len(dataset) > max_samples:
-        dataset = dataset.select(range(max_samples))
-        logger.info(f"Filtered full dataset to {max_samples} examples")
-    return dataset.train_test_split(test_size=0.2, seed=42)
+        old_size = len(dataset)
+        dataset = dataset.shuffle(42).select(range(max_samples))
+        logger.info(f"Filtered full dataset from {old_size} to {max_samples} examples")
+    logger.info(f"Data source breakdown: {Counter(dataset['source'])}")
+    splits = dataset.train_test_split(test_size=0.2, seed=42)
+    logger.info(f"Data splits: {splits}")
+    return splits
