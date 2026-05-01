@@ -7,7 +7,8 @@ from collections import Counter
 from pprint import pprint
 from src.data.dataset import assemble_dataset, get_language_name
 
-MAX_SAMPLES=6000
+MAX_MONO = 20000
+MAX_BI=6000
 
 languages = [
     "amh", "ber", "chr", "grn", "haw", "ibo", "npi", "oci","que", "yor", "zgh", "zh"
@@ -21,7 +22,7 @@ for language in languages:
     data['name'] = get_language_name(language)
     print(data['name'])
     try:
-        mono_data = assemble_dataset(language, 'mono', MAX_SAMPLES)
+        mono_data = assemble_dataset(language, 'mono', MAX_MONO)
         data['mono'] = {
             'train': {
                 'num_examples': len(mono_data['train']),
@@ -35,7 +36,7 @@ for language in languages:
     except Exception as e:
         print(language, "MONO", e)
     try:
-        bi_data = assemble_dataset(language, 'bi', MAX_SAMPLES)
+        bi_data = assemble_dataset(language, 'bi', MAX_BI)
         data['bi'] = {
             'train': {
                 'num_examples': len(bi_data['train']),
