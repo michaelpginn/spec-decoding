@@ -31,6 +31,8 @@ class NGramModel:
         self.tokenizer = tokenizer
         self.vocab_size = vocab_size
         self.config = SimpleNamespace(vocab_size=vocab_size)
+        self._logprob_buf = torch.full((vocab_size,), float("-inf"))
+        self._last_modified: list[int] = []
 
     def train(self, train: Dataset):
         """Learn an n-gram model with gram frequencies"""
@@ -61,18 +63,22 @@ class NGramModel:
             )
 
         if len(tokens) < self.n - 1:
-            # Uniform distribution
             return torch.full((len(self.tokenizer),), 1 / len(self.tokenizer))
 
         context_key = tuple(tokens[-(self.n - 1) :])
         if context_key not in self.conditional_logprobs:
-            # Unseen gram
             return torch.full((len(self.tokenizer),), 1 / len(self.tokenizer))
-            
-        logprobs = torch.full((len(self.tokenizer),), float("-inf"))
+
+        if self._last_modified:
+            self._logprob_buf[self._last_modified] = float("-inf")
+
+        modified = []
         for token_id, prob in self.conditional_logprobs[context_key].items():
-            logprobs[token_id] = prob
-        return logprobs
+            self._logprob_buf[token_id] = prob
+            modified.append(token_id)
+        self._last_modified = modified
+
+        return self._logprob_buf
 
     def __call__(
         self,
@@ -92,6 +98,6 @@ class NGramModel:
             )
         else:
             full_seq = input_ids
-        logits = self.predict(full_seq[0].tolist()).to(input_ids.device)
+        logits = self.predict(full_seq[0, -(self.n - 1):].tolist()).to(input_ids.device)
         logits = logits.unsqueeze(0).unsqueeze(0)  # (batch_size, seq_length, d_vocab)
         return CausalLMOutputWithPast(logits=logits, past_key_values=(full_seq,))  # type:ignore
