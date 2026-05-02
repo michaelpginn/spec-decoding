@@ -1,5 +1,6 @@
 from collections import Counter
 import csv
+import json
 import logging
 from pathlib import Path
 from typing import Literal, cast
@@ -41,6 +42,41 @@ def load_with_max(repo, config, split, max_samples: int | None):
     stream = load_dataset(repo, config, split=split, streaming=True).take(max_samples) # type:ignore
     return Dataset.from_list(list(stream))
 
+
+mono_features = Features({"text": Value("string"), "source": Value("string")})
+
+def standardize_columns_mono(ds: Dataset, language: str, lang_code: str):
+    # Column standardization logic
+    current_cols = ds.column_names
+    if "text" not in current_cols:
+        # Expanded search list to include 'Mayan', 'Source', and 'Target'
+        search_cols = [
+            language, lang_code, language.lower(),
+            "Mayan", "Mayan language",  # Specific to yua datasets
+            "sentence", "text_sentence", "content", "Article"
+            "Source", "Target","inputs"         # Common in parallel-formatted mono data
+        ]
+        for col in search_cols:
+            if col in current_cols:
+                ds = ds.rename_column(col, "text")
+                break
+        else:
+            raise AssertionError("Could not find matching column")
+    ds = ds.select_columns(["text", "source"])
+    ds = ds.filter(lambda row: row['text'])
+    return ds.cast(mono_features)
+
+
+def standardize_columns_bi(ds: Dataset, language: str, lang_code: str):
+    if 'english' in ds.column_names:
+        ds = ds.rename_column('english', "English")
+    if language.lower() in ds.column_names:
+        ds = ds.rename_column(language.lower(), language)
+    ds = ds.select_columns(['English', language, "source"])
+    bi_features = Features({"English": Value("string"), language: Value("string"), "source": Value("string")})
+    return ds.cast(bi_features)
+
+
 def assemble_dataset(lang_code: str, type: Literal["mono", "bi"], max_samples: int | None = None, include_aya=True):
     file = "reference_table_monolingual.csv" if type=="mono" else "reference_table_bilingual.csv"
     file_path = DATA_DIR / file
@@ -69,6 +105,13 @@ def assemble_dataset(lang_code: str, type: Literal["mono", "bi"], max_samples: i
                 if len(parts) > 2:
                     split_to_load = parts[2]
 
+            if path == 'Helsinki-NLP/opus-100':
+                ds = load_with_max(repo, config, "train", max_samples)
+                def map(r):
+                    d = json.loads(r['translation'])
+                    return {"English": d['en'], language: d[lang_code]}
+                ds = ds.map(map)
+
             for split in [split_to_load, 'full', lang_code]:
                 try:
                     ds = load_with_max(repo, config, split, max_samples)
@@ -78,34 +121,19 @@ def assemble_dataset(lang_code: str, type: Literal["mono", "bi"], max_samples: i
             else:
                 raise ValueError(f"No split matching {[split_to_load, 'full', lang_code]} in {repo}")
 
-        # Column standardization logic
-        current_cols = ds.column_names
-        if "text" not in current_cols:
-            # Expanded search list to include 'Mayan', 'Source', and 'Target'
-            search_cols = [
-                language, lang_code, language.lower(),
-                "Mayan", "Mayan language",  # Specific to yua datasets
-                "sentence", "text_sentence", "content",
-                "Source", "Target","inputs"          # Common in parallel-formatted mono data
-            ]
-            for col in search_cols:
-                if col in current_cols:
-                    ds = ds.rename_column(col, "text")
-                    break
-            else:
-                raise AssertionError("Could not find matching column")
-
         # Add sources
-        if "source" not in ds.column_names:
+        if "Source" in ds.column_names:
+            ds = ds.rename_column('Source', 'source')
+        elif "source" not in ds.column_names:
             ds = ds.map(lambda r: {"source": path})
 
-        ds = ds.select_columns(["text", "source"])
+        if type == 'mono':
+            ds = standardize_columns_mono(ds, language, lang_code)
+        else:
+            ds = standardize_columns_bi(ds, language, lang_code)
         dataset_list.append(ds)
 
-    standard_features = Features({"text": Value("string"), "source": Value("string")})
-    dataset_list = [ds.cast(standard_features) for ds in dataset_list]
-
-    if include_aya:
+    if type == 'mono' and include_aya:
         aya_dataset = load_dataset("CohereLabs/aya_dataset", split="train")
         aya_dataset = cast(Dataset, aya_dataset.filter(lambda x: x["language"].lower() == language.lower()))
         if len(aya_dataset) != 0:
@@ -116,13 +144,12 @@ def assemble_dataset(lang_code: str, type: Literal["mono", "bi"], max_samples: i
                     aya_dataset = aya_dataset.rename_column(col, "text")
                     break
             aya_dataset = aya_dataset.map(lambda r: {"source": "CohereLabs/aya_dataset"})
-            aya_dataset = aya_dataset.select_columns(["text", "source"]).cast(standard_features)
+            aya_dataset = aya_dataset.select_columns(["text", "source"]).cast(mono_features)
             dataset_list.append(aya_dataset)
 
     if not dataset_list:
         raise ValueError(f"No datasets found for {language}")
     dataset: Dataset = concatenate_datasets(dataset_list)
-    dataset = dataset.filter(lambda row: row['text'])
     if max_samples and max_samples > 0 and len(dataset) > max_samples:
         old_size = len(dataset)
         dataset = dataset.shuffle(42).select(range(max_samples))

@@ -17,6 +17,7 @@ Igbo,ibo,tatoeba,46,data/monolingual/ibo/tatoeba.tsv,
 Amharic,amh,https://huggingface.co/datasets/CohereLabs/aya_dataset,,,CohereLabs/aya_dataset
 Yoruba,yor,https://huggingface.co/datasets/CohereLabs/aya_dataset,,,CohereLabs/aya_dataset
 Nepali,npi,tatoeba,4504,data/monolingual/npi/tatoeba.tsv,lecslab/monoling_npi
+Nepali,npi,hugging face,6391117,data/bilingualnpi/hugging_face.py,IRIIS-RESEARCH/Nepali-Text-Corpus
 Occitan,oci,https://wortschatz-leipzig.de/en/download/oci#oci_community_2017,10000,data/monolingual/oci/oci-fr_web_2020_10K-sentences.txt,lecslab/monoling_oci
 Occitan,oci,https://wortschatz-leipzig.de/en/download/oci#oci_community_2017,25982,data/monolingual/oci/oci-fr_web_2020_10K-words.txt,
 Occitan,oci,https://wortschatz-leipzig.de/en/download/oci#oci_community_2017,1792,data/monolingual/oci/oci_community_2023-sentences.txt,

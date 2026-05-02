@@ -9,13 +9,12 @@ Igbo,ibo,Open Subtitles,1706,opus,
 Lakota,lkt,tatoeba,22,data/bilingual/lkt/tatoeba.tsv,lecslab/biling_lkt
 Muskogee (Creek),mus,tatoeba,512,data/bilingual/mus/tatoeba.tsv,lecslab/biling_mus
 Nepali,npi,tatoeba,3917,data/bilingual/npi/tatoeba.tsv,lecslab/biling_npi
-Nepali,npi,hugging face,6391117,data/bilingualnpi/hugging_face.py,IRIIS-RESEARCH/Nepali-Text-Corpus
 Occitan,oci,tatoeba,4540,data/bilingual/oci/tatoeba.tsv,lecslab/biling_oci
 Ojibwe,oji,tatoeba,116,data/bilingual/oji/tatoeba.tsv,lecslab/biling_oji
 Quechua,que,tatoeba,279,data/bilingual/que/tatoeba.tsv,lecslab/biling_que
 Quechua,que,NLLB,2874090,opus,
 Tamazight,zgh,tatoeba,15760,data/bilingual/zgh/tatoeba.tsv,lecslab/biling_zgh
-Chinese,zh,hugging face,1000000,,Helsinki-NLP/opus-100
+Chinese,zh,hugging face,1000000,,Helsinki-NLP/opus-100:en-zh:train
 Amharic,amh,tatoeba,230,,lecslab/bilingal_amh
 Amharic,amh,https://github.com/wubet/unified-amharic-english-corpus,195378,,
 Yoruba,yor,UdS-LSV/menyo20k_mt,"10,070",,https://raw.githubusercontent.com/uds-lsv/menyo-20k_MT/master/data/train.tsv

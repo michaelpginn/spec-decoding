@@ -35,20 +35,17 @@ for language in languages:
         }
     except Exception as e:
         print(language, "MONO", e)
-    try:
-        bi_data = assemble_dataset(language, 'bi', MAX_BI)
-        data['bi'] = {
-            'train': {
-                'num_examples': len(bi_data['train']),
-                'sources': Counter(bi_data['train']['source'])
-            },
-            'test': {
-                'num_examples': len(bi_data['test']),
-                'sources': Counter(bi_data['test']['source'])
-            }
+    bi_data = assemble_dataset(language, 'bi', MAX_BI)
+    data['bi'] = {
+        'train': {
+            'num_examples': len(bi_data['train']),
+            'sources': Counter(bi_data['train']['source'])
+        },
+        'test': {
+            'num_examples': len(bi_data['test']),
+            'sources': Counter(bi_data['test']['source'])
         }
-    except Exception as e:
-        print(language, "BI", e)
+    }
     lang_data.append(data)
 
 pprint(lang_data)
