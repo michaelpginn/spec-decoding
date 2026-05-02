@@ -105,13 +105,6 @@ def assemble_dataset(lang_code: str, type: Literal["mono", "bi"], max_samples: i
                 if len(parts) > 2:
                     split_to_load = parts[2]
 
-            if repo == 'Helsinki-NLP/opus-100':
-                ds = load_with_max(repo, config, "train", max_samples)
-                def map(r):
-                    d = json.loads(r['translation'])
-                    return {"English": d['en'], language: d[lang_code]}
-                ds = ds.map(map)
-
             for split in [split_to_load, 'full', lang_code]:
                 try:
                     ds = load_with_max(repo, config, split, max_samples)
@@ -120,6 +113,10 @@ def assemble_dataset(lang_code: str, type: Literal["mono", "bi"], max_samples: i
                     continue
             else:
                 raise ValueError(f"No split matching {[split_to_load, 'full', lang_code]} in {repo}")
+            if repo == 'Helsinki-NLP/opus-100':
+                def map(r):
+                    return {"English": r['translation']['en'], language: r['translation'][lang_code]}
+                ds = ds.map(map)
 
         # Add sources
         if "Source" in ds.column_names:
