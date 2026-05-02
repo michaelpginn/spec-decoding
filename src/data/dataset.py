@@ -1,6 +1,6 @@
-from collections import Counter
 import csv
 import logging
+from collections import Counter
 from pathlib import Path
 from typing import Literal, cast
 
@@ -71,7 +71,11 @@ def assemble_dataset(lang_code: str, type: Literal["mono", "bi"], max_samples: i
 
             for split in [split_to_load, 'full', lang_code]:
                 try:
-                    ds = load_with_max(repo, config, split, max_samples)
+                    if repo == "Helsinki-NLP/opus-100":
+                        stream = load_dataset("Helsinki-NLP/opus-100", "en-zh", config, split=split, streaming=True).take(max_samples)
+                        ds = Dataset.from_list(list(stream))
+                    else:
+                        ds = load_with_max(repo, config, split, max_samples)
                     break
                 except:
                     continue
