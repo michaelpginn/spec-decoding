@@ -53,7 +53,7 @@ def standardize_columns_mono(ds: Dataset, language: str, lang_code: str):
         search_cols = [
             language, lang_code, language.lower(),
             "Mayan", "Mayan language",  # Specific to yua datasets
-            "sentence", "text_sentence", "content", "Article"
+            "sentence", "text_sentence", "content", "Article",
             "Source", "Target","inputs"         # Common in parallel-formatted mono data
         ]
         for col in search_cols:
@@ -105,7 +105,7 @@ def assemble_dataset(lang_code: str, type: Literal["mono", "bi"], max_samples: i
                 if len(parts) > 2:
                     split_to_load = parts[2]
 
-            if path == 'Helsinki-NLP/opus-100':
+            if repo == 'Helsinki-NLP/opus-100':
                 ds = load_with_max(repo, config, "train", max_samples)
                 def map(r):
                     d = json.loads(r['translation'])
