@@ -4,8 +4,17 @@ uv run -m src.data.describe_data
 """
 
 from collections import Counter
+import logging
 from pprint import pprint
+
+from transformers import AutoTokenizer
 from src.data.dataset import assemble_dataset, get_language_name
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="\033[90m%(asctime)s \033[36m[%(levelname)s] \033[1;33m%(module)s\033[0m: %(message)s",
+)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 MAX_MONO = 20000
 MAX_BI=6000
@@ -16,34 +25,35 @@ languages = [
 
 # Cut: lkt,mus,oji
 
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-7B-Instruct")
+
 lang_data = []
 for language in languages:
     data: dict = {'code': language}
     data['name'] = get_language_name(language)
     print(data['name'])
-    try:
-        mono_data = assemble_dataset(language, 'mono', MAX_MONO)
-        data['mono'] = {
-            'train': {
-                'num_examples': len(mono_data['train']),
-                'sources': Counter(mono_data['train']['source'])
-            },
-            'test': {
-                'num_examples': len(mono_data['test']),
-                'sources': Counter(mono_data['test']['source'])
-            }
+    mono_data = assemble_dataset(language, 'mono', tokenizer, MAX_MONO)
+    data['mono'] = {
+        'train': {
+            'num_examples': len(mono_data['train']),
+            'sources': Counter(mono_data['train']['origin']),
+            'first_example': mono_data['train'][0]
+        },
+        'test': {
+            'num_examples': len(mono_data['test']),
+            'sources': Counter(mono_data['test']['origin'])
         }
-    except Exception as e:
-        print(language, "MONO", e)
-    bi_data = assemble_dataset(language, 'bi', MAX_BI)
+    }
+    bi_data = assemble_dataset(language, 'bi', tokenizer, MAX_BI)
     data['bi'] = {
         'train': {
             'num_examples': len(bi_data['train']),
-            'sources': Counter(bi_data['train']['source'])
+            'sources': Counter(bi_data['train']['origin']),
+            'first_example': bi_data['train'][0]
         },
         'test': {
             'num_examples': len(bi_data['test']),
-            'sources': Counter(bi_data['test']['source'])
+            'sources': Counter(bi_data['test']['origin'])
         }
     }
     lang_data.append(data)

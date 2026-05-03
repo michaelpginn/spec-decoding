@@ -33,19 +33,19 @@ def run(config: ExperimentConfig):
     else:
         raise NotImplementedError()
 
-    # 1. Load data
-    logger.info(f"Loading test split for {config.language_code}...")
-    dataset, language = load_data(config)
-    dataset = dataset['test']
-    logger.info(f"Loaded {len(dataset)} examples")
-    assert dataset and len(dataset) > 0
-
-    # 2. Load target model
+    # 1. Load target model
     logger.info(f"Loading target model: {config.target_model}...")
     target_model, target_tokenizer = load_model(
         config.target_model, device=config.device
     )
     device = next(target_model.parameters()).device
+
+    # 2. Load data
+    logger.info(f"Loading test split for {config.language_code}...")
+    dataset, language = load_data(config, target_tokenizer)
+    dataset = dataset['test']
+    logger.info(f"Loaded {len(dataset)} examples")
+    assert dataset and len(dataset) > 0
 
     # 3. Load draft model
     if config.draft_model_type == "none":
@@ -68,7 +68,7 @@ def run(config: ExperimentConfig):
     elif config.draft_model_type == "ngram":
         draft_tokenizer = target_tokenizer
         draft_model = NGramModel(n=config.ngram_n, tokenizer=draft_tokenizer, vocab_size=target_model.config.vocab_size)
-        draft_model.train(assemble_dataset(language, 'mono', config.max_samples_mono)['train'])
+        draft_model.train(assemble_dataset(language, 'mono', target_tokenizer, config.max_samples_mono)['train'])
     else:
         raise ValueError()
 
