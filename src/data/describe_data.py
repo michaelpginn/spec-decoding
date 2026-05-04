@@ -8,9 +8,9 @@ from collections import Counter
 from pathlib import Path
 from pprint import pprint
 
+# src.data.
+from dataset import assemble_dataset, get_language_name
 from transformers import AutoTokenizer
-
-from src.data.dataset import assemble_dataset, get_language_name
 
 logging.basicConfig(
     level=logging.INFO,
@@ -69,7 +69,7 @@ for language in languages:
 pprint(lang_data)
 
 # Make latex tables
-Path("viz").mkdir(exist_ok=True)
+Path("../../viz").mkdir(exist_ok=True)
 
 mono_table = """\\begin{table}[h!]
     \\small
@@ -96,7 +96,7 @@ mono_table += """            \\bottomrule
     \\caption{Monolingual corpora for each language, with token counts under the Qwen tokenizer. Sources are described in \\autoref{tab:mono_source_counts}.}
     \\label{tab:monolingual}
 \\end{table}"""
-with open("viz/monolingual.tex", 'w') as f:
+with open("../../viz/monolingual.tex", 'w') as f:
     f.write(mono_table)
 
 parallel_table = """\\begin{table}[h!]
@@ -117,28 +117,32 @@ parallel_table += """            \\bottomrule
     \\caption{Number of parallel sentences for each language. Sources are described in \\autoref{tab:par_source_counts}. Our main evaluation uses the test split.}
     \\label{tab:bilingual}
 \\end{table}"""
-with open("viz/bilingual.tex", 'w') as f:
+with open("../../viz/bilingual.tex", 'w') as f:
     f.write(parallel_table)
 
 # Source Count
 mono_source_table = """\\begin{table}[h!]
     \\small
     \\centering
-        \\begin{tabular}{l c c c}
+        \\begin{tabular}{l c l}
             \\toprule
-            \\textbf{Language} & \\textbf{Tokens} & \\textbf{Source} \\\\
+            \\textbf{Language} & \\textbf{Total Tokens} & \\textbf{Sources} \\\\
             \\midrule
 """
 for lang in sorted(languages):
     d = lang_data[lang]
-    num_tokens_train = short(d['mono']['train']['num_tokens'])
-    num_tokens_test = short(d['mono']['test']['num_tokens'])
-    mono_source_table += f"            {d['name']} [{lang}] & {num_tokens_train+num_tokens_test} & {d['mono']['train']['origin']} \\\\ \n"
+    total_tokens = short(d['mono']['train']['num_tokens'] + d['mono']['test']['num_tokens'])
+
+    sources_list = ", ".join(d['mono']['train']['sources'].keys())
+
+    mono_source_table += f"            {d['name']} [{lang}] & {total_tokens} & {sources_list} \\\\ \n"
 
 mono_source_table += """            \\bottomrule
         \\end{tabular}
     \\caption{Monolingual source counts for each language.}
     \\label{tab:mono_source_counts}
 \\end{table}"""
-with open("viz/monolingual_source.tex", 'w') as f:
+
+# Use the consistent relative path
+with open("../../viz/monolingual_source.tex", 'w') as f:
     f.write(mono_source_table)
