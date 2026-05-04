@@ -150,7 +150,7 @@ def assemble_dataset(lang_code: str, type: Literal["mono", "bi"], tokenizer, max
                 if len(parts) > 2:
                     split_to_load = parts[2]
 
-            for split in [split_to_load, 'full', lang_code]:
+            for split in [split_to_load, 'full', lang_code, 'test', 'validation']:
                 try:
                     ds = load_dataset(repo, config, split=split, streaming=True)
                     assert isinstance(ds, IterableDataset)
