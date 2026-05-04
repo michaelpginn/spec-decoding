@@ -3,12 +3,13 @@
 uv run -m src.data.describe_data
 """
 
-from collections import Counter
 import logging
+from collections import Counter
 from pathlib import Path
 from pprint import pprint
 
 from transformers import AutoTokenizer
+
 from src.data.dataset import assemble_dataset, get_language_name
 
 logging.basicConfig(
@@ -118,3 +119,26 @@ parallel_table += """            \\bottomrule
 \\end{table}"""
 with open("viz/bilingual.tex", 'w') as f:
     f.write(parallel_table)
+
+# Source Count
+mono_source_table = """\\begin{table}[h!]
+    \\small
+    \\centering
+        \\begin{tabular}{l c c c}
+            \\toprule
+            \\textbf{Language} & \\textbf{Tokens} & \\textbf{Source} \\\\
+            \\midrule
+"""
+for lang in sorted(languages):
+    d = lang_data[lang]
+    num_tokens_train = short(d['mono']['train']['num_tokens'])
+    num_tokens_test = short(d['mono']['test']['num_tokens'])
+    mono_source_table += f"            {d['name']} [{lang}] & {num_tokens_train+num_tokens_test} & {d['mono']['train']['origin']} \\\\ \n"
+
+mono_source_table += """            \\bottomrule
+        \\end{tabular}
+    \\caption{Monolingual source counts for each language.}
+    \\label{tab:mono_source_counts}
+\\end{table}"""
+with open("viz/monolingual_source.tex", 'w') as f:
+    f.write(mono_source_table)
