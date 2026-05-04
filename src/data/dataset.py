@@ -1,11 +1,23 @@
 import csv
+import io
 import logging
 from collections import Counter
 from pathlib import Path
 from typing import Literal, cast
 
 import pandas as pd
-from datasets import Dataset, Features, IterableDataset, Value, concatenate_datasets, load_dataset
+import requests
+import urllib3
+from datasets import (
+    Dataset,
+    Features,
+    IterableDataset,
+    Value,
+    concatenate_datasets,
+    load_dataset,
+)
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 DATA_DIR = Path(__file__).resolve().parent
 REFERENCE_TABLE = DATA_DIR / "reference_table_bilingual.csv"
@@ -122,7 +134,9 @@ def assemble_dataset(lang_code: str, type: Literal["mono", "bi"], tokenizer, max
         if str(path).startswith("http"):
             raw_url = get_raw_url(str(path))
             sep = '\t' if raw_url.endswith('.tsv') or 'tatoeba' in raw_url.lower() else ','
-            temp_df = pd.read_csv(raw_url, sep=sep, storage_options={'ssl': False})
+            resp = requests.get(raw_url, verify=False)
+            resp.raise_for_status()
+            temp_df = pd.read_csv(io.BytesIO(resp.content), sep=sep)
             ds = Dataset.from_pandas(temp_df)
         else:
             # HF dataset
