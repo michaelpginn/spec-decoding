@@ -7,3 +7,5 @@ experiments/submit_alpine.sh
 wandb
 outputs
 logprobs
+scripts/stats_langs.py
+logs/
