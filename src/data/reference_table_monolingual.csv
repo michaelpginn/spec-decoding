@@ -34,4 +34,4 @@ Maya,yua,Americas NLP github,,,https://github.com/AmericasNLP/americasnlp2024/bl
 Tamazight,zgh,tatoeba,20665,data/monolingual/zgh/tatoeba.tsv,lecslab/monoling_zgh
 Tamazight,zgh,hugging face,55,data/monolingual/zgh/hugging_face.py,Tamazight-NLP/IRCAM-CORPUS
 Chinese,zh,hugging face,958000000,,opencsg/Fineweb-Edu-Chinese-V2.1
-Guarani,grn,https://wortschatz-leipzig.de/en/download/grn#grn_wikipedia_2021,10000,,lecslab/monoling_guarani
+Guarani,grn,https://wortschatz-leipzig.de/en/download/grn#grn_wikipedia_2021,10000,,lecslab/monoling_grn

@@ -84,7 +84,7 @@ def generate_teacher_logprobs(config: DistillConfig) -> Dataset:
     logger.info(f"Loading train split for {config.language_code}...")
     if config.task == 'general':
         language = get_language_name(config.language_code)
-        dataset = assemble_dataset(language, 'mono', tokenizer, config.max_samples)['train']
+        dataset = assemble_dataset(config.language_code, 'mono', tokenizer, config.max_samples)['train']
         if config.max_samples and config.max_samples <= len(dataset):
             dataset = dataset.select(range(config.max_samples))
     elif config.task == "translation":
