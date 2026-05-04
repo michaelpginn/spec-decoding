@@ -176,6 +176,9 @@ def assemble_dataset(lang_code: str, type: Literal["mono", "bi"], tokenizer, max
             else:
                 stream = ds.take(max_samples)
             ds = Dataset.from_list(list(stream)) # type:ignore
+            del stream
+            import gc
+            gc.collect()
         else:
             if max_samples is not None:
                 ds = ds.select(range(min(max_samples, len(ds))))
