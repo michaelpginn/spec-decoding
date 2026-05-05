@@ -131,19 +131,19 @@ mono_source_table = """\\begin{table}[h!]
 """
 for lang in sorted(languages):
     d = lang_data[lang]
-    total_tokens = short(d['bi']['train']['num_examples'] + d['bi']['test']['num_examples'])
+    total_tokens = short(d['mono']['train']['num_tokens'] + d['mono']['test']['num_tokens'])
 
-    sources_list = ", ".join(d['bi']['train']['sources'].keys())
+    sources_list = ", ".join(d['mono']['train']['sources'].keys())
 
     mono_source_table += f"            {d['name']} [{lang}] & {total_tokens} & {sources_list} \\\\ \n"
 
 mono_source_table += """            \\bottomrule
         \\end{tabular}
-    \\caption{bilingual source counts for each language.}
-    \\label{tab:bi_source_counts}
+    \\caption{monolingual source counts for each language.}
+    \\label{tab:mono_source_counts}
 \\end{table}"""
 
-with open("../../viz/bilingual_source.tex", 'w') as f:
+with open("../../viz/monolingual_source.tex", 'w') as f:
     f.write(mono_source_table)
 
 
@@ -158,7 +158,7 @@ bi_source_table = """\\begin{table}[h!]
 
 for lang in sorted(languages):
     d = lang_data[lang]
-    total_tokens = short(d['bi']['train']['num_tokens'] + d['bi']['test']['num_tokens'])
+    total_tokens = short(d['bi']['train']['num_examples'] + d['bi']['test']['num_examples'])
     temp = ""
     for item in d['bi']['train']['sources'].keys():
         if item.lower() == "tateoba":
@@ -168,16 +168,16 @@ for lang in sorted(languages):
         elif item.lower() == "opus":
             temp += ", ".join("Opus")
         else:
-            temp = ", ".join(temp)
+            temp += ", ".join(temp)
     sources_list = temp
 
     bi_source_table += f"            {d['name']} [{lang}] & {total_tokens} & {sources_list} \\\\ \n"
 
 bi_source_table += """            \\bottomrule
         \\end{tabular}
-    \\caption{Monolingual source counts for each language.}
-    \\label{tab:mono_source_counts}
+    \\caption{Bilingual source counts for each language.}
+    \\label{tab:bi_source_counts}
 \\end{table}"""
 
-with open("../../viz/monolingual_source.tex", 'w') as f:
+with open("../../viz/bilingual_source.tex", 'w') as f:
     f.write(bi_source_table)
