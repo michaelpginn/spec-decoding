@@ -27,9 +27,9 @@ G=$(( TASK_ID % 4 + 2 ))
 module purge
 module load uv
 
+cd "${SLURM_SUBMIT_DIR}"
 source .venv/bin/activate
 
-cd "${SLURM_SUBMIT_DIR}"
 mkdir -p logs
 
 export HF_HOME="/scratch/alpine/${USER}/hf_cache"
