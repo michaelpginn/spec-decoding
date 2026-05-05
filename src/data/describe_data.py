@@ -143,6 +143,31 @@ mono_source_table += """            \\bottomrule
     \\label{tab:mono_source_counts}
 \\end{table}"""
 
-# Use the consistent relative path
 with open("../../viz/monolingual_source.tex", 'w') as f:
     f.write(mono_source_table)
+
+
+bi_source_table = """\\begin{table}[h!]
+    \\small
+    \\centering
+        \\begin{tabular}{l c l}
+            \\toprule
+            \\textbf{Language} & \\textbf{Total Tokens} & \\textbf{Sources} \\\\
+            \\midrule
+"""
+for lang in sorted(languages):
+    d = lang_data[lang]
+    total_tokens = short(d['bi']['train']['num_tokens'] + d['bi']['test']['num_tokens'])
+
+    sources_list = ", ".join(d['bi']['train']['sources'].keys())
+
+    bi_source_table += f"            {d['name']} [{lang}] & {total_tokens} & {sources_list} \\\\ \n"
+
+bi_source_table += """            \\bottomrule
+        \\end{tabular}
+    \\caption{Monolingual source counts for each language.}
+    \\label{tab:mono_source_counts}
+\\end{table}"""
+
+with open("../../viz/monolingual_source.tex", 'w') as f:
+    f.write(bi_source_table)
