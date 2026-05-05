@@ -20,4 +20,4 @@ Amharic,amh,https://github.com/wubet/unified-amharic-english-corpus,195378,,
 Yoruba,yor,UdS-LSV/menyo20k_mt,"10,070",,https://raw.githubusercontent.com/uds-lsv/menyo-20k_MT/master/data/train.tsv
 Yoruba,yor,UdS-LSV/menyo20k_mt,"3,397",,https://raw.githubusercontent.com/uds-lsv/menyo-20k_MT/master/data/dev.tsv
 Yoruba,yor,UdS-LSV/menyo20k_mt,"6,633",,https://raw.githubusercontent.com/uds-lsv/menyo-20k_MT/master/data/test.tsv
-Guarani,grn,tatoeba,986,,lecslab/bilingual_guarani
+Guarani,grn,tatoeba,986,,lecslab/biling_grn

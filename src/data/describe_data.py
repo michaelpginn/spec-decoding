@@ -5,6 +5,7 @@ uv run -m src.data.describe_data
 
 from collections import Counter
 import logging
+from pathlib import Path
 from pprint import pprint
 
 from transformers import AutoTokenizer
@@ -27,20 +28,26 @@ languages = [
 
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-7B-Instruct")
 
-lang_data = []
+def add_token_counts(row):
+    return {'num_tokens': len(tokenizer.tokenize(row['text']))}
+
+lang_data = {}
 for language in languages:
     data: dict = {'code': language}
     data['name'] = get_language_name(language)
     print(data['name'])
     mono_data = assemble_dataset(language, 'mono', tokenizer, MAX_MONO)
+    mono_data = mono_data.map(add_token_counts)
     data['mono'] = {
         'train': {
             'num_examples': len(mono_data['train']),
+            'num_tokens': sum(mono_data['train']['num_tokens']),
             'sources': Counter(mono_data['train']['origin']),
             'first_example': mono_data['train'][0]
         },
         'test': {
             'num_examples': len(mono_data['test']),
+            'num_tokens': sum(mono_data['test']['num_tokens']),
             'sources': Counter(mono_data['test']['origin'])
         }
     }
@@ -56,6 +63,58 @@ for language in languages:
             'sources': Counter(bi_data['test']['origin'])
         }
     }
-    lang_data.append(data)
+    lang_data[language] = data
 
 pprint(lang_data)
+
+# Make latex tables
+Path("viz").mkdir(exist_ok=True)
+
+mono_table = """\\begin{table}[h!]
+    \\small
+    \\centering
+        \\begin{tabular}{l c c c}
+            \\toprule
+            \\textbf{Language} & \\textbf{Train toks} & \\textbf{Test toks} \\\\
+            \\midrule
+"""
+
+def short(n):
+    for div, suf in [(1e9,'B'), (1e6,'M'), (1e3,'k')]:
+        if abs(n) >= div: return f"{n/div:.1f}{suf}"
+    return str(n)
+
+for lang in sorted(languages):
+    d = lang_data[lang]
+    num_tokens_train = short(d['mono']['train']['num_tokens'])
+    num_tokens_test = short(d['mono']['test']['num_tokens'])
+    mono_table += f"            {d['name']} [{lang}] & {num_tokens_train} & {num_tokens_test} \\\\ \n"
+
+mono_table += """            \\bottomrule
+        \\end{tabular}
+    \\caption{Monolingual corpora for each language, with token counts under the Qwen tokenizer. Sources are described in \\autoref{tab:mono_source_counts}.}
+    \\label{tab:monolingual}
+\\end{table}"""
+with open("viz/monolingual.tex", 'w') as f:
+    f.write(mono_table)
+
+parallel_table = """\\begin{table}[h!]
+    \\small
+    \\centering
+        \\begin{tabular}{l c c c}
+            \\toprule
+            \\textbf{Language} & \\textbf{\\# Train} & \\textbf{\\# Test} \\\\
+            \\midrule
+"""
+
+for lang in sorted(languages):
+    d = lang_data[lang]
+    parallel_table += f"            {d['name']} [{lang}] & {d['bi']['train']['num_examples']} & {d['bi']['test']['num_examples']} \\\\ \n"
+
+parallel_table += """            \\bottomrule
+        \\end{tabular}
+    \\caption{Number of parallel sentences for each language. Sources are described in \\autoref{tab:par_source_counts}. Our main evaluation uses the test split.}
+    \\label{tab:bilingual}
+\\end{table}"""
+with open("viz/bilingual.tex", 'w') as f:
+    f.write(parallel_table)
