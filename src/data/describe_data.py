@@ -167,8 +167,12 @@ for lang in sorted(languages):
             temp += ", ChEn"
         elif item.lower() == "opus":
             temp += ", Opus"
+        elif item == "Durbin Feeling Cherokee English Dictionary 1975":
+            temp += ", Che"
+        elif "menyo" in item:
+            temp += ", Men"
         else:
-            temp += item
+            temp += f", {item}"
     sources_list = temp
 
     bi_source_table += f"            {d['name']} [{lang}] & {total_tokens} & {sources_list} \\\\ \n"
