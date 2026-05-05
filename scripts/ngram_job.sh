@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Slurm array job: n-gram speculative decoding sweep (8 tasks = n={2,3} x gamma={2,3,4,5})
+#   sbatch --array=0-7 --export=LANG_CODE=ber scripts/ngram_job.sh
+#   sbatch --array=0-7 --export=LANG_CODE=ber,DECODING_MODE=greedy scripts/ngram_job.sh
 #SBATCH --partition=aa100
 #SBATCH --qos=normal
 #SBATCH --account=ucb-general
@@ -14,6 +17,7 @@
 set -euo pipefail
 
 LANG_CODE="${LANG_CODE:-ber}"
+DECODING_MODE="${DECODING_MODE:-sample}"
 TASK_ID="${SLURM_ARRAY_TASK_ID:-0}"
 
 # Map task index (0–7) → (n, gamma): n ∈ {2,3}, gamma ∈ {2,3,4,5}
@@ -34,7 +38,7 @@ mkdir -p "${HF_HOME}" "${WANDB_DIR}"
 
 echo "========================================="
 echo "  Array job: ${SLURM_ARRAY_JOB_ID} / task ${TASK_ID}"
-echo "  Language:  ${LANG_CODE}  |  n=${N}  |  gamma=${G}"
+echo "  Language:  ${LANG_CODE}  |  n=${N}  |  gamma=${G}  |  mode=${DECODING_MODE}"
 echo "  Node:      $(hostname)"
 echo "  GPU:       $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo '?')"
 echo "  Start:     $(date)"
@@ -43,7 +47,8 @@ echo "========================================="
 python run.py experiments/ngram.cfg \
     -o language_code="${LANG_CODE}" \
        ngram_n="${N}" \
-       gamma="${G}"
+       gamma="${G}" \
+       decoding_mode="${DECODING_MODE}"
 
 echo ""
 echo "  Done: $(date)"
