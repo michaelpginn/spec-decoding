@@ -10,7 +10,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
 #SBATCH --mem=64G
-#SBATCH --time=01:30:00
+#SBATCH --time=02:30:00
 #SBATCH --output=logs/ngram_%A_%a.out
 #SBATCH --error=logs/ngram_%A_%a.err
 
@@ -19,6 +19,9 @@ set -euo pipefail
 LANG_CODE="${LANG_CODE:-ber}"
 DECODING_MODE="${DECODING_MODE:-sample}"
 TASK_ID="${SLURM_ARRAY_TASK_ID:-0}"
+MAX_SAMPLES="${MAX_SAMPLES:-}"
+MAX_SAMPLES_MONO="${MAX_SAMPLES_MONO:-}"
+MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-}"
 
 # Map task index (0–7) → (n, gamma): n ∈ {2,3}, gamma ∈ {2,3,4,5}
 N=$(( TASK_ID / 4 + 2 ))
@@ -48,7 +51,10 @@ python run.py experiments/ngram.cfg \
     -o language_code="${LANG_CODE}" \
        ngram_n="${N}" \
        gamma="${G}" \
-       decoding_mode="${DECODING_MODE}"
+       decoding_mode="${DECODING_MODE}" \
+       ${MAX_SAMPLES:+max_samples="${MAX_SAMPLES}"} \
+       ${MAX_SAMPLES_MONO:+max_samples_mono="${MAX_SAMPLES_MONO}"} \
+       ${MAX_NEW_TOKENS:+max_new_tokens="${MAX_NEW_TOKENS}"}
 
 echo ""
 echo "  Done: $(date)"
