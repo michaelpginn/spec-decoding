@@ -131,18 +131,9 @@ mono_source_table = """\\begin{table}[h!]
 """
 for lang in sorted(languages):
     d = lang_data[lang]
-    total_tokens = short(d['bi']['train']['num_tokens'] + d['bi']['test']['num_tokens'])
-    temp = ""
-    for item in d['bi']['train']['sources'].keys():
-        if item.lower() == "tateoba":
-            temp += ", ".join("Tat")
-        elif item.lower() == "https://cherokeedictionary.net":
-            temp += ", ".join("ChEn")
-        elif item.lower() == "opus":
-            temp += ", ".join("Opus")
-        else:
-            temp = ", ".join(temp)
-    sources_list = temp
+    total_tokens = short(d['bi']['train']['num_examples'] + d['bi']['test']['num_examples'])
+
+    sources_list = ", ".join(d['bi']['train']['sources'].keys())
 
     mono_source_table += f"            {d['name']} [{lang}] & {total_tokens} & {sources_list} \\\\ \n"
 
@@ -164,11 +155,21 @@ bi_source_table = """\\begin{table}[h!]
             \\textbf{Language} & \\textbf{Total Tokens} & \\textbf{Sources} \\\\
             \\midrule
 """
+
 for lang in sorted(languages):
     d = lang_data[lang]
-    total_tokens = short(d['bi']['train']['num_examples'] + d['bi']['test']['num_examples'])
-
-    sources_list = ", ".join(d['bi']['train']['sources'].keys())
+    total_tokens = short(d['bi']['train']['num_tokens'] + d['bi']['test']['num_tokens'])
+    temp = ""
+    for item in d['bi']['train']['sources'].keys():
+        if item.lower() == "tateoba":
+            temp += ", ".join("Tat")
+        elif item.lower() == "https://cherokeedictionary.net":
+            temp += ", ".join("ChEn")
+        elif item.lower() == "opus":
+            temp += ", ".join("Opus")
+        else:
+            temp = ", ".join(temp)
+    sources_list = temp
 
     bi_source_table += f"            {d['name']} [{lang}] & {total_tokens} & {sources_list} \\\\ \n"
 
