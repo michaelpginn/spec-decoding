@@ -162,13 +162,13 @@ for lang in sorted(languages):
     temp = ""
     for item in d['bi']['train']['sources'].keys():
         if item.lower() == "tateoba":
-            temp += ", ".join("Tat")
+            temp += ", Tat"
         elif item.lower() == "https://cherokeedictionary.net":
-            temp += ", ".join("ChEn")
+            temp += ", ChEn"
         elif item.lower() == "opus":
-            temp += ", ".join("Opus")
+            temp += ", Opus"
         else:
-            temp += ", ".join(temp)
+            temp += item
     sources_list = temp
 
     bi_source_table += f"            {d['name']} [{lang}] & {total_tokens} & {sources_list} \\\\ \n"
