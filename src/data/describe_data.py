@@ -8,9 +8,10 @@ from collections import Counter
 from pathlib import Path
 from pprint import pprint
 
-# src.data.
-from dataset import assemble_dataset, get_language_name
 from transformers import AutoTokenizer
+
+#
+from src.data.dataset import assemble_dataset, get_language_name
 
 logging.basicConfig(
     level=logging.INFO,
@@ -69,7 +70,7 @@ for language in languages:
 pprint(lang_data)
 
 # Make latex tables
-Path("../../viz").mkdir(exist_ok=True)
+Path("./viz").mkdir(exist_ok=True)
 
 mono_table = """\\begin{table}[h!]
     \\small
@@ -96,7 +97,7 @@ mono_table += """            \\bottomrule
     \\caption{Monolingual corpora for each language, with token counts under the Qwen tokenizer. Sources are described in \\autoref{tab:mono_source_counts}.}
     \\label{tab:monolingual}
 \\end{table}"""
-with open("../../viz/monolingual.tex", 'w') as f:
+with open("./viz/monolingual.tex", 'w') as f:
     f.write(mono_table)
 
 parallel_table = """\\begin{table}[h!]
@@ -117,7 +118,7 @@ parallel_table += """            \\bottomrule
     \\caption{Number of parallel sentences for each language. Sources are described in \\autoref{tab:par_source_counts}. Our main evaluation uses the test split.}
     \\label{tab:bilingual}
 \\end{table}"""
-with open("../../viz/bilingual.tex", 'w') as f:
+with open("./viz/bilingual.tex", 'w') as f:
     f.write(parallel_table)
 
 # Source Count
@@ -143,7 +144,7 @@ mono_source_table += """            \\bottomrule
     \\label{tab:mono_source_counts}
 \\end{table}"""
 
-with open("../../viz/monolingual_source.tex", 'w') as f:
+with open("./viz/monolingual_source.tex", 'w') as f:
     f.write(mono_source_table)
 
 
@@ -183,5 +184,5 @@ bi_source_table += """            \\bottomrule
     \\label{tab:bi_source_counts}
 \\end{table}"""
 
-with open("../../viz/bilingual_source.tex", 'w') as f:
+with open("./viz/bilingual_source.tex", 'w') as f:
     f.write(bi_source_table)
