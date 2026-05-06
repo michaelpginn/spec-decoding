@@ -113,7 +113,6 @@ def generate_teacher_logprobs(config: DistillConfig) -> Dataset:
                 top_k=config.top_k,
             )
         data.append(outputs)
-    breakpoint()
     ds = Dataset.from_list(data)
     logger.info(f"Generated dataset: {len(ds)} examples")
     return ds
