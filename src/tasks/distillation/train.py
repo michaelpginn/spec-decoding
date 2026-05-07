@@ -182,7 +182,10 @@ def run_distillation(config: DistillConfig):
             item_prompt_len = batch[idx]["prompt_length"]
             input_ids[idx][0:item_seq_len] = torch.as_tensor(batch[idx]["token_ids"])
             attention_mask[idx][0:item_seq_len] = 1
-            topk_logprobs[idx][item_prompt_len-1:item_seq_len-1] = torch.as_tensor(batch[idx]["logprobs"])
+            try:
+                topk_logprobs[idx][item_prompt_len-1:item_seq_len-1] = torch.as_tensor(batch[idx]["logprobs"])
+            except:
+                breakpoint()
             topk_logprobs_indices[idx][item_prompt_len-1:item_seq_len-1] = torch.as_tensor(batch[idx]["logprobs_vocab_idx"])
             label_mask[idx][item_prompt_len-1:item_seq_len-1] = 1
 

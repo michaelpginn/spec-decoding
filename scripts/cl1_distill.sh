@@ -11,6 +11,21 @@
 #SBATCH --qos=blanca-clearlab1
 #SBATCH --mail-type=END,FAIL
 
+if [ "$#" -ne 2 ]; then
+    echo "Usage: $0 <config_file> <general|translation>" >&2
+    exit 1
+fi
+
+if [ ! -f "$1" ]; then
+    echo "Error: config file '$1' does not exist" >&2
+    exit 1
+fi
+
+if [ "$2" != "general" ] && [ "$2" != "translation" ]; then
+    echo "Error: second argument must be 'general' or 'translation' (got '$2')" >&2
+    exit 1
+fi
+
 export HF_HOME="/projects/$USER/.cache/huggingface"
 mkdir -p $HF_HOME
 
@@ -38,7 +53,8 @@ LANGS="amh ber chr grn haw ibo npi oci que yor zgh zh"
     do
         uv run scripts/distill.py "$1" \
             -o language_code=$lang \
-            output_dir="/scratch/alpine/$USER/spec-dec/"
+            output_dir="/scratch/alpine/$USER/spec-dec/" \
+            dataset_path="logprobs/logprobs-Qwen2.5-7B-Instruct-$lang-$2.parquet"
             # draft_model=$draft \
     done
 done
