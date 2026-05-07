@@ -62,7 +62,7 @@ if __name__ == "__main__":
     def one_run():
         run = setup_wandb(config)
         config.learning_rate = run.config["lr"]
-        run.config.update({"learning_rate": config.learning_rate})
+        run.config.update({"learning_rate": config.learning_rate}, allow_val_change=True)
         run_distillation(config)
     wandb.agent(sweep_id, function=one_run, count=5)
     sweep = wandb.Api().sweep(f"{entity}/{project}/sweeps/{sweep_id}")
