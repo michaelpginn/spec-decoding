@@ -1,8 +1,13 @@
 import itertools
-from re import L
 
+import nltk
 from nltk.corpus import wordnet as wn
 
+try:
+    wn.synsets('dog')
+except LookupError:
+    nltk.download('wordnet')
+    nltk.download('omw-1.4')
 
 class create_prompt:
     def __init__(self, num_prompts: int = 10) -> None:
@@ -22,8 +27,9 @@ class create_prompt:
             sample_nouns = [synset.name().split('.')[0] for synset in nouns[:self.num_prompts]]
 
             for i in range(self.num_prompts):
-                self.prompts[i+1] = f"Write a stroy in {self.language} about {sample_nouns[i]}"
+                self.prompts[i+1] = f"Write a story in {self.language} about a(n) {sample_nouns[i]}"
         else:
             wombos = self.get_combinations() #wombo = word combos
             for i in range(self.num_prompts):
-                self.prompts[i+1] = f"Write a stroy in {self.language} about {wombos[i]}"
+                self.prompts[i+1] = f"Write a stroy in {self.language} about a(n) {wombos[i]}"
+        return self.prompts
