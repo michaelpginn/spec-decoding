@@ -264,6 +264,7 @@ def run_distillation(config: DistillConfig):
 
             # Optimizer step (this is one "step")
             scaler.unscale_(optimizer)
+            unclipped_grad_norm = grad_norm(student)
             torch.nn.utils.clip_grad_norm_(student.parameters(), 1.0)
             scaler.step(optimizer)
             scaler.update()
@@ -284,6 +285,7 @@ def run_distillation(config: DistillConfig):
                     "train/loss": avg_loss,
                     "train/lr": current_lr,
                     "train/epoch": epoch,
+                    "train/grad_norm": unclipped_grad_norm,
                     "step": step,
                 })
                 log_accum_loss = 0.0
@@ -369,3 +371,12 @@ def _save_checkpoint(student, tokenizer, optimizer, output_dir, label,
         student.push_to_hub(hub_repo, commit_message=f"Distilled model (step {label})")
         tokenizer.push_to_hub(hub_repo, commit_message=f"Tokenizer (step {label})")
         logger.info(f"Pushed: https://huggingface.co/{hub_repo}")
+
+def grad_norm(model):
+    # Log grad norm
+    grad_norm = 0
+    for p in model.parameters():
+        param_norm = p.grad.detach().data.norm(2)
+        grad_norm += param_norm.item() ** 2
+    grad_norm = grad_norm**0.5
+    return grad_norm

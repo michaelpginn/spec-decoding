@@ -59,7 +59,7 @@ class DistillConfig:
     lr_scheduler: Literal["cosine", "linear", "constant"] = "cosine"
     max_length: int = 512
     eval_split_ratio: float = 0.05
-    eval_every: int = 200
+    eval_every: int = 50
 
     # Checkpointing & output
     hf_repo_id: str | None = None
