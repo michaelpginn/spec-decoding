@@ -25,10 +25,9 @@ def _model_short_name(model_id: str) -> str:
     return model_id.split("/")[-1]
 
 
-def build_repo_name(config: DistillConfig, dataset_len: int) -> str:
+def build_repo_name(config: DistillConfig) -> str:
     student = _model_short_name(config.student_model)
-    teacher = _model_short_name(config.teacher_model)
-    name = f"{config.task}-{teacher}-{student}-{config.language_code}-{dataset_len}"
+    name = f"{config.language_code}-{config.task}-{student}"
     if config.hf_repo_id:
         return f"{config.hf_repo_id}/{name}"
     return name
@@ -39,10 +38,6 @@ def setup_wandb(config: DistillConfig):
     teacher_short = _model_short_name(config.teacher_model)
     student_short = _model_short_name(config.student_model)
 
-    name = (
-        f"{config.task}_{config.language_code}"
-        f"_lr{config.learning_rate}_steps{config.max_steps}_ga{config.grad_accum_steps}"
-    )
     group = f"distill_{teacher_short}__{config.language_code}"
 
     tags = [
@@ -55,23 +50,19 @@ def setup_wandb(config: DistillConfig):
         f"steps={config.max_steps}",
         f"ga={config.grad_accum_steps}",
     ]
-    # Optional tag set by sweep runners (e.g. "grid_search").
-    _sweep_tag = os.environ.get("WANDB_DISTILL_SWEEP_TAG", "").strip()
-    if _sweep_tag:
-        tags.append(_sweep_tag)
 
-    wandb.init(
+    run = wandb.init(
         project=os.environ.get("WANDB_PROJECT", "spec-decoding-distill"),
         entity=os.environ.get("WANDB_ENTITY", "lecs-general"),
         config=asdict(config),
         group=group,
         job_type=f"distill-{config.task}",
-        name=name,
         tags=tags,
     )
     wandb.define_metric("step")
     wandb.define_metric("train/*", step_metric="step")
     wandb.define_metric("eval/*", step_metric="step")
+    return run
 
 
 def _build_scheduler(optimizer, config: DistillConfig) -> LambdaLR:
@@ -128,8 +119,6 @@ def run_distillation(config: DistillConfig):
     - task_specific: cross-entropy on teacher translations (SeqKD).
     - general: causal LM on monolingual text.
     """
-    setup_wandb(config)
-
     os.makedirs(config.output_dir, exist_ok=True)
 
     logger.info(f"Loading student model: {config.student_model}")
@@ -156,7 +145,7 @@ def run_distillation(config: DistillConfig):
     assert config.dataset_path
     dataset = datasets.Dataset.from_parquet(config.dataset_path)
     assert isinstance(dataset, datasets.Dataset)
-    repo_name = build_repo_name(config, len(dataset))
+    repo_name = build_repo_name(config)
     logger.info(f"HF repo: {repo_name}")
 
     # Train / eval split (randomized, seeded for reproducibility).
@@ -362,7 +351,8 @@ def _restore_training_state(config: DistillConfig, optimizer, scheduler, device)
 def _save_checkpoint(student, tokenizer, optimizer, output_dir, label,
                      repo_name=None, push_to_hub=False, scheduler=None):
     """Save model, tokenizer, optimizer, and scheduler state; optionally push to HF Hub."""
-    path = os.path.join(output_dir, f"checkpoint-{label}" if isinstance(label, int) else str(label))
+    run_name = wandb.run.name # type:ignore
+    path = os.path.join(output_dir, f"{run_name}-{label}.ckpt")
     os.makedirs(path, exist_ok=True)
 
     student.save_pretrained(path)
