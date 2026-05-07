@@ -145,6 +145,8 @@ def run_distillation(config: DistillConfig):
     assert config.dataset_path
     dataset = datasets.Dataset.from_parquet(config.dataset_path)
     assert isinstance(dataset, datasets.Dataset)
+    # There's a few one-token samples which we can't use for training
+    dataset = dataset.filter(lambda r: len(r['logprobs'] > 0))
     repo_name = build_repo_name(config)
     logger.info(f"HF repo: {repo_name}")
 
@@ -161,7 +163,6 @@ def run_distillation(config: DistillConfig):
     logger.info(
         f"Split: {len(train_dataset)} train, {len(eval_dataset)} eval examples"
     )
-
 
     def collate_fn(batch):
         # Build input IDs and full logits
@@ -182,10 +183,7 @@ def run_distillation(config: DistillConfig):
             item_prompt_len = batch[idx]["prompt_length"]
             input_ids[idx][0:item_seq_len] = torch.as_tensor(batch[idx]["token_ids"])
             attention_mask[idx][0:item_seq_len] = 1
-            try:
-                topk_logprobs[idx][item_prompt_len-1:item_seq_len-1] = torch.as_tensor(batch[idx]["logprobs"])
-            except:
-                breakpoint()
+            topk_logprobs[idx][item_prompt_len-1:item_seq_len-1] = torch.as_tensor(batch[idx]["logprobs"])
             topk_logprobs_indices[idx][item_prompt_len-1:item_seq_len-1] = torch.as_tensor(batch[idx]["logprobs_vocab_idx"])
             label_mask[idx][item_prompt_len-1:item_seq_len-1] = 1
 
