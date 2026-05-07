@@ -146,7 +146,7 @@ def run_distillation(config: DistillConfig):
     dataset = datasets.Dataset.from_parquet(config.dataset_path)
     assert isinstance(dataset, datasets.Dataset)
     # There's a few one-token samples which we can't use for training
-    dataset = dataset.filter(lambda r: len(r['logprobs'] > 0))
+    dataset = dataset.filter(lambda r: len(r['logprobs']) > 0)
     repo_name = build_repo_name(config)
     logger.info(f"HF repo: {repo_name}")
 
