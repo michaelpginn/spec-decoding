@@ -1,5 +1,4 @@
 import itertools
-import json
 
 import nltk
 import pandas as pd
@@ -35,5 +34,4 @@ def create_prompt(language_code:str, adj_n:bool=False, num_prompts:int=10):
         for i in range(num_prompts):
             prompts[i+1] = f"Write a story in {language} about a(n) {wombos[i]}"
 
-    with open("./data/prompts.json", 'w', encoding='utf-8') as f:
-        json.dump(list(prompts.values()), f, ensure_ascii=False, indent=4)
+    return prompts
