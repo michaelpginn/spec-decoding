@@ -1,4 +1,5 @@
 import itertools
+import json
 
 import nltk
 from nltk.corpus import wordnet as wn
@@ -23,6 +24,9 @@ def create_prompt(language:str, adj_n:bool=False, num_prompts:int=10):
         wombos = [f"{a} {n}" for a, n in zip(adjs, nouns)]
 
         for i in range(num_prompts):
-            prompts[i+1] = f"Write a stroy in {language} about a(n) {wombos[i]}"
+            prompts[i+1] = f"Write a story in {language} about a(n) {wombos[i]}"
+
+    with open("./data/prompts.json", 'w', encoding='utf-8') as f:
+        json.dump(list(prompts.values()), f, ensure_ascii=False, indent=4)
 
     return prompts
