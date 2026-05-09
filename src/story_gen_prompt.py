@@ -2,6 +2,7 @@ import itertools
 import json
 
 import nltk
+import pandas as pd
 from nltk.corpus import wordnet as wn
 
 try:
@@ -10,7 +11,15 @@ except LookupError:
     nltk.download('wordnet')
     nltk.download('omw-1.4')
 
-def create_prompt(language:str, adj_n:bool=False, num_prompts:int=10):
+def create_prompt(language_code:str, adj_n:bool=False, num_prompts:int=10):
+    if len(language_code) == 3:
+        biling = pd.read_csv("./data/reference_table_bilingual.csv")
+        monoling = pd.read_csv("./data/reference_table_monolingual.csv")
+        concat = pd.concat([biling,monoling])[['Language',"Code"]].drop_duplicates()
+        final_set = set(map(tuple, concat.values))
+        language = next((item[0] for item in final_set if item[1] == language_code), None)
+    else:
+        language=language_code
     prompts: dict = {}
     if not adj_n:
         nouns = list(wn.all_synsets('n'))
