@@ -37,5 +37,3 @@ def create_prompt(language_code:str, adj_n:bool=False, num_prompts:int=10):
 
     with open("./data/prompts.json", 'w', encoding='utf-8') as f:
         json.dump(list(prompts.values()), f, ensure_ascii=False, indent=4)
-
-    return prompts

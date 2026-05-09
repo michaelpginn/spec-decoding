@@ -30,11 +30,6 @@ def run(config: ExperimentConfig):
     """Run experiment: load config, init wandb, dispatch to task (e.g. translation)."""
     if config.task == "translation":
         from src.tasks.translation import compute_eval_metrics, load_data
-    elif config.task == "story_generation":
-        from src.story_gen_prompt import create_prompt
-        prompt_dict = create_prompt(
-            language = config.language
-        )
     else:
         raise NotImplementedError()
 
