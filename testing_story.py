@@ -1,12 +1,13 @@
 import argparse
+import logging
+import pprint
+
 import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 import src.story_gen_prompt
 from src.config.config import ExperimentConfig
 from src.config.config_to_dataclass import config_to_dataclass
-import pprint
-import logging
-from transformers import AutoTokenizer,AutoModelForCausalLM
 from src.generation import generate_output
 from src.utils import load_model
 
@@ -17,7 +18,7 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
-def main(config:ExperimentConfig)
+def main(config:ExperimentConfig):
     target_model, target_tokenizer = load_model(
         config.target_model, device=config.device
     )
