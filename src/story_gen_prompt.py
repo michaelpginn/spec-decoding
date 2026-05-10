@@ -12,8 +12,8 @@ except LookupError:
 
 def create_prompt(language_code:str, adj_n:bool=False, num_prompts:int=10):
     if len(language_code) == 3:
-        biling = pd.read_csv("./data/reference_table_bilingual.csv")
-        monoling = pd.read_csv("./data/reference_table_monolingual.csv")
+        biling = pd.read_csv("./src/data/reference_table_bilingual.csv")
+        monoling = pd.read_csv("./src/data/reference_table_monolingual.csv")
         concat = pd.concat([biling,monoling])[['Language',"Code"]].drop_duplicates()
         final_set = set(map(tuple, concat.values))
         language = next((item[0] for item in final_set if item[1] == language_code), None)
