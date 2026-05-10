@@ -2,9 +2,6 @@ import argparse
 import logging
 import pprint
 
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
 import src.story_gen_prompt
 from src.config.config import ExperimentConfig
 from src.config.config_to_dataclass import config_to_dataclass
