@@ -57,4 +57,4 @@ LANGS="amh ber chr grn haw ibo npi oci que yor zgh zh"
             dataset_path="logprobs/logprobs-Qwen2.5-7B-Instruct-$lang-$2.parquet"
             # draft_model=$draft \
     done
-done
+# done
