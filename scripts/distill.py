@@ -69,7 +69,7 @@ if __name__ == "__main__":
     best_run = sweep.best_run()
 
     # Push winner to hub
-    winner_path = Path(config.output_dir) / f"{best_run.name}-final.ckpt"
+    winner_path = Path(config.output_dir) / f"{config.language_code}-{config.student_model}-{config.task}-final.ckpt"
     student, _ = load_model(str(winner_path), device=config.device)
     config.hf_repo_id = hf_repo_id
     repo_name = build_repo_name(config)
