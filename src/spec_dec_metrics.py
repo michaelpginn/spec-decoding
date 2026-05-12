@@ -4,7 +4,7 @@ evaluation and metrics
 
 import logging
 from pathlib import Path
-from statistics import median
+from statistics import median, stdev
 
 import wandb
 
@@ -70,12 +70,20 @@ def _compute_common_metrics(
         for i, (t, tpt, tc) in enumerate(zip(times, time_per_token_list, token_counts))
     ]
 
+    # Per-sentence tokens/sec for std computation
+    tps_per_sentence = [
+        tc / t if t > 0 else 0.0 for t, tc in zip(times, token_counts)
+    ]
+
     summary = {
         "avg_time_per_sentence": total_time / n,
         "median_time_per_sentence": median(times),
         "avg_time_per_token": sum(time_per_token_list) / n,
         "tokens_per_second": total_tokens / total_time if total_time > 0 else 0,
+        "avg_tokens_per_second": sum(tps_per_sentence) / n,
     }
+    if n >= 2:
+        summary["std_tokens_per_second"] = stdev(tps_per_sentence)
 
     return per_sentence, summary
 
@@ -124,6 +132,15 @@ def _compute_spec_metrics(
     )
     mean_accepted = total_matched / total_iterations if total_iterations > 0 else 0
 
+    # Per-sentence values for std computation
+    per_sentence_acceptance_rates = [r["acceptance_rate"] for r in spec_results]
+    per_sentence_accepted_tokens = [
+        r["matched_tokens"] / (r.get("num_iterations", r["draft_tokens"] / gamma))
+        if r.get("num_iterations", r["draft_tokens"] / gamma) > 0 else 0.0
+        for r in spec_results
+    ]
+
+    n = len(spec_results)
     summary = {}
     summary["draft_to_output_ratio"] = (
         total_draft / total_generated if total_generated > 0 else 0
@@ -131,11 +148,14 @@ def _compute_spec_metrics(
     summary["token_weighted_acceptance_rate"] = (
         total_matched / total_draft if total_draft > 0 else 0
     )
-    summary["sentence_avg_acceptance_rate"] = sum(
-        r["acceptance_rate"] for r in spec_results
-    ) / len(spec_results)
+    summary["sentence_avg_acceptance_rate"] = sum(per_sentence_acceptance_rates) / n
     summary["mean_accepted_tokens"] = mean_accepted
     summary["block_efficiency"] = mean_accepted / gamma if gamma > 0 else 0
+
+    # Standard deviations
+    if n >= 2:
+        summary["std_acceptance_rate"] = stdev(per_sentence_acceptance_rates)
+        summary["std_mean_accepted_tokens"] = stdev(per_sentence_accepted_tokens)
     
     # Compute speedup factor (CUDA only)
     summary["average_draft_time"] = sum(
