@@ -80,10 +80,10 @@ def _compute_common_metrics(
         "median_time_per_sentence": median(times),
         "avg_time_per_token": sum(time_per_token_list) / n,
         "tokens_per_second": total_tokens / total_time if total_time > 0 else 0,
-        "avg_tokens_per_second": sum(tps_per_sentence) / n,
+        "sentence_avg_tokens_per_second": sum(tps_per_sentence) / n,
     }
     if n >= 2:
-        summary["std_tokens_per_second"] = stdev(tps_per_sentence)
+        summary["sentence_std_tokens_per_second"] = stdev(tps_per_sentence)
 
     return per_sentence, summary
 
@@ -154,8 +154,8 @@ def _compute_spec_metrics(
 
     # Standard deviations
     if n >= 2:
-        summary["std_acceptance_rate"] = stdev(per_sentence_acceptance_rates)
-        summary["std_mean_accepted_tokens"] = stdev(per_sentence_accepted_tokens)
+        summary["sentence_std_acceptance_rate"] = stdev(per_sentence_acceptance_rates)
+        summary["sentence_std_mean_accepted_tokens"] = stdev(per_sentence_accepted_tokens)
     
     # Compute speedup factor (CUDA only)
     summary["average_draft_time"] = sum(
