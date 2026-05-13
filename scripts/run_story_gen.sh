@@ -2,7 +2,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
-#SBATCH --mem=32G
+#SBATCH --mem=40G
 #SBATCH --time=1:00:00
 #SBATCH --output=logs/%j.log
 #SBATCH --job-name=specdec

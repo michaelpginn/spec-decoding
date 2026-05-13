@@ -22,9 +22,10 @@ def main(config:ExperimentConfig):
 
     draft_model = None
     if config.draft_model_type != "none":
-        draft_model, draft_tokenizer = load_model(
-            config.draft_model, device=config.device
-        )
+            draft_model, draft_tokenizer = load_model(
+                config.draft_model,
+                device=config.device
+            )
 
     prompts = src.story_gen_prompt.create_prompt(
         language_code=config.language_code,
@@ -45,14 +46,14 @@ def main(config:ExperimentConfig):
             add_generation_prompt=True
         )
 
-        inputs = tokenizer(text, return_tensors="pt").to("cuda")
+        inputs = tokenizer(text, return_tensors="pt").to(config.device)
 
         decoded_story, metrics = generate_output(
             inputs=inputs,
             model=target_model,
             tokenizer=tokenizer,
             draft_model=draft_model,
-            draft_tokenizer=tokenizer,
+            draft_tokenizer=draft_model if draft_model else None,
             config=config
         )
 
@@ -61,15 +62,8 @@ def main(config:ExperimentConfig):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "config", help="A config file (cfg, ini) with configuration parameters"
-    )
-    parser.add_argument(
-        "--overrides",
-        "-o",
-        help="Override config arguments, in the format `key1=value1 key2=value2`",
-        nargs="+",
-    )
+    parser.add_argument("config", help="Path to the config file")
+    parser.add_argument("--overrides", "-o", nargs="+", help="Config overrides")
 
     args = parser.parse_args()
     config = config_to_dataclass(
@@ -77,6 +71,5 @@ if __name__ == "__main__":
         overrides=args.overrides or [],
         dataclass_type=ExperimentConfig,
     )
-    logger.info(f"Experiment config:\n{pprint.pformat(config)}")
 
     main(config)
