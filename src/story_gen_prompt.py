@@ -16,7 +16,7 @@ def create_prompt(language_code:str, adj_n:bool=False, num_prompts:int=10):
         monoling = pd.read_csv("./src/data/reference_table_monolingual.csv")
         concat = pd.concat([biling,monoling])[['Language',"Code"]].drop_duplicates()
         final_set = set(map(tuple, concat.values))
-        language = next((item[0] for item in final_set if item[1] == language_code), None)
+        language = next((item[0] for item in final_set if item[1] == language_code), language_code)
     else:
         language=language_code
     prompts: dict = {}

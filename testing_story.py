@@ -31,9 +31,21 @@ def main(config:ExperimentConfig):
         adj_n=True,
         num_prompts=1
     )
+
     tokenizer = target_tokenizer
     for prompt in prompts.values():
-        inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+        messages = [
+            {"role": "system", "content": f"You are a helpful assistant who only writes in {config.language_code}."},
+            {"role": "user", "content": prompt}
+        ]
+
+        text = tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True
+        )
+
+        inputs = tokenizer(text, return_tensors="pt").to("cuda")
 
         decoded_story, metrics = generate_output(
             inputs=inputs,
