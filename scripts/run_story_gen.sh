@@ -11,6 +11,12 @@
 #SBATCH --qos=blanca-clearlab2
 #SBATCH --mail-type=END,FAIL
 
+if [ -z "$1" ]; then
+    echo "Error: No config file provided. Usage: sbatch run_multiple_ngram.sh path/to/config.yaml"
+    exit 1
+fi
+CONFIG_FILE=$1
+
 export HF_HOME="/projects/$USER/.cache/huggingface"
 mkdir -p $HF_HOME
 
@@ -31,4 +37,10 @@ PY
 
 cd ..
 
-uv run python testing_story.py "$1" "${@:2}"
+langs=("ber" "chr" "haw" "ibo" "amh" "yor" "oci" "grn" "yua" "zgh")
+
+for item in "${langs[@]}"; do
+    echo "-----------------------------------"
+    echo "running ${item}"
+    uv run python testing_story.py "$CONFIG_FILE" --override language_code=$item
+done
