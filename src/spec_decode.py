@@ -99,6 +99,8 @@ def speculative_decode(
     gamma: int = 5,
     top_k: int = 0,
     top_p: float = 0.0,
+    repetition_penalty: float = 1.0,
+    repetition_penalty_window: int = 64,
     eos_token_id: int | None = None,
     device=None,
     track_iterations: bool = False,
@@ -117,6 +119,10 @@ def speculative_decode(
         gamma: Number of draft tokens to generate per iteration
         top_k: If > 0, only sample from the top k tokens
         top_p: If > 0 and < 1, keep the smallest set of tokens whose cumulative prob >= p
+        repetition_penalty: Multiplicative penalty (> 1.0) applied to logits of tokens
+            already present in the recent context window. 1.0 = disabled.
+        repetition_penalty_window: Number of most-recent tokens to consider as the
+            penalty context. Applied identically to both draft and target models.
         eos_token_id: End of sequence token ID
         device: Device to run on
 
@@ -135,6 +141,39 @@ def speculative_decode(
 
     def select_index(logprobs: torch.Tensor):
         return sample(logprobs, mode)
+
+    def penalize_logits(
+        logits: torch.Tensor,
+        confirmed_len: int,
+        draft_so_far: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Apply windowed repetition penalty to raw logits.
+
+        Builds the penalty context as:
+            last `repetition_penalty_window` tokens of
+            generated_tokens[:, :confirmed_len] ++ draft_so_far (if any)
+
+        This is called with raw logits (before log_softmax) so the
+        positive/negative sign distinction in the penalty formula is meaningful.
+
+        Args:
+            logits:       Raw model logits, shape [bs, d_vocab].
+            confirmed_len: Number of confirmed tokens in generated_tokens
+                          (i.e. cur_gen_idx at the time of the call).
+            draft_so_far: Draft tokens generated in the current iteration
+                          so far, shape [bs, n_draft]. None or empty = no drafts yet.
+        Returns:
+            Penalized logits, same shape as input.
+        """
+        if repetition_penalty == 1.0:
+            return logits
+        # Build context: confirmed portion of generated_tokens + any draft tokens
+        ctx = generated_tokens[:, :confirmed_len]
+        if draft_so_far is not None and draft_so_far.size(-1) > 0:
+            ctx = torch.cat([ctx, draft_so_far], dim=-1)
+        # Slide to the last `repetition_penalty_window` tokens
+        ctx = ctx[:, -repetition_penalty_window:]
+        return apply_repetition_penalty(logits, ctx, repetition_penalty)
 
     stop_token_ids = torch.tensor(
         list(get_stop_token_ids(tokenizer, eos_token_id)), device=device
@@ -178,9 +217,11 @@ def speculative_decode(
         target_kv_cache = target_out.past_key_values
         draft_kv_cache = draft_model(input_ids, use_cache=True).past_key_values
 
-        # Add the first new token
+        # Add the first new token.
+        # Penalty context: the last W tokens of the prompt (no generated tokens yet).
+        first_logits = penalize_logits(target_out.logits[:, -1, :], confirmed_len=cur_gen_idx)
         last_target_token = select_index(
-            apply_filters(torch.log_softmax(target_out.logits[:, -1, :], dim=-1))
+            apply_filters(torch.log_softmax(first_logits, dim=-1))
         )
         generated_tokens[:, cur_gen_idx] = last_target_token
         cur_gen_idx += 1
@@ -224,8 +265,17 @@ def speculative_decode(
                     use_cache=True,
                 )
                 draft_kv_cache = draft_out.past_key_values
+                # Penalty context: confirmed tokens + draft tokens produced so far
+                # (new_draft_tokens[:, :idx] holds the idx tokens drafted this iteration).
                 draft_out_logprobs = apply_filters(
-                    torch.log_softmax(draft_out.logits[:, -1, :], dim=-1)
+                    torch.log_softmax(
+                        penalize_logits(
+                            draft_out.logits[:, -1, :],
+                            confirmed_len=cur_gen_idx,
+                            draft_so_far=new_draft_tokens[:, :idx],
+                        ),
+                        dim=-1,
+                    )
                 )
                 next_draft_token = select_index(draft_out_logprobs)  # (bs,)
                 new_draft_tokens[:, idx] = next_draft_token
@@ -259,18 +309,37 @@ def speculative_decode(
                 draft_times_acc = (draft_times_acc[0] + draft_start.elapsed_time(draft_end), draft_times_acc[1] + new_draft_tokens.size(-1))
                 verifier_times_acc = (verifier_times_acc[0] + verifier_start.elapsed_time(verifier_end), verifier_times_acc[1] + 1)
             
-            # Find the first collision, if any
+            # Find the first collision, if any.
+            #
+            # Apply repetition penalty per-position BEFORE log_softmax so that
+            # the target distribution matches what the draft model saw at each step.
+            # Position j verifies draft token j, so its penalty context is:
+            #   confirmed tokens + new_draft_tokens[:, :j]  (same as draft step j).
+            # Position `n_draft` (the bonus token) uses all draft tokens as context.
+            #
+            # We must use the raw logits here, not the post-softmax values, because
+            # apply_repetition_penalty relies on logit sign to decide divide vs multiply.
+            n_draft = new_draft_tokens.size(-1)  # may be < gamma if EOS was hit early
+            target_raw_logits = target_out.logits  # (bs, n_draft+1, d_vocab)
+            penalized_target_logits = torch.empty_like(target_raw_logits)
+            for j in range(n_draft + 1):
+                # draft_so_far at verification position j equals the first j draft tokens
+                penalized_target_logits[:, j, :] = penalize_logits(
+                    target_raw_logits[:, j, :],
+                    confirmed_len=cur_gen_idx,
+                    draft_so_far=new_draft_tokens[:, :j],
+                )
             target_out_logprobs = apply_filters(
-                torch.log_softmax(target_out.logits, dim=-1)
-            )  # (bs,seq,d_vocab)
+                torch.log_softmax(penalized_target_logits, dim=-1)
+            )  # (bs, n_draft+1, d_vocab)
             target_out_chosen_logprobs = (
                 target_out_logprobs[:, :-1, :]
                 .gather(-1, new_draft_tokens.unsqueeze(-1))
                 .squeeze(-1)
-            )  # (bs,seq)
+            )  # (bs, n_draft)
             draft_out_chosen_logprobs = new_draft_token_logprobs.gather(
                 -1, new_draft_tokens.unsqueeze(-1)
-            ).squeeze(-1)  # (bs,seq)
+            ).squeeze(-1)  # (bs, n_draft)
 
             # First, check if p_draft(t) <= p_target(t)
             lower_draft_prob = draft_out_chosen_logprobs <= target_out_chosen_logprobs
@@ -467,3 +536,59 @@ def apply_top_p(logits: torch.Tensor, p: float) -> torch.Tensor:
     logits_filtered = logits.masked_fill(indices_to_remove, float("-inf"))
 
     return logits_filtered
+
+
+def apply_repetition_penalty(
+    logits: torch.Tensor,
+    context_ids: torch.Tensor,
+    penalty: float,
+) -> torch.Tensor:
+    """Apply multiplicative repetition penalty to raw logits.
+
+    Only tokens that appear **more than once** in `context_ids` are penalized.
+    A token's first occurrence in the window is free — the penalty only fires
+    when the model tries to emit a token it has already repeated within the
+    current window.
+
+    For each such repeated token ID:
+        - If logit > 0  ->  logit /= penalty   (shrinks toward zero -> less probable)
+        - If logit < 0  ->  logit *= penalty   (pushed further negative -> even less probable)
+
+    The penalty must be applied to *raw logits* (before log_softmax) so that the
+    positive/negative sign distinction in the formula is meaningful.
+
+    Args:
+        logits:      Raw model logits, shape [bs, d_vocab].
+        context_ids: Token IDs in the penalty window, shape [bs, ctx_len].
+        penalty:     Penalty factor (> 1.0). 1.0 = no-op.
+
+    Returns:
+        Penalized logits, same shape and dtype as input.
+    """
+    if penalty == 1.0 or context_ids.size(-1) == 0:
+        return logits
+
+    logits = logits.clone()
+    vocab_size = logits.size(-1)
+    for b in range(logits.size(0)):
+        ctx = context_ids[b]
+        # Filter out any out-of-range IDs (e.g. padding zeros that aren't real tokens).
+        ctx = ctx[(ctx >= 0) & (ctx < vocab_size)]
+        if ctx.numel() == 0:
+            continue
+
+        # Count how many times each token ID appears in the window.
+        counts = torch.bincount(ctx, minlength=vocab_size)  # shape [vocab_size]
+
+        # Only penalize tokens that appear MORE THAN ONCE (genuine repetition).
+        repeated_ids = counts.nonzero(as_tuple=False).squeeze(-1)
+        repeated_ids = repeated_ids[counts[repeated_ids] > 1]
+
+        if repeated_ids.numel() == 0:
+            continue
+
+        score = logits[b, repeated_ids]
+        logits[b, repeated_ids] = torch.where(
+            score > 0, score / penalty, score * penalty
+        )
+    return logits

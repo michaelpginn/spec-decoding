@@ -13,6 +13,14 @@ class ExperimentConfig:
     decoding_mode: Literal["greedy", "sample"]
     top_k: int = 0
     top_p: float = 0.0
+
+    # Repetition penalty — only fires when a token appears >=2 times in the window.
+    # 1.0  = disabled (default; preserves existing experiment behaviour).
+    # >1.5 = risk of incoherent output; avoid.
+
+    repetition_penalty: float = 1.0
+    repetition_penalty_window: int = 16
+
     gamma: int = 5
     track_iterations: bool = False # If true, will log per-iteration of SD
 
