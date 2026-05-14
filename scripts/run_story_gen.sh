@@ -3,7 +3,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=40G
-#SBATCH --time=1:00:00
+#SBATCH --time=2:00:00
 #SBATCH --output=logs/%j.log
 #SBATCH --job-name=specdec
 #SBATCH --partition=blanca-clearlab2
@@ -17,7 +17,7 @@ if [ -z "$1" ]; then
 fi
 CONFIG_FILE=$1
 
-export HF_HOME="/projects/$USER/.cache/huggingface"
+export HF_HOME="/scratch/alpine/$USER/.cache/huggingface"
 mkdir -p $HF_HOME
 
 module load uv
@@ -37,7 +37,7 @@ PY
 
 cd ..
 
-langs=("ber" "chr" "haw" "ibo" "amh" "yor" "oci" "grn" "yua" "zgh")
+langs=("ber" "chr" "haw" "ibo" "amh" "yor" "npi" "oci" "que" "grn" "yua" "zgh" "zh")
 
 for item in "${langs[@]}"; do
     echo "-----------------------------------"
