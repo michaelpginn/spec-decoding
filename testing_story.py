@@ -1,6 +1,7 @@
 import argparse
 import logging
-import pprint
+
+import torch
 
 import src.story_gen_prompt
 from src.config.config import ExperimentConfig
@@ -16,16 +17,19 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 def main(config:ExperimentConfig):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
     target_model, target_tokenizer = load_model(
-        config.target_model, device=config.device
+        config.target_model, device=device
     )
 
     draft_model = None
+    draft_tokenizer = None
     if config.draft_model_type != "none":
-            draft_model, draft_tokenizer = load_model(
-                config.draft_model,
-                device=config.device
-            )
+        draft_model, draft_tokenizer = load_model(
+            config.draft_model,
+            device=device
+        )
 
     prompts = src.story_gen_prompt.create_prompt(
         language_code=config.language_code,
@@ -33,27 +37,26 @@ def main(config:ExperimentConfig):
         num_prompts=1
     )
 
-    tokenizer = target_tokenizer
     for prompt in prompts.values():
         messages = [
             {"role": "system", "content": f"You are a helpful assistant who only writes in {config.language_code}."},
             {"role": "user", "content": prompt}
         ]
 
-        text = tokenizer.apply_chat_template(
+        text = target_tokenizer.apply_chat_template(
             messages,
             tokenize=False,
             add_generation_prompt=True
         )
 
-        inputs = tokenizer(text, return_tensors="pt").to(config.device)
+        inputs = target_tokenizer(text, return_tensors="pt").to(device)
 
         decoded_story, metrics = generate_output(
             inputs=inputs,
             model=target_model,
-            tokenizer=tokenizer,
+            tokenizer=target_tokenizer,
             draft_model=draft_model,
-            draft_tokenizer=draft_model if draft_model else None,
+            draft_tokenizer=draft_tokenizer,
             config=config
         )
 
