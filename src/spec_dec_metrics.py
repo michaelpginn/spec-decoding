@@ -174,6 +174,10 @@ def _compute_spec_metrics(
 
         summary["average_draft_time"] = mu_d
         summary["average_verifier_time"] = mu_v
+        summary["draft_time_std"] = math.sqrt(var_d)
+        summary["verifier_time_std"] = math.sqrt(var_v)
+        summary["draft_time_count"] = total_d_n
+        summary["verifier_time_count"] = total_v_n
 
         if mu_d > 0 and mu_v > 0:
             c = mu_d / mu_v  # drafter cost ratio

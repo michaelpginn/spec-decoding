@@ -17,6 +17,10 @@ N = number of sentences (max_samples). All times exclude prompt prefill.
 | sentence_std_tokens_per_second | sample stdev of per-sentence tok/s (N ≥ 2) | tok/s |
 | average_draft_time | mean time for single forward pass | s |
 | average_verifier_time | mean time for single forward pass | s |
+| draft_time_std | standard deviation of draft forward pass times | s |
+| verifier_time_std | standard deviation of verifier forward pass times | s |
+| draft_time_count | total number of draft forward passes | count |
+| verifier_time_count | total number of verifier forward passes | count |
 
 
 ### Quality
