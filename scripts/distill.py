@@ -6,9 +6,7 @@ import logging
 import os
 from pathlib import Path
 import pprint
-from typing import cast
 
-from transformers import PreTrainedModel
 import wandb
 
 from src.config.config import DistillConfig
@@ -69,9 +67,10 @@ if __name__ == "__main__":
     best_run = sweep.best_run()
 
     # Push winner to hub
-    winner_path = Path(config.output_dir) / f"{config.language_code}-{config.student_model}-{config.task}-final.ckpt"
-    student, _ = load_model(str(winner_path), device=config.device)
+    winner_path = Path(config.output_dir) / f"{best_run.name}-final.ckpt"
+    student, tokenizer = load_model(str(winner_path), device=config.device)
     config.hf_repo_id = hf_repo_id
     repo_name = build_repo_name(config)
     logger.info(f"Pushing to HF Hub: {repo_name}")
     student.push_to_hub(repo_name, commit_message="Distilled model") # type:ignore
+    tokenizer.push_to_hub(repo_name, commit_message="Distilled tokenizer")

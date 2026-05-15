@@ -27,7 +27,8 @@ def _model_short_name(model_id: str) -> str:
 
 def build_repo_name(config: DistillConfig) -> str:
     student = _model_short_name(config.student_model)
-    name = f"{config.language_code}-{config.task}-{student}"
+    teacher = _model_short_name(config.teacher_model)
+    name = f"{config.language_code}-{config.task}-{teacher}-{student}"
     if config.hf_repo_id:
         return f"{config.hf_repo_id}/{name}"
     return name
