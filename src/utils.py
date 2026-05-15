@@ -41,14 +41,14 @@ def load_model(model_name: str, device: str = "auto"):
     if dev.type == "cuda":
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
             trust_remote_code=True,
         )
     else:
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            torch_dtype=torch.bfloat16 if dev.type == "mps" else torch.float32,
+            dtype=torch.bfloat16 if dev.type == "mps" else torch.float32,
             trust_remote_code=True,
         )
         model = model.to(dev)
