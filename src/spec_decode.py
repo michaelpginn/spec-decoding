@@ -158,9 +158,10 @@ def speculative_decode(
     cur_gen_idx = input_ids.size(1)
 
     # Track average time for draft and verifier forward pass for speedup factor
+    # Each accumulator: (sum_of_times, sum_of_squared_times, count)
     draft_start,draft_end,verifier_start, verifier_end   = None, None, None, None
-    draft_times_acc = (0., 0)
-    verifier_times_acc = (0., 0)
+    draft_times_acc = (0., 0., 0)
+    verifier_times_acc = (0., 0., 0)
     if device.type == 'cuda':
         draft_start = torch.cuda.Event(enable_timing=True)
         draft_end = torch.cuda.Event(enable_timing=True)
@@ -256,8 +257,22 @@ def speculative_decode(
             # Record times (CUDA only)
             if draft_start and draft_end and verifier_start and verifier_end:
                 torch.cuda.synchronize()
-                draft_times_acc = (draft_times_acc[0] + draft_start.elapsed_time(draft_end), draft_times_acc[1] + new_draft_tokens.size(-1))
-                verifier_times_acc = (verifier_times_acc[0] + verifier_start.elapsed_time(verifier_end), verifier_times_acc[1] + 1)
+                # Draft: we only measure total drafting time for the batch of n tokens.
+                # We treat each token as taking elapsed/n time (uniform split).
+                # sum_sq contribution = n * (elapsed/n)^2 = elapsed^2/n
+                draft_elapsed = draft_start.elapsed_time(draft_end)  # ms
+                n_drafted = new_draft_tokens.size(-1)
+                draft_times_acc = (
+                    draft_times_acc[0] + draft_elapsed,
+                    draft_times_acc[1] + (draft_elapsed**2 / n_drafted if n_drafted > 0 else 0),
+                    draft_times_acc[2] + n_drafted,
+                )
+                verifier_elapsed = verifier_start.elapsed_time(verifier_end)  # ms
+                verifier_times_acc = (
+                    verifier_times_acc[0] + verifier_elapsed,
+                    verifier_times_acc[1] + verifier_elapsed**2,
+                    verifier_times_acc[2] + 1,
+                )
             
             # Find the first collision, if any
             target_out_logprobs = apply_filters(
@@ -308,7 +323,7 @@ def speculative_decode(
             else:
                 total_matched_tokens += new_draft_tokens.size(-1)
                 total_draft_tokens += new_draft_tokens.size(-1)
-                if torch.isin(new_draft_tokens[:, -1], stop_token_ids).any():
+                if new_draft_tokens.size(-1) > 0 and torch.isin(new_draft_tokens[:, -1], stop_token_ids).any():
                     # If we've reached <eos>, don't add bonus token
                     tokens_to_add = new_draft_tokens
                 else:
@@ -387,11 +402,18 @@ def speculative_decode(
     }
     
     # Forward pass times for speedup factor
-    if draft_times_acc[1] > 0 and verifier_times_acc[1] > 0:
-        average_draft_time = draft_times_acc[0] / draft_times_acc[1]
-        average_verifier_time = verifier_times_acc[0] / verifier_times_acc[1]
-        metrics["average_draft_time"] = average_draft_time / 1000 # seconds
+    if draft_times_acc[2] > 0 and verifier_times_acc[2] > 0:
+        d_sum, d_sum_sq, d_n = draft_times_acc
+        v_sum, v_sum_sq, v_n = verifier_times_acc
+        average_draft_time = d_sum / d_n          # ms
+        average_verifier_time = v_sum / v_n        # ms
+        metrics["average_draft_time"] = average_draft_time / 1000  # seconds
         metrics["average_verifier_time"] = average_verifier_time / 1000
+        # Variance of individual forward pass times (population variance, in ms^2)
+        metrics["draft_time_variance"] = (d_sum_sq / d_n - average_draft_time**2) / 1e6  # s^2
+        metrics["verifier_time_variance"] = (v_sum_sq / v_n - average_verifier_time**2) / 1e6  # s^2
+        metrics["draft_time_count"] = d_n
+        metrics["verifier_time_count"] = v_n
 
     if track_iterations:
         metrics["iteration_history"] = iteration_history

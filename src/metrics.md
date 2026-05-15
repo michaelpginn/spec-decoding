@@ -34,6 +34,7 @@ N = number of sentences (max_samples). All times exclude prompt prefill.
 | block_efficiency | mean_accepted_tokens / gamma | 0.0–1.0 |
 | draft_to_output_ratio | sum(draft tokens) / sum(generated tokens) across all N sentences | >= 1.0 |
 | speedup_factor | Expected time without spec decoding / with | >= 0.0 |
+| speedup_factor_std | Std of speedup via delta method on α and c=T_d/T_v (N ≥ 2, CUDA only) | ≥ 0.0 |
 | sentence_std_acceptance_rate | sample stdev of per-sentence acceptance rates (N ≥ 2) | 0.0–1.0 |
 | sentence_std_mean_accepted_tokens | sample stdev of per-sentence mean accepted tokens (N ≥ 2) | ≥ 0.0 |
 ---
