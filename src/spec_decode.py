@@ -668,9 +668,6 @@ def apply_repetition_penalty_batched(
         # We compute the base counts over the confirmed portion that is
         # within the window even at the widest position (the bonus token).
         confirmed_in_window = confirmed[-window:] if window > 0 else confirmed
-        confirmed_in_window = confirmed_in_window[
-            (confirmed_in_window >= 0) & (confirmed_in_window < vocab_size)
-        ]
         base_counts = torch.bincount(confirmed_in_window, minlength=vocab_size)
 
         # Step 2: Build incremental counts matrix
