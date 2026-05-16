@@ -410,8 +410,10 @@ def speculative_decode(
         metrics["average_draft_time"] = average_draft_time / 1000  # seconds
         metrics["average_verifier_time"] = average_verifier_time / 1000
         # Variance of individual forward pass times (population variance, in ms^2)
-        metrics["draft_time_variance"] = (d_sum_sq / d_n - average_draft_time**2) / 1e6  # s^2
-        metrics["verifier_time_variance"] = (v_sum_sq / v_n - average_verifier_time**2) / 1e6  # s^2
+        raw_draft_variance = d_sum_sq / d_n - average_draft_time**2
+        raw_verifier_variance = v_sum_sq / v_n - average_verifier_time**2
+        metrics["draft_time_variance"] = max(raw_draft_variance, 0.0) / 1e6  # s^2
+        metrics["verifier_time_variance"] = max(raw_verifier_variance, 0.0) / 1e6  # s^2
         metrics["draft_time_count"] = d_n
         metrics["verifier_time_count"] = v_n
 
