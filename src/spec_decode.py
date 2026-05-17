@@ -175,34 +175,6 @@ def speculative_decode(
         ctx = ctx[:, -repetition_penalty_window:]
         return apply_repetition_penalty(logits, ctx, repetition_penalty)
 
-    def penalize_logits_batched(
-        logits: torch.Tensor,
-        confirmed_len: int,
-        draft_tokens: torch.Tensor,
-    ) -> torch.Tensor:
-        """Apply windowed repetition penalty to all verification positions at once.
-
-        Instead of calling penalize_logits in a Python loop for each position
-        j in [0, n_draft], this builds a (n_positions, vocab_size) counts
-        matrix incrementally and applies the penalty in one vectorized pass.
-
-        Position j's context = confirmed_tokens[-W:] ++ draft_tokens[:j].
-        Position n_draft (bonus) uses all draft_tokens.
-
-        Args:
-            logits:        Raw target logits, shape [bs, n_draft+1, d_vocab].
-            confirmed_len: Number of confirmed tokens in generated_tokens.
-            draft_tokens:  Draft tokens from this iteration, shape [bs, n_draft].
-        Returns:
-            Penalized logits, same shape as input.
-        """
-        if repetition_penalty == 1.0:
-            return logits
-        return apply_repetition_penalty_batched(
-            logits, generated_tokens, confirmed_len, draft_tokens,
-            repetition_penalty, repetition_penalty_window,
-        )
-
     stop_token_ids = torch.tensor(
         list(get_stop_token_ids(tokenizer, eos_token_id)), device=device
     )
@@ -238,7 +210,7 @@ def speculative_decode(
         if device.type == "cuda":
             torch.cuda.synchronize()
         return time.time()
-        
+
     with torch.no_grad():
         # Preload kv cache for prompts
         target_out = target_model(input_ids, use_cache=True)
@@ -330,13 +302,13 @@ def speculative_decode(
                 use_cache=True,
             )
             _ = verifier_end and verifier_end.record()
-            
+
             # Record times (CUDA only)
             if draft_start and draft_end and verifier_start and verifier_end:
                 torch.cuda.synchronize()
                 draft_times_acc = (draft_times_acc[0] + draft_start.elapsed_time(draft_end), draft_times_acc[1] + new_draft_tokens.size(-1))
                 verifier_times_acc = (verifier_times_acc[0] + verifier_start.elapsed_time(verifier_end), verifier_times_acc[1] + 1)
-            
+
             # Find the first collision, if any.
             #
             # Apply repetition penalty per-position BEFORE log_softmax so that
@@ -347,12 +319,13 @@ def speculative_decode(
             #
             # We must use the raw logits here, not the post-softmax values, because
             # apply_repetition_penalty relies on logit sign to decide divide vs multiply.
-            n_draft = new_draft_tokens.size(-1)  # may be < gamma if EOS was hit early
             target_raw_logits = target_out.logits  # (bs, n_draft+1, d_vocab)
-            penalized_target_logits = penalize_logits_batched(
-                target_raw_logits,
+            penalized_target_logits = apply_repetition_penalty_batched(
+                logits=target_raw_logits,
+                generated_tokens=target_input_ids,
                 confirmed_len=cur_gen_idx,
-                draft_tokens=new_draft_tokens,
+                penalty=repetition_penalty,
+                window=repetition_penalty_window,
             )
             target_out_logprobs = apply_filters(
                 torch.log_softmax(penalized_target_logits, dim=-1)
@@ -479,7 +452,7 @@ def speculative_decode(
         "num_iterations": num_iterations,
         "toks_per_sec": total_generated_tokens / total_time if total_time > 0 else 0,
     }
-    
+
     # Forward pass times for speedup factor
     if draft_times_acc[1] > 0 and verifier_times_acc[1] > 0:
         average_draft_time = draft_times_acc[0] / draft_times_acc[1]
@@ -593,29 +566,14 @@ def apply_repetition_penalty(
     if penalty == 1.0 or context_ids.size(-1) == 0:
         return logits
 
-    logits = logits.clone()
-    vocab_size = logits.size(-1)
     for b in range(logits.size(0)):
-        ctx = context_ids[b]
-        # Defensive guard: keep only valid token IDs in [0, vocab_size).
-        # Current callers already ensure clean slices, so this is a safety net.
-        ctx = ctx[(ctx >= 0) & (ctx < vocab_size)]
-        if ctx.numel() == 0:
-            continue
-
-        # Count how many times each token ID appears in the window.
-        counts = torch.bincount(ctx, minlength=vocab_size)  # shape [vocab_size]
-
-        # Only penalize tokens that appear MORE THAN ONCE (genuine repetition).
-        repeated_ids = counts.nonzero(as_tuple=False).squeeze(-1)
-        repeated_ids = repeated_ids[counts[repeated_ids] > 1]
-
-        if repeated_ids.numel() == 0:
-            continue
-
-        score = logits[b, repeated_ids]
-        logits[b, repeated_ids] = torch.where(
-            score > 0, score / penalty, score * penalty
+        window_counts = torch.nn.functional.one_hot(context_ids[b]).sum(dim=1)
+        max_vocab_index = window_counts.size(-1)
+        per_token_penalty = penalty ** window_counts # [seq_len, max_vocab_index]
+        logits[b,:max_vocab_index] = torch.where(
+            logits[b,:max_vocab_index] > 0,
+            logits[b,:max_vocab_index] / per_token_penalty,
+            logits[b,:max_vocab_index] * per_token_penalty,
         )
     return logits
 
@@ -624,7 +582,6 @@ def apply_repetition_penalty_batched(
     logits: torch.Tensor,
     generated_tokens: torch.Tensor,
     confirmed_len: int,
-    draft_tokens: torch.Tensor,
     penalty: float,
     window: int,
 ) -> torch.Tensor:
@@ -632,19 +589,18 @@ def apply_repetition_penalty_batched(
 
     Instead of calling apply_repetition_penalty in a Python loop for each
     verification position j in [0, n_draft], this function:
-      1. Computes bincount once for the shared confirmed-token window.
+      1. Computes a per-position context window
       2. Incrementally accumulates draft token counts to build a
          (n_positions, vocab_size) counts matrix in one forward pass.
       3. Applies the penalty to all positions simultaneously.
 
-    Position j's context = confirmed_tokens[-W:] ++ draft_tokens[:j].
-    Position n_draft (bonus) uses confirmed_tokens + all draft_tokens.
+    Position j's context = generated_tokens[j-window:j]
 
     Args:
         logits:           Raw target logits, shape [bs, n_draft+1, d_vocab].
-        generated_tokens: Full generated token buffer.
+                            Last position is for a new token, not in generated_tokens.
+        generated_tokens: Full generated token buffer, [bs, confirmed_len + n_draft]
         confirmed_len:    Number of confirmed tokens in generated_tokens.
-        draft_tokens:     Draft tokens from this iteration, shape [bs, n_draft].
         penalty:          Penalty factor (> 1.0).
         window:           Repetition penalty window size.
 
@@ -654,83 +610,29 @@ def apply_repetition_penalty_batched(
     if penalty == 1.0:
         return logits
 
-    bs, n_positions, vocab_size = logits.shape
-    n_draft = draft_tokens.size(-1)  # n_positions = n_draft + 1
-    logits = logits.clone()
+    bs, seq_len = generated_tokens.shape
 
     for b in range(bs):
-        # Step 1: Base counts from confirmed tokens
-        # This is the shared prefix for ALL verification positions.
-        confirmed = generated_tokens[b, :confirmed_len]
-        # The full window at position n_draft (bonus) is:
-        #   confirmed[-max(0, W - n_draft):] ++ draft_tokens[b, :n_draft]
-        # At position 0, no draft tokens → context is just confirmed[-W:].
-        # We compute the base counts over the confirmed portion that is
-        # within the window even at the widest position (the bonus token).
-        confirmed_in_window = confirmed[-window:] if window > 0 else confirmed
-        base_counts = torch.bincount(confirmed_in_window, minlength=vocab_size)
+        # Only positions before the current pos
+        mask = ~torch.triu(torch.ones(seq_len + 1, seq_len, dtype=torch.bool))
 
-        # Step 2: Build incremental counts matrix
-        # all_counts[j] = counts for position j's full context window.
-        # Position 0: only confirmed tokens (windowed).
-        # Position j: confirmed tokens + draft_tokens[:j] (windowed).
-        #
-        # As j increases, we add one more draft token. But also, if the window
-        # is smaller than confirmed_len + j, older confirmed tokens slide out.
-        all_counts = base_counts.unsqueeze(0).expand(n_positions, -1).clone()  # (n_pos, V)
+        # Only positions after the start of the window
+        window_start = torch.clamp(torch.arange(seq_len + 1) - window, 0).unsqueeze(-1)
+        start_mask = torch.arange(seq_len) >= window_start
+        mask *= start_mask
 
-        for j in range(1, n_positions):
-            # Add draft token j-1 to position j's context
-            dt = draft_tokens[b, j - 1].item()
-            if 0 <= dt < vocab_size:
-                all_counts[j, dt] += 1
-                # Also propagate to all subsequent positions
-                # (positions j+1..n_draft all include this draft token)
-                if j + 1 < n_positions:
-                    all_counts[j + 1:, dt] += 1
+        # Replace masked positions with an unused index (hack to avoid using 0)
+        unused_idx = torch.max(generated_tokens) + 1
+        window_tokens = generated_tokens.expand(seq_len + 1, seq_len).masked_fill(~mask, unused_idx)
 
-            # If adding draft tokens pushes us past the window, remove the
-            # oldest confirmed token that just slid out of the window.
-            tokens_in_ctx = confirmed_in_window.size(0) + j
-            if tokens_in_ctx > window and window > 0:
-                # Absolute index of the token sliding out (0-indexed relative to confirmed sequence start)
-                slide_out_abs_idx = confirmed_len - window + j - 1
-                
-                if slide_out_abs_idx < confirmed_len:
-                    # Token sliding out was originally from the confirmed prefix
-                    if slide_out_abs_idx >= 0:
-                        old_token = generated_tokens[b, slide_out_abs_idx].item()
-                        if 0 <= old_token < vocab_size:
-                            all_counts[j:, old_token] = torch.clamp(
-                                all_counts[j:, old_token] - 1, min=0
-                            )
-                else:
-                    # Token sliding out was from the draft tokens we added earlier this iteration
-                    draft_idx = slide_out_abs_idx - confirmed_len
-                    if 0 <= draft_idx < n_draft:
-                        old_token = draft_tokens[b, draft_idx].item()
-                        if 0 <= old_token < vocab_size:
-                            all_counts[j:, old_token] = torch.clamp(
-                                all_counts[j:, old_token] - 1, min=0
-                            )
+        window_counts = torch.nn.functional.one_hot(window_tokens).sum(dim=1)[...,:-1] # cut off the unused one
+        per_token_penalty = penalty ** window_counts # [seq_len, vocab_size]
+        per_token_penalty = per_token_penalty[confirmed_len:]
 
-        # Step 3: Find repeated tokens and apply penalty
-        # A token is "repeated" if its count >= 2 at that position.
-        repeated_mask = all_counts > 1  # (n_positions, vocab_size)
-
-        if not repeated_mask.any():
-            continue
-
-        # Apply penalty: positive logits /= penalty, negative logits *= penalty
-        pos_logits = logits[b]  # (n_positions, vocab_size)
-        logits[b] = torch.where(
-            repeated_mask & (pos_logits > 0),
-            pos_logits / penalty,
-            torch.where(
-                repeated_mask & (pos_logits <= 0),
-                pos_logits * penalty,
-                pos_logits,
-            ),
+        logits[b,:,:unused_idx] = torch.where(
+            logits[b,:,:unused_idx] > 0,
+            logits[b,:,:unused_idx] / per_token_penalty,
+            logits[b,:,:unused_idx] * per_token_penalty,
         )
 
     return logits
