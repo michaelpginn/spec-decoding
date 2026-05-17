@@ -30,11 +30,13 @@ def fake_data(langs):
 
 defualt_x = ["amh","ber","chr","grn","haw","ibo","npi","oci","que","yor","zgh","zh"]
 def graphs(
-    title=["Wall-Clock Speed", "Speculative Decoding Efficiency", "BLEU"],
-    x_title="Languages",
-    y_title="Values",
-    data=None,
-    x_axis=defualt_x,
+    title:list[str]=["Wall-Clock Speed", "Speculative Decoding Efficiency", "BLEU"],
+    x_title:str="Languages",
+    y_title:str="Values",
+    data:dict[str,list[float]] | None=None,
+    x_axis:list[str]=defualt_x,
 ):
     if data is None:
         data = fake_data(x_axis)
+
+        for item in
