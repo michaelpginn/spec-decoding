@@ -23,14 +23,18 @@ def fake_data(langs):
     tps_spec = base_tps * speedup
     tps_auto = np.full(len_langs, base_tps)
 
+    bleu_auto = np.array([random.random() for _ in range(len_langs)])
+
+    bleu_spec = bleu_auto + np.random.uniform(-0.001, 0.001, len_langs)
+    return {"efficiency": block_efficiency, "ratio": draft_ratio, "tps spec": tps_spec, "tps auto":tps_auto, "bleu": bleu_spec}
+
 defualt_x = ["amh","ber","chr","grn","haw","ibo","npi","oci","que","yor","zgh","zh"]
 def graphs(
-    title,
-    x_title,
-    y_title,
+    title=["Wall-Clock Speed", "Speculative Decoding Efficiency", "BLEU"],
+    x_title="Languages",
+    y_title="Values",
     data=None,
     x_axis=defualt_x,
-    y_axis=None
 ):
-    if data is None and y_axis is None:
-        fake_data(x_axis)
+    if data is None:
+        data = fake_data(x_axis)
