@@ -99,7 +99,7 @@ def speculative_decode(
     gamma: int = 5,
     top_k: int = 0,
     top_p: float = 0.0,
-    repetition_penalty: float = 1.0,
+    repetition_penalty: float = 1.1,
     repetition_penalty_window: int = 16,
     eos_token_id: int | None = None,
     device=None,
@@ -119,10 +119,6 @@ def speculative_decode(
         gamma: Number of draft tokens to generate per iteration
         top_k: If > 0, only sample from the top k tokens
         top_p: If > 0 and < 1, keep the smallest set of tokens whose cumulative prob >= p
-        repetition_penalty: Multiplicative penalty (> 1.0) applied to logits of tokens
-            already present in the recent context window. 1.0 = disabled.
-        repetition_penalty_window: Number of most-recent tokens to consider as the
-            penalty context. Applied identically to both draft and target models.
         eos_token_id: End of sequence token ID
         device: Device to run on
 
