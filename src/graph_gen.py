@@ -40,18 +40,18 @@ def fake_data(langs):
         "draft ratio": draft_ratio
     }
 
-defualt_x = ["amh","ber","chr","grn","haw","ibo","npi","oci","que","yor","zgh","zh"]
+default_x = ["amh","ber","chr","grn","haw","ibo","npi","oci","que","yor","zgh","zh"]
 def graphs(
     title:list[str]=["Wall-Clock Speed", "Speculative Decoding Efficiency", "BLEU"],
     x_title:str="Languages",
     y_title:str="Values",
     data:dict[str,list[int | float]] | None=None,
-    x_axis:list[str]=defualt_x,
+    x_axis:list[str]=default_x,
     figure_title:list[str]=["Placeholder_wall_clock_speed", "Placeholder_speculative_decoding_efficiency", "Placeholder_BLEU"],
     alpha:int|float=5,
     gamma = 5
 ):
-    if data is None and x_axis==defualt_x:
+    if data is None and x_axis==default_x:
         data = fake_data(x_axis)
         width = 0.35
         fig, ax1 = plt.subplots(figsize=(7, 4.5))
@@ -140,7 +140,7 @@ def graphs(
         plt.title(title[0], fontsize=12, fontweight='bold', pad=15)
         plt.tight_layout()
 
-        plt.savefig(f"../place_holder_graphs/{figure_title[0]}.png")
+        plt.savefig(f"../viz/{figure_title[0]}.pdf")
 
         fig, ax = plt.subplots(figsize=(7, 4.5))
         rects3 = ax.bar(np.arange(len(x_axis)) - width, alpha, width, label=r'Acceptance Rate ($\alpha$)', color='#2ecc71')
@@ -165,7 +165,7 @@ def graphs(
         plt.title(title[1], fontsize=12, fontweight='bold', pad=15)
         plt.tight_layout()
 
-        plt.savefig(f"../place_holder_graphs/{figure_title[1]}.png")
+        plt.savefig(f"../viz/{figure_title[1]}.pdf")
 
         fig, ax = plt.subplots(figsize=(7, 4.5))
         rects6 = ax.bar(np.arange(len(x_axis)) - width/2, data["bleu auto"], width, label='Autoregressive Baseline', color='#9b59b6')
@@ -180,7 +180,7 @@ def graphs(
         plt.title(title[2], fontsize=12, fontweight='bold', pad=15)
         plt.tight_layout()
 
-        plt.savefig(f"../place_holder_graphs/{figure_title[2]}.png")
+        plt.savefig(f"../viz/{figure_title[2]}.pdf")
 
 
 if __name__ == "__main__":
