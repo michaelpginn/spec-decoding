@@ -7,16 +7,16 @@ logger = logging.getLogger(__name__)
 _logged_template_mode = False
 
 
-Task = Literal["translation"]
+Task = Literal["translation", "story_gen"]
 
 
 def create_prompt(task: Task, language: str, input: str):
     if task == "translation":
-        # modified to avoid triggering chain-of-thought reasoning
-        # in Qwen3 models even when enable_thinking=True is set elsewhere.
         return f"Translate the following English text to {language}. Output only the translation, nothing else.\n\n{input}"
+    elif task == "story_gen":
+        return f"Write a short story in {language} inspired by the following text. Output only the story, nothing else.\n\n{input}"
     else:
-        raise NotImplementedError()
+        raise NotImplementedError(f"Unknown task: {task!r}")
 
 
 def create_inputs(
@@ -25,7 +25,7 @@ def create_inputs(
     device: device | None = None,
     debug=False,
 ):
-    """Create chat messages for translation task."""
+    """Tokenize a prompt string into model inputs."""
     messages = [{"role": "user", "content": message}]
     # enable_thinking=False: disables Qwen3's chain-of-thought <think>...</think> mode.
     # Falls back gracefully on non-Qwen3 tokenizers that don't support this kwarg.

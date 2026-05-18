@@ -4,7 +4,7 @@ from typing import Literal
 
 @dataclass
 class ExperimentConfig:
-    task: Literal['translation']
+    task: Literal['translation', 'story_gen']
     language_code: str
 
     target_model: str
