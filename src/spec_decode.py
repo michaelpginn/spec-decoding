@@ -322,7 +322,9 @@ def speculative_decode(
             target_raw_logits = target_out.logits  # (bs, n_draft+1, d_vocab)
             penalized_target_logits = apply_repetition_penalty_batched(
                 logits=target_raw_logits,
-                generated_tokens=target_input_ids,
+                generated_tokens=torch.cat(
+                    [generated_tokens[:, :cur_gen_idx], new_draft_tokens], dim=-1
+                ),
                 confirmed_len=cur_gen_idx,
                 penalty=repetition_penalty,
                 window=repetition_penalty_window,
@@ -611,22 +613,23 @@ def apply_repetition_penalty_batched(
         return logits
 
     bs, seq_len = generated_tokens.shape
+    device = generated_tokens.device
 
     for b in range(bs):
         # Only positions before the current pos
-        mask = ~torch.triu(torch.ones(seq_len + 1, seq_len, dtype=torch.bool))
+        mask = ~torch.triu(torch.ones(seq_len + 1, seq_len, dtype=torch.bool, device=device))
 
         # Only positions after the start of the window
-        window_start = torch.clamp(torch.arange(seq_len + 1) - window, 0).unsqueeze(-1)
-        start_mask = torch.arange(seq_len) >= window_start
+        window_start = torch.clamp(torch.arange(seq_len + 1, device=device) - window, 0).unsqueeze(-1)
+        start_mask = torch.arange(seq_len, device=device) >= window_start
         mask *= start_mask
 
         # Replace masked positions with an unused index (hack to avoid using 0)
         unused_idx = torch.max(generated_tokens) + 1
-        window_tokens = generated_tokens.expand(seq_len + 1, seq_len).masked_fill(~mask, unused_idx)
+        window_tokens = generated_tokens[b].expand(seq_len + 1, seq_len).masked_fill(~mask, unused_idx)
 
-        window_counts = torch.nn.functional.one_hot(window_tokens).sum(dim=1)[...,:-1] # cut off the unused one
-        per_token_penalty = penalty ** window_counts # [seq_len, vocab_size]
+        window_counts = torch.nn.functional.one_hot(window_tokens).sum(dim=1)[...,:-1]
+        per_token_penalty = penalty ** window_counts
         per_token_penalty = per_token_penalty[confirmed_len:]
 
         logits[b,:,:unused_idx] = torch.where(
