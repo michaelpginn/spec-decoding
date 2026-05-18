@@ -117,6 +117,71 @@ def graphs(
         plt.tight_layout()
 
         plt.savefig(f"../place_holder_graphs/{figure_title[2]}.png")
+    else:
+        width = 0.35
+        fig, ax1 = plt.subplots(figsize=(7, 4.5))
+        rects1 = ax1.bar(np.arange(len(x_axis)) - width/2, data["tps auto"], width, label='Autoregressive Baseline', color='#34495e')
+        rects2 = ax1.bar(np.arange(len(x_axis)) + width/2, data["tps spec"], width, label='Speculative Decoding', color='#3498db')
+        ax1.set_ylabel(y_title, color='#2c3e50', fontweight='bold')
+        ax1.set_xlabel(x_title, fontweight='bold', labelpad=10)
+        ax1.set_xticks(np.arange(len(x_axis)))
+        ax1.set_xticklabels(x_axis)
+        ax1.tick_params(axis='y', labelcolor='#2c3e50')
+        ax1.legend(loc='upper left', framealpha=0.9)
+
+        ax2 = ax1.twinx()
+        ax2.grid(False) # Turn off secondary grid to keep ggplot structure clean
+        ax2.plot(np.arange(len(x_axis)), data["speedup"], color='#e74c3c', marker='o', linewidth=2.5, markersize=8, label='Speedup Factor')
+        ax2.set_ylabel(y_title, color='#e74c3c', fontweight='bold')
+        ax2.tick_params(axis='y', labelcolor='#e74c3c')
+        # Format labels as 1.2x multipliers
+        ax2.set_yticklabels([f'{val:.1f}×' for val in ax2.get_yticks()])
+
+        plt.title(title[0], fontsize=12, fontweight='bold', pad=15)
+        plt.tight_layout()
+
+        plt.savefig(f"../place_holder_graphs/{figure_title[0]}.png")
+
+        fig, ax = plt.subplots(figsize=(7, 4.5))
+        rects3 = ax.bar(np.arange(len(x_axis)) - width, alpha, width, label=r'Acceptance Rate ($\alpha$)', color='#2ecc71')
+        rects4 = ax.bar(np.arange(len(x_axis)), data["efficiency"], width, label='Block Efficiency', color='#27ae60')
+
+        ax.set_ylabel(y_title, fontweight='bold')
+        ax.set_xticks(np.arange(len(x_axis)))
+        ax.set_xticklabels(x_axis)
+        ax.set_ylim(0, 1.0)
+
+        ax3 = ax.twinx()
+        ax3.grid(False)
+        rects5 = ax3.bar(np.arange(len(x_axis)) + width, data["draft ratio"], width, label='Draft-to-Output Ratio', color='#f39c12')
+        ax3.set_ylabel(y_title, color='#d35400', fontweight='bold')
+        ax3.tick_params(axis='y', labelcolor='#d35400')
+        ax3.set_ylim(1.0, gamma + 0.5)
+
+        lines, labels = ax.get_legend_handles_labels()
+        lines3, labels3 = ax3.get_legend_handles_labels()
+        ax.legend(lines + lines3, labels + labels3, loc='upper right', framealpha=0.9)
+
+        plt.title(title[1], fontsize=12, fontweight='bold', pad=15)
+        plt.tight_layout()
+
+        plt.savefig(f"../place_holder_graphs/{figure_title[1]}.png")
+
+        fig, ax = plt.subplots(figsize=(7, 4.5))
+        rects6 = ax.bar(np.arange(len(x_axis)) - width/2, data["bleu auto"], width, label='Autoregressive Baseline', color='#9b59b6')
+        rects7 = ax.bar(np.arange(len(x_axis)) + width/2, data["bleu spec"], width, label='Speculative Decoding', color='#8e44ad')
+
+        ax.set_ylabel(y_title, fontweight='bold')
+        ax.set_xticks(np.arange(len(x_axis)))
+        ax.set_xticklabels(x_axis)
+        ax.set_ylim(0, 0.55) # Cap near realistic bounds
+        ax.legend(loc='upper right', framealpha=0.9)
+
+        plt.title(title[2], fontsize=12, fontweight='bold', pad=15)
+        plt.tight_layout()
+
+        plt.savefig(f"../place_holder_graphs/{figure_title[2]}.png")
+
 
 if __name__ == "__main__":
     graph = graphs()
