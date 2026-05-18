@@ -539,28 +539,7 @@ def apply_repetition_penalty(
     context_ids: torch.Tensor,
     penalty: float,
 ) -> torch.Tensor:
-    """Apply multiplicative repetition penalty to raw logits (single position).
-
-    Only tokens that appear **more than once** in `context_ids` are penalized.
-    A token's first occurrence in the window is free — the penalty only fires
-    when the model tries to emit a token it has already repeated within the
-    current window.
-
-    For each such repeated token ID:
-        - If logit > 0  ->  logit /= penalty   (shrinks toward zero -> less probable)
-        - If logit < 0  ->  logit *= penalty   (pushed further negative -> even less probable)
-
-    The penalty must be applied to *raw logits* (before log_softmax) so that the
-    positive/negative sign distinction in the formula is meaningful.
-
-    Args:
-        logits:      Raw model logits, shape [bs, d_vocab].
-        context_ids: Token IDs in the penalty window, shape [bs, ctx_len].
-        penalty:     Penalty factor (> 1.0). 1.0 = no-op.
-
-    Returns:
-        Penalized logits, same shape and dtype as input.
-    """
+    """Apply multiplicative repetition penalty to raw logits (single position)."""
     if penalty == 1.0 or context_ids.size(-1) == 0:
         return logits
 
@@ -585,25 +564,7 @@ def apply_repetition_penalty_batched(
 ) -> torch.Tensor:
     """Vectorized repetition penalty for all verification positions at once.
 
-    Instead of calling apply_repetition_penalty in a Python loop for each
-    verification position j in [0, n_draft], this function:
-      1. Computes a per-position context window
-      2. Incrementally accumulates draft token counts to build a
-         (n_positions, vocab_size) counts matrix in one forward pass.
-      3. Applies the penalty to all positions simultaneously.
-
     Position j's context = generated_tokens[j-window:j]
-
-    Args:
-        logits:           Raw target logits, shape [bs, n_draft+1, d_vocab].
-                            Last position is for a new token, not in generated_tokens.
-        generated_tokens: Full generated token buffer, [bs, confirmed_len + n_draft]
-        confirmed_len:    Number of confirmed tokens in generated_tokens.
-        penalty:          Penalty factor (> 1.0).
-        window:           Repetition penalty window size.
-
-    Returns:
-        Penalized logits, same shape as input.
     """
     if penalty == 1.0:
         return logits
