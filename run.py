@@ -77,7 +77,7 @@ def run(config: ExperimentConfig):
     # 4. Decoding loop
     predictions = []
     all_metrics: list[dict] = []
-    for row in tqdm(dataset, desc="Decoding"):
+    for row_idx, row in enumerate(tqdm(dataset, desc="Decoding")):
         assert isinstance(row, Mapping)
         prompt = create_prompt(config.task, language, row['source'])
         inputs = create_inputs(prompt, target_tokenizer, device)
@@ -91,6 +91,9 @@ def run(config: ExperimentConfig):
         )
         predictions.append(predicted)
         all_metrics.append(metrics)
+        if row_idx < 5:
+            logger.info(f"Prompt {row_idx}: {prompt}")
+            logger.info(f"Response {row_idx}: {predicted}\n")
 
     # 5. Save generated outputs (story gen only)
     if config.task == "story_gen":
