@@ -11,6 +11,19 @@ plt.rcParams['font.family'] = 'sans-serif'
 plt.rcParams['axes.edgecolor'] = '#E5E5E5'
 plt.rcParams['axes.linewidth'] = 0.8
 
+column_width_inch = 7.7 / 2.54
+fig_height_inch = column_width_inch * 0.72
+
+plt.rcParams.update({
+    "font.family": "serif",
+    "font.serif": ["Times New Roman", "Times"],
+    "font.size": 9,
+    "axes.labelsize": 9,
+    "xtick.labelsize": 8,
+    "ytick.labelsize": 8,
+    "figure.titlesize": 10
+})
+
 def fake_data(langs):
     acceptance_rate = (random.randint(1, 100) / 100) * 100
 
@@ -40,3 +53,17 @@ def fake_data(langs):
     }
 
 def placeholder_graphs():
+    langs = ["amh","ber","chr","grn","haw","ibo","npi","oci","que","yor","zgh","zh"]
+    models = {
+        "Baseline": fake_data(langs),
+        "Task-Specific Distill": fake_data(langs),
+        "General Domain Distill": fake_data(langs),
+        "N-Gram": fake_data(langs),
+    }
+
+    fig, ax = plt.subplots(figsize=(column_width_inch, fig_height_inch), linewidth=4, edgecolor='black')
+
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_linewidth(0.5)
+        spine.set_edgecolor('#333333')
