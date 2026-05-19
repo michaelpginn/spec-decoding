@@ -54,7 +54,7 @@ LANGS="amh ber chr grn haw ibo npi oci que yor zgh zh"
         uv run scripts/distill.py "$1" \
             -o language_code=$lang \
             output_dir="/scratch/alpine/$USER/spec-dec/" \
-            dataset_path="logprobs/Qwen3.5-9B-$lang-$2.parquet" \
+            dataset_path="logprobs/logprobs-Qwen3.5-9B-$lang-$2.parquet" \
             task=$2
             # draft_model=$draft \
     done
