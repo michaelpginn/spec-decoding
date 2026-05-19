@@ -13,8 +13,14 @@ N = number of sentences (max_samples). All times exclude prompt prefill.
 | median_time_per_sentence | median(sentence times) | seconds |
 | avg_time_per_token | mean of (time_i / tokens_i) for each sentence | seconds |
 | tokens_per_second | sum(all generated tokens) / sum(all sentence times) | tok/s |
+| sentence_avg_tokens_per_second | mean of per-sentence tok/s — each sentence weighted equally | tok/s |
+| sentence_std_tokens_per_second | sample stdev of per-sentence tok/s (N ≥ 2) | tok/s |
 | average_draft_time | mean time for single forward pass | s |
 | average_verifier_time | mean time for single forward pass | s |
+| draft_time_std | standard deviation of draft forward pass times | s |
+| verifier_time_std | standard deviation of verifier forward pass times | s |
+| draft_time_count | total number of draft forward passes | count |
+| verifier_time_count | total number of verifier forward passes | count |
 
 
 ### Quality
@@ -32,6 +38,9 @@ N = number of sentences (max_samples). All times exclude prompt prefill.
 | block_efficiency | mean_accepted_tokens / gamma | 0.0–1.0 |
 | draft_to_output_ratio | sum(draft tokens) / sum(generated tokens) across all N sentences | >= 1.0 |
 | speedup_factor | Expected time without spec decoding / with | >= 0.0 |
+| speedup_factor_std | Std of speedup via delta method on α and c=T_d/T_v (N ≥ 2, CUDA only) | ≥ 0.0 |
+| sentence_std_acceptance_rate | sample stdev of per-sentence acceptance rates (N ≥ 2) | 0.0–1.0 |
+| sentence_std_mean_accepted_tokens | sample stdev of per-sentence mean accepted tokens (N ≥ 2) | ≥ 0.0 |
 ---
 
 ## Per-Sentence Charts (sentence/*, one value per sentence, x-axis = sentence_idx)

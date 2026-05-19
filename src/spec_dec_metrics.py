@@ -3,8 +3,9 @@ evaluation and metrics
 """
 
 import logging
+import math
 from pathlib import Path
-from statistics import median
+from statistics import median, stdev
 
 import wandb
 
@@ -70,12 +71,20 @@ def _compute_common_metrics(
         for i, (t, tpt, tc) in enumerate(zip(times, time_per_token_list, token_counts))
     ]
 
+    # Per-sentence tokens/sec for std computation
+    tps_per_sentence = [
+        tc / t if t > 0 else 0.0 for t, tc in zip(times, token_counts)
+    ]
+
     summary = {
         "avg_time_per_sentence": total_time / n,
         "median_time_per_sentence": median(times),
         "avg_time_per_token": sum(time_per_token_list) / n,
         "tokens_per_second": total_tokens / total_time if total_time > 0 else 0,
+        "sentence_avg_tokens_per_second": sum(tps_per_sentence) / n,
     }
+    if n >= 2:
+        summary["sentence_std_tokens_per_second"] = stdev(tps_per_sentence)
 
     return per_sentence, summary
 
@@ -119,11 +128,17 @@ def _compute_spec_metrics(
     total_draft = sum(r["draft_tokens"] for r in spec_results)
     total_matched = sum(r["matched_tokens"] for r in spec_results)
 
-    total_iterations = sum(
-        r.get("num_iterations", r["draft_tokens"] / gamma) for r in spec_results
-    )
+    total_iterations = sum(r["num_iterations"] for r in spec_results)
     mean_accepted = total_matched / total_iterations if total_iterations > 0 else 0
 
+    # Per-sentence values for std computation
+    per_sentence_acceptance_rates = [r["acceptance_rate"] for r in spec_results]
+    per_sentence_accepted_tokens = [
+        r["matched_tokens"] / r["num_iterations"] if r["num_iterations"] > 0 else 0.0
+        for r in spec_results
+    ]
+
+    n = len(spec_results)
     summary = {}
     summary["draft_to_output_ratio"] = (
         total_draft / total_generated if total_generated > 0 else 0
@@ -131,29 +146,73 @@ def _compute_spec_metrics(
     summary["token_weighted_acceptance_rate"] = (
         total_matched / total_draft if total_draft > 0 else 0
     )
-    summary["sentence_avg_acceptance_rate"] = sum(
-        r["acceptance_rate"] for r in spec_results
-    ) / len(spec_results)
+    summary["sentence_avg_acceptance_rate"] = sum(per_sentence_acceptance_rates) / n
     summary["mean_accepted_tokens"] = mean_accepted
     summary["block_efficiency"] = mean_accepted / gamma if gamma > 0 else 0
+
+    # Standard deviations
+    if n >= 2:
+        summary["sentence_std_acceptance_rate"] = stdev(per_sentence_acceptance_rates)
+        summary["sentence_std_mean_accepted_tokens"] = stdev(per_sentence_accepted_tokens)
     
-    # Compute speedup factor (CUDA only)
-    summary["average_draft_time"] = sum(
-        r.get("average_draft_time", 0) for r in spec_results
-    ) / len(spec_results)
-    summary["average_verifier_time"] = sum(
-        r.get("average_verifier_time", 0) for r in spec_results
-    ) / len(spec_results)
-    if summary["average_verifier_time"] > 0 and summary["average_draft_time"] > 0:
-        # Compute overall speedup factor
-        drafter_cost_ratio = summary["average_draft_time"] / summary["average_verifier_time"]
-        if summary["sentence_avg_acceptance_rate"] < 1:
-            speedup_factor = (1 - summary["sentence_avg_acceptance_rate"] ** (gamma + 1)) / (
-                (1 - summary["sentence_avg_acceptance_rate"]) * (gamma * drafter_cost_ratio + 1)
-            )
-        else:
-            speedup_factor = float("inf")
-        summary["speedup_factor"] = speedup_factor
+    # Compute speedup factor and its std (CUDA only)
+    # Pool forward-pass timing stats across all sentences
+    total_d_sum = sum(r.get("average_draft_time", 0) * r.get("draft_time_count", 0) for r in spec_results)
+    total_d_sum_sq = sum(r.get("draft_time_variance", 0) * r.get("draft_time_count", 0) + r.get("average_draft_time", 0)**2 * r.get("draft_time_count", 0) for r in spec_results)
+    total_d_n = sum(r.get("draft_time_count", 0) for r in spec_results)
+
+    total_v_sum = sum(r.get("average_verifier_time", 0) * r.get("verifier_time_count", 0) for r in spec_results)
+    total_v_sum_sq = sum(r.get("verifier_time_variance", 0) * r.get("verifier_time_count", 0) + r.get("average_verifier_time", 0)**2 * r.get("verifier_time_count", 0) for r in spec_results)
+    total_v_n = sum(r.get("verifier_time_count", 0) for r in spec_results)
+
+    if total_d_n > 0 and total_v_n > 0:
+        mu_d = total_d_sum / total_d_n
+        mu_v = total_v_sum / total_v_n
+        # Population variance of individual forward pass times
+        var_d = max(total_d_sum_sq / total_d_n - mu_d**2, 0)
+        var_v = max(total_v_sum_sq / total_v_n - mu_v**2, 0)
+
+        summary["average_draft_time"] = mu_d
+        summary["average_verifier_time"] = mu_v
+        summary["draft_time_std"] = math.sqrt(var_d)
+        summary["verifier_time_std"] = math.sqrt(var_v)
+        summary["draft_time_count"] = total_d_n
+        summary["verifier_time_count"] = total_v_n
+
+        if mu_d > 0 and mu_v > 0:
+            c = mu_d / mu_v  # drafter cost ratio
+            alpha = summary["sentence_avg_acceptance_rate"]
+
+            if alpha < 1:
+                speedup = (1 - alpha ** (gamma + 1)) / (
+                    (1 - alpha) * (gamma * c + 1)
+                )
+            else:
+                speedup = float("inf")
+            summary["speedup_factor"] = speedup
+
+            # Variance via delta method (error propagation)
+            # Var(mean_d) = var_d / n_d,  Var(mean_v) = var_v / n_v
+            # Var(c) ≈ c^2 * [Var(mean_d)/mu_d^2 + Var(mean_v)/mu_v^2]
+            var_c = c**2 * (var_d / (total_d_n * mu_d**2) + var_v / (total_v_n * mu_v**2))
+
+            if alpha < 1 and speedup != float("inf"):
+                # Var(alpha) from sentence-level std (already computed above)
+                var_alpha = summary.get("sentence_std_acceptance_rate", 0)**2 / n if n >= 2 else 0
+
+                # Sensitivity of speedup to changes in the cost ratio (c)
+                df_dc = -(1 - alpha**(gamma+1)) * gamma / ((1 - alpha) * (gamma*c + 1)**2)
+
+                # Sensitivity of speedup to changes in the acceptance rate (alpha)
+                df_dalpha = (-(gamma+1) * alpha**gamma * (1-alpha) + (1 - alpha**(gamma+1))) / (
+                    (1 - alpha)**2 * (gamma * c + 1)
+                )
+
+                var_speedup = df_dc**2 * var_c + df_dalpha**2 * var_alpha
+                summary["speedup_factor_std"] = math.sqrt(max(var_speedup, 0))
+    else:
+        summary["average_draft_time"] = 0
+        summary["average_verifier_time"] = 0
 
     if verbose:
         print("\n=== Speculative Decoding Metrics ===")
@@ -161,12 +220,14 @@ def _compute_spec_metrics(
             f"Acceptance Rate (token-weighted): {summary['token_weighted_acceptance_rate']:.2%}"
         )
         if "speedup_factor" in summary:
+            std_str = f" ± {summary['speedup_factor_std']:.2f}" if "speedup_factor_std" in summary else ""
             print(
-                f"Speedup Factor (sentence-weighted): {summary['speedup_factor']:.2f}x"
+                f"Speedup Factor (sentence-weighted): {summary['speedup_factor']:.2f}x{std_str}"
             )
         print(f"Mean Accepted Tokens (per iteration): {mean_accepted:.2f}")
         print(f"Block Efficiency: {summary['block_efficiency']:.2%}")
-        print(f"Tokens/sec:  {summary['tokens_per_second']:.2f}")
+        if "tokens_per_second" in summary:
+            print(f"Tokens/sec:  {summary['tokens_per_second']:.2f}")
 
     return per_sentence, summary
 

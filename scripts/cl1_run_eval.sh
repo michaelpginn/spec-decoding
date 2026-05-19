@@ -29,7 +29,7 @@ if torch.cuda.is_available():
     print("GPU 0:", torch.cuda.get_device_name(0))
 PY
 
-LANGS="ber chr haw ibo lkt mus npi oci oji que zgh zh amh yor grn"
+LANGS="amh ber chr grn haw ibo npi oci que yor zgh zh"
 GAMMAS="1 2 3 4 5 6 7"
 DRAFT="Qwen/Qwen2.5-0.5B-Instruct Qwen/Qwen2.5-1.5B-Instruct Qwen/Qwen2.5-3B-Instruct"
 
