@@ -41,6 +41,13 @@ def fake_data(langs):
     bleu_auto = np.array([random.random() for _ in range(len_langs)])
     bleu_spec = bleu_auto + np.random.uniform(-0.001, 0.001, len_langs)
 
+    data = np.random.randn(len_langs)
+    data = (data - np.mean(data)) / np.std(data)
+    # 3. Scale to target
+    fake_data = (data * 5) + 7
+
+    stdev = np.std(fake_data)
+
     # Dictionary construction
     return {
         "tps spec": tps_spec,
@@ -48,7 +55,8 @@ def fake_data(langs):
         "bleu auto": bleu_auto,
         "bleu spec": bleu_spec,
         "speedup": speedup,
-        "acceptance rate": acceptance_rate
+        "acceptance rate": acceptance_rate,
+        "standard deviation": stdev
     }
 
 def placeholder_graphs():
@@ -78,7 +86,9 @@ def placeholder_graphs():
             color=colors[idx],
             edgecolor='#333333',
             linewidth=0.4,
-            label=model_name
+            label=model_name,
+            yerr= model_data["standard deviation"],
+            capsize=3,
         )
 
     for spine in ax.spines.values():
@@ -118,7 +128,9 @@ def placeholder_graphs():
             color=colors[idx],
             edgecolor='#333333',
             linewidth=0.4,
-            label=model_name
+            label=model_name,
+            yerr= model_data["standard deviation"],
+            capsize=3,
         )
 
     for spine in ax2.spines.values():
@@ -158,7 +170,9 @@ def placeholder_graphs():
             color=colors[idx],
             edgecolor='#333333',
             linewidth=0.4,
-            label=model_name
+            label=model_name,
+            yerr= model_data["standard deviation"],
+            capsize=3,
         )
 
     for spine in ax3.spines.values():
@@ -186,34 +200,36 @@ def placeholder_graphs():
     Path("../viz").mkdir(parents=True, exist_ok=True)
     plt.savefig("../viz/speedup.pdf", format="pdf", bbox_inches="tight")
 
-    fig, ax3 = plt.subplots(figsize=(8,5))
+    fig, ax4 = plt.subplots(figsize=(8,5))
 
     for idx, (model_name, model_data) in enumerate(models.items()):
         offset = (idx - (num_bars - 1) / 2) * width
 
-        ax3.bar(
+        ax4.bar(
             x = x_indexes + offset,
             height = model_data["acceptance rate"],
             width=width,
             color=colors[idx],
             edgecolor='#333333',
             linewidth=0.4,
-            label=model_name
+            label=model_name,
+            yerr= model_data["standard deviation"],
+            capsize=3,
         )
 
-    for spine in ax3.spines.values():
+    for spine in ax4.spines.values():
         spine.set_visible(True)
         spine.set_linewidth(0.5)
         spine.set_edgecolor('#333333')
 
     # Mapping center coordinates back to textual language categories
-    ax3.set_xticks(x_indexes)
-    ax3.set_xticklabels(langs, rotation=0)
+    ax4.set_xticks(x_indexes)
+    ax4.set_xticklabels(langs, rotation=0)
 
-    ax3.set_ylabel("Acceptance Rate")
+    ax4.set_ylabel("Acceptance Rate")
 
     # Place legend cleanly without taking up critical horizontal plot space
-    ax3.legend(
+    ax4.legend(
         frameon=False,
         fontsize=12,
         loc='center left',
@@ -258,7 +274,9 @@ def graphs(
                 color=colors[idx],
                 edgecolor='#333333',
                 linewidth=0.4,
-                label=model_name
+                label=model_name,
+                yerr= model_data["standard deviation"],
+                capsize=3,
             )
 
         for spine in ax.spines.values():
