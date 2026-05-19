@@ -31,7 +31,7 @@ class ExperimentConfig:
     data_source: str = "tatoeba"
     max_samples: int = 6000
     max_samples_mono: int = 20000
-    max_new_tokens: int = 512
+    max_new_tokens: int = 128
     device: str = "auto"
 
     wandb_tag: str | None = None
