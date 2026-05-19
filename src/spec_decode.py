@@ -190,7 +190,8 @@ def speculative_decode(
         ],
         dim=-1,
     )
-    cur_gen_idx = input_ids.size(1)
+    prompt_len = input_ids.size(-1)
+    cur_gen_idx = input_ids.size(-1)
 
     # Track average time for draft and verifier forward pass for speedup factor
     # Each accumulator: (sum_of_times, sum_of_squared_times, count)
@@ -227,7 +228,8 @@ def speculative_decode(
         total_draft_tokens = 0
         total_matched_tokens = 0
         # Per-position acceptance for the octiles (eg 16, 32, ..., 128 if we use max_tokens=128)
-        octile_positions = [input_ids.size(-1) + i * max_new_tokens // 8 for i in range(8)]
+        # These are offsets after the prompt length, not absolute indices
+        octile_offsets = [i * max_new_tokens + 1 // 8 for i in range(8)]
         per_position_accept_count = [0] * 8
         per_position_draft_count = [0] * 8
         num_iterations = 0
@@ -294,8 +296,10 @@ def speculative_decode(
             # Determine if we're drafting any of the octile positions (for logging)
             octile_idxs_to_log = [
                 idx
-                for idx, pos in enumerate(octile_positions)
-                if cur_gen_idx <= pos < cur_gen_idx + new_draft_tokens.size(-1)
+                for idx, pos in enumerate(octile_offsets)
+                if cur_gen_idx - prompt_len - 1
+                <= pos
+                < cur_gen_idx + new_draft_tokens.size(-1) - prompt_len - 1
             ]
             for idx in octile_idxs_to_log:
                 per_position_draft_count[idx] += 1
@@ -382,7 +386,7 @@ def speculative_decode(
                 total_matched_tokens += first_collision_idx
                 total_draft_tokens += first_collision_idx + 1
                 for idx in octile_idxs_to_log:
-                    if octile_positions[idx] < cur_gen_idx + first_collision_idx:
+                    if octile_offsets[idx] < cur_gen_idx + first_collision_idx - prompt_len - 1:
                         per_position_accept_count[idx] += 1
 
                 # Resample token from p_target(x) - p_draft(x)
@@ -485,7 +489,7 @@ def speculative_decode(
         "matched_tokens": total_matched_tokens,
         "acceptance_rate": acceptance_rate,
         "octile_position_acceptance": octile_position_acceptance,
-        "octile_positions": octile_positions,
+        "octile_positions": octile_offsets,
         "num_iterations": num_iterations,
         "toks_per_sec": total_generated_tokens / total_time if total_time > 0 else 0,
     }
