@@ -227,7 +227,7 @@ def speculative_decode(
         total_draft_tokens = 0
         total_matched_tokens = 0
         # Per-position acceptance for the octiles (eg 16, 32, ..., 128 if we use max_tokens=128)
-        octile_positions = [0 + i * max_new_tokens // 8 for i in range(1,9)]
+        octile_positions = [input_ids.size(-1) + i * max_new_tokens // 8 for i in range(8)]
         per_position_accept_count = [0] * 8
         per_position_draft_count = [0] * 8
         num_iterations = 0
@@ -295,7 +295,7 @@ def speculative_decode(
             octile_idxs_to_log = [
                 idx
                 for idx, pos in enumerate(octile_positions)
-                if cur_gen_idx <= pos < cur_gen_idx + max_draft_tokens
+                if cur_gen_idx <= pos < cur_gen_idx + new_draft_tokens.size(-1)
             ]
             for idx in octile_idxs_to_log:
                 per_position_draft_count[idx] += 1

@@ -155,7 +155,7 @@ def _compute_spec_metrics(
     for idx, pos in enumerate(positions):
         per_sentence_vals = [r["octile_position_acceptance"][idx] for r in spec_results]
         per_sentence_vals = [acc for acc in per_sentence_vals if acc is not None]
-        summary[f"acceptance_rate_pos_{pos}"] = sum(per_sentence_vals) / len(per_sentence_vals)
+        summary[f"acceptance_rate_pos_{pos}"] = sum(per_sentence_vals) / len(per_sentence_vals) if len(per_sentence_vals) else None
 
     # Standard deviations
     if n >= 2:
