@@ -544,9 +544,9 @@ def apply_repetition_penalty(
         return logits
 
     for b in range(logits.size(0)):
-        window_counts = torch.nn.functional.one_hot(context_ids[b]).sum(dim=1)
+        window_counts = torch.nn.functional.one_hot(context_ids[b]).sum(dim=-2)
         max_vocab_index = window_counts.size(-1)
-        per_token_penalty = penalty ** window_counts # [seq_len, max_vocab_index]
+        per_token_penalty = penalty ** window_counts
         logits[b,:max_vocab_index] = torch.where(
             logits[b,:max_vocab_index] > 0,
             logits[b,:max_vocab_index] / per_token_penalty,
@@ -585,7 +585,7 @@ def apply_repetition_penalty_batched(
         unused_idx = torch.max(generated_tokens) + 1
         window_tokens = generated_tokens[b].expand(seq_len + 1, seq_len).masked_fill(~mask, unused_idx)
 
-        window_counts = torch.nn.functional.one_hot(window_tokens).sum(dim=1)[...,:-1]
+        window_counts = torch.nn.functional.one_hot(window_tokens).sum(dim=-2)[...,:-1]
         per_token_penalty = penalty ** window_counts
         per_token_penalty = per_token_penalty[confirmed_len:]
 

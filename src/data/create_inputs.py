@@ -10,7 +10,7 @@ def create_prompt(task: Task, language: str, input: str):
     if task == "translation":
         return f"Translate the following English text to {language}. Output only the translation, nothing else.\n\n{input}"
     elif task == "story_gen":
-        return f"Write a short story in {language} inspired by the following text. Output only the story, nothing else.\n\n{input}"
+        return f"Write a short story in {language} about a(n) {input}. Output only the story, nothing else."
     else:
         raise NotImplementedError(f"Unknown task: {task!r}")
 

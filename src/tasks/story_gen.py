@@ -1,39 +1,38 @@
 """
-Story generation task — load monolingual data as prompt seeds.
+Story generation task — WordNet-based short-phrase seeds.
 """
 
-import logging
-from typing import cast
+import itertools
 
-from datasets import DatasetDict
+import nltk
+from datasets import Dataset, DatasetDict
+from nltk.corpus import wordnet as wn
 
 from src.config.config import ExperimentConfig
-from src.data.dataset import assemble_dataset, get_language_name
+from src.data.dataset import get_language_name
 
-logger = logging.getLogger(__name__)
+nltk.download('wordnet', quiet=True)
+nltk.download('omw-1.4', quiet=True)
+
+
+def _synset_names(pos: str, n: int) -> list[str]:
+    return [s.name().split('.')[0] for s in itertools.islice(wn.all_synsets(pos), n)]
 
 
 def load_data(config: ExperimentConfig, tokenizer) -> tuple[DatasetDict, str]:
-    """
-    Load monolingual text as story seeds.
-
-    Each example gets a 'source' column (the mono text used as a prompt seed)
-    and a dummy empty 'target' column (no reference for generation tasks).
-    """
-    max_samples = config.max_samples if config.max_samples > 0 else None
-    dataset = assemble_dataset(config.language_code, 'mono', tokenizer, max_samples)
+    """Generate adjective+noun seeds (e.g. "able entity") as story prompts."""
     lang_name = get_language_name(config.language_code)
+    n = config.max_samples
 
-    dataset = dataset.rename_column("text", "source")
-    dataset = dataset.map(lambda r: {"target": ""})
-    dataset = dataset.remove_columns([c for c in cast(list[str], dataset["train"].column_names)
-                                      if c not in ("source", "target")])
-    logger.info(f"Loaded {len(dataset['test'])} story-gen test examples for {lang_name}")
-    return dataset, lang_name
+    adjs = _synset_names('a', n)
+    nouns = _synset_names('n', n)
+    seeds = [f"{a} {noun}" for a, noun in zip(adjs, nouns)]
+
+    dataset = Dataset.from_dict({"source": seeds, "target": [""] * len(seeds)})
+    return DatasetDict({"test": dataset}), lang_name
 
 
 def compute_eval_metrics(
     references: list[str], hypotheses: list[str], verbose: bool = False
 ) -> dict:
-    """No reference-based metrics for story generation."""
     return {}
