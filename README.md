@@ -5,7 +5,10 @@ Clone with submodules:
 git clone --recursive git@github.com:michaelpginn/spec-decoding.git
 ```
 
-Please install [uv](https://docs.astral.sh/uv/getting-started/installation/) to run.
+Then, install [uv](https://docs.astral.sh/uv/getting-started/installation/) if it isn't already.
+
+```bash
+uv run run.py experiments/<config>.cfg -o key1=val1 key2=val2
 
 ## Research Questions
 
