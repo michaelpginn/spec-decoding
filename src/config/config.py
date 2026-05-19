@@ -76,7 +76,7 @@ class DistillConfig:
     log_every: int = 5
 
     device: str = "auto"
-    wandb_project: str = WANDB_PROJECT
+    wandb_project: str = "spec-dec-distill"
 
     def __post_init__(self):
         if self.dataset_path == "None":
