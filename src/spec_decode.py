@@ -229,7 +229,7 @@ def speculative_decode(
         total_matched_tokens = 0
         # Per-position acceptance for the octiles (eg 16, 32, ..., 128 if we use max_tokens=128)
         # These are offsets after the prompt length, not absolute indices
-        octile_offsets = [i * max_new_tokens + 1 // 8 for i in range(8)]
+        octile_offsets = [i * (max_new_tokens // 8) + 1 for i in range(8)]
         per_position_accept_count = [0] * 8
         per_position_draft_count = [0] * 8
         num_iterations = 0
@@ -297,7 +297,7 @@ def speculative_decode(
             octile_idxs_to_log = [
                 idx
                 for idx, pos in enumerate(octile_offsets)
-                if cur_gen_idx - prompt_len - 1
+                if cur_gen_idx - prompt_len
                 <= pos
                 < cur_gen_idx + new_draft_tokens.size(-1) - prompt_len - 1
             ]
@@ -386,7 +386,7 @@ def speculative_decode(
                 total_matched_tokens += first_collision_idx
                 total_draft_tokens += first_collision_idx + 1
                 for idx in octile_idxs_to_log:
-                    if octile_offsets[idx] < cur_gen_idx + first_collision_idx - prompt_len - 1:
+                    if octile_offsets[idx] < cur_gen_idx + first_collision_idx - prompt_len:
                         per_position_accept_count[idx] += 1
 
                 # Resample token from p_target(x) - p_draft(x)
