@@ -11,17 +11,14 @@ plt.rcParams['font.family'] = 'sans-serif'
 plt.rcParams['axes.edgecolor'] = '#E5E5E5'
 plt.rcParams['axes.linewidth'] = 0.8
 
-column_width_inch = 7.7 / 2.54
-fig_height_inch = column_width_inch * 0.72
-
 plt.rcParams.update({
     "font.family": "serif",
     "font.serif": ["Times New Roman", "Times"],
-    "font.size": 9,
-    "axes.labelsize": 9,
-    "xtick.labelsize": 8,
-    "ytick.labelsize": 8,
-    "figure.titlesize": 10
+    "font.size": 14,
+    "axes.labelsize": 14,
+    "xtick.labelsize": 14,
+    "ytick.labelsize": 14,
+    "figure.titlesize": 14
 })
 
 def fake_data(langs):
@@ -61,14 +58,14 @@ def placeholder_graphs():
         "N-Gram": fake_data(langs),
     }
 
-    fig, ax = plt.subplots(figsize=(column_width_inch, fig_height_inch))
+    fig, ax = plt.subplots(figsize=(8, 5))
 
     x_indexes = np.arange(len(langs))
     total_group_width = 0.8
     num_bars = len(models)
     width = total_group_width / num_bars
 
-    colors = ['#0072B2', '#D55E00', '#009E73', '#F0E442)']
+    colors = ['#0072B2', '#D55E00', '#009E73', '#F0E442']
 
     for idx, (model_name, model_data) in enumerate(models.items()):
         offset = (idx - (num_bars - 1) / 2) * width
@@ -95,7 +92,12 @@ def placeholder_graphs():
     ax.set_ylabel("Tokens / Second (Spec)")
 
     # Place legend cleanly without taking up critical horizontal plot space
-    ax.legend(frameon=False, fontsize=6.5, loc='upper left')
+    ax.legend(
+        frameon=False,
+        fontsize=12,
+        loc='center left',
+        bbox_to_anchor=(1.02, 1)  # (x, y) coordinates starting right at the edge of the axis
+    )
 
     plt.tight_layout()
 
@@ -103,14 +105,7 @@ def placeholder_graphs():
     Path("../viz").mkdir(parents=True, exist_ok=True)
     plt.savefig("../viz/tps_spec.pdf", format="pdf", bbox_inches="tight")
 
-    fig, ax2 = plt.subplots(figsize=(column_width_inch, fig_height_inch))
-
-    x_indexes = np.arange(len(langs))
-    total_group_width = 0.8
-    num_bars = len(models)
-    width = total_group_width / num_bars
-
-    colors = ['#0072B2', '#D55E00', '#009E73', '#F0E442)']
+    fig, ax2 = plt.subplots(figsize=(8,5))
 
     for idx, (model_name, model_data) in enumerate(models.items()):
         offset = (idx - (num_bars - 1) / 2) * width
@@ -126,9 +121,9 @@ def placeholder_graphs():
         )
 
     for spine in ax2.spines.values():
-            spine.set_visible(True)
-            spine.set_linewidth(0.5)
-            spine.set_edgecolor('#333333')
+        spine.set_visible(True)
+        spine.set_linewidth(0.5)
+        spine.set_edgecolor('#333333')
 
     # Mapping center coordinates back to textual language categories
     ax2.set_xticks(x_indexes)
@@ -137,13 +132,58 @@ def placeholder_graphs():
     ax2.set_ylabel("BLEU")
 
     # Place legend cleanly without taking up critical horizontal plot space
-    ax2.legend(frameon=False, fontsize=6.5, loc='upper left')
+    ax2.legend(
+        frameon=False,
+        fontsize=12,
+        loc='center left',
+        bbox_to_anchor=(1.02, 1)  # (x, y) coordinates starting right at the edge of the axis
+    )
 
     plt.tight_layout()
 
     # Create destination output directory safely
     Path("../viz").mkdir(parents=True, exist_ok=True)
     plt.savefig("../viz/bleu_spec.pdf", format="pdf", bbox_inches="tight")
+
+    fig, ax3 = plt.subplots(figsize=(8,5))
+
+    for idx, (model_name, model_data) in enumerate(models.items()):
+        offset = (idx - (num_bars - 1) / 2) * width
+
+        ax3.bar(
+            x = x_indexes + offset,
+            height = model_data["speedup"],
+            width=width,
+            color=colors[idx],
+            edgecolor='#333333',
+            linewidth=0.4,
+            label=model_name
+        )
+
+    for spine in ax3.spines.values():
+        spine.set_visible(True)
+        spine.set_linewidth(0.5)
+        spine.set_edgecolor('#333333')
+
+    # Mapping center coordinates back to textual language categories
+    ax3.set_xticks(x_indexes)
+    ax3.set_xticklabels(langs, rotation=0)
+
+    ax3.set_ylabel("Speedup")
+
+    # Place legend cleanly without taking up critical horizontal plot space
+    ax3.legend(
+        frameon=False,
+        fontsize=12,
+        loc='center left',
+        bbox_to_anchor=(1.02, 1)  # (x, y) coordinates starting right at the edge of the axis
+    )
+
+    plt.tight_layout()
+
+    # Create destination output directory safely
+    Path("../viz").mkdir(parents=True, exist_ok=True)
+    plt.savefig("../viz/speedup.pdf", format="pdf", bbox_inches="tight")
 
 if __name__ == "__main__":
     placeholder_graphs()
