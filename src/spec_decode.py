@@ -299,7 +299,7 @@ def speculative_decode(
                 for idx, pos in enumerate(octile_offsets)
                 if cur_gen_idx - prompt_len
                 <= pos
-                < cur_gen_idx + new_draft_tokens.size(-1) - prompt_len - 1
+                < cur_gen_idx + new_draft_tokens.size(-1) - prompt_len
             ]
             for idx in octile_idxs_to_log:
                 per_position_draft_count[idx] += 1
