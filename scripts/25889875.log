@@ -16,7 +16,7 @@ Torch built with: PyTorch built with:
   - NVCC architecture flags: -gencode;arch=compute_70,code=sm_70;-gencode;arch=compute_75,code=sm_75;-gencode;arch=compute_80,code=sm_80;-gencode;arch=compute_86,code=sm_86;-gencode;arch=compute_90,code=sm_90;-gencode;arch=compute_100,code=sm_100;-gencode;arch=compute_120,code=sm_120
   - CuDNN 91.0.2  (built against CUDA 12.9)
   - Magma 2.6.1
-  - Build settings: BLAS_INFO=mkl, BUILD_TYPE=Release, COMMIT_SHA=449b1768410104d3ed79d3bcfe4ba1d65c7f22c0, CUDA_VERSION=12.8, CUDNN_VERSION=9.10.2, CXX_COMPILER=/opt/rh/gcc-toolset-13/root/usr/bin/c++, CXX_FLAGS= -fvisibility-inlines-hidden -DUSE_PTHREADPOOL -DNDEBUG -DUSE_KINETO -DLIBKINETO_NOROCTRACER -DLIBKINETO_NOXPUPTI=ON -DUSE_FBGEMM -DUSE_FBGEMM_GENAI -DUSE_PYTORCH_QNNPACK -DUSE_XNNPACK -DSYMBOLICATE_MOBILE_DEBUG_HANDLE -O2 -fPIC -DC10_NODEPRECATED -Wall -Wextra -Werror=return-type -Werror=non-virtual-dtor -Werror=range-loop-construct -Werror=bool-operation -Wnarrowing -Wno-missing-field-initializers -Wno-unknown-pragmas -Wno-unused-parameter -Wno-strict-overflow -Wno-strict-aliasing -Wno-stringop-overflow -Wsuggest-override -Wno-psabi -Wno-error=old-style-cast -faligned-new -Wno-maybe-uninitialized -fno-math-errno -fno-trapping-math -Werror=format -Wno-dangling-reference -Wno-error=dangling-reference -Wno-stringop-overflow, LAPACK_INFO=mkl, PERF_WITH_AVX=1, PERF_WITH_AVX2=1, TORCH_VERSION=2.10.0, USE_CUDA=ON, USE_CUDNN=ON, USE_CUSPARSELT=1, USE_GFLAGS=OFF, USE_GLOG=OFF, USE_GLOO=ON, USE_MKL=ON, USE_MKLDNN=ON, USE_MPI=OFF, USE_NCCL=1, USE_NNPACK=ON, USE_OPENMP=ON, USE_ROCM=OFF, USE_ROCM_KERNEL_ASSERT=OFF, USE_XCCL=OFF, USE_XPU=OFF, 
+  - Build settings: BLAS_INFO=mkl, BUILD_TYPE=Release, COMMIT_SHA=449b1768410104d3ed79d3bcfe4ba1d65c7f22c0, CUDA_VERSION=12.8, CUDNN_VERSION=9.10.2, CXX_COMPILER=/opt/rh/gcc-toolset-13/root/usr/bin/c++, CXX_FLAGS= -fvisibility-inlines-hidden -DUSE_PTHREADPOOL -DNDEBUG -DUSE_KINETO -DLIBKINETO_NOROCTRACER -DLIBKINETO_NOXPUPTI=ON -DUSE_FBGEMM -DUSE_FBGEMM_GENAI -DUSE_PYTORCH_QNNPACK -DUSE_XNNPACK -DSYMBOLICATE_MOBILE_DEBUG_HANDLE -O2 -fPIC -DC10_NODEPRECATED -Wall -Wextra -Werror=return-type -Werror=non-virtual-dtor -Werror=range-loop-construct -Werror=bool-operation -Wnarrowing -Wno-missing-field-initializers -Wno-unknown-pragmas -Wno-unused-parameter -Wno-strict-overflow -Wno-strict-aliasing -Wno-stringop-overflow -Wsuggest-override -Wno-psabi -Wno-error=old-style-cast -faligned-new -Wno-maybe-uninitialized -fno-math-errno -fno-trapping-math -Werror=format -Wno-dangling-reference -Wno-error=dangling-reference -Wno-stringop-overflow, LAPACK_INFO=mkl, PERF_WITH_AVX=1, PERF_WITH_AVX2=1, TORCH_VERSION=2.10.0, USE_CUDA=ON, USE_CUDNN=ON, USE_CUSPARSELT=1, USE_GFLAGS=OFF, USE_GLOG=OFF, USE_GLOO=ON, USE_MKL=ON, USE_MKLDNN=ON, USE_MPI=OFF, USE_NCCL=1, USE_NNPACK=ON, USE_OPENMP=ON, USE_ROCM=OFF, USE_ROCM_KERNEL_ASSERT=OFF, USE_XCCL=OFF, USE_XPU=OFF,
 
 CUDA available: True
 Detected GPUs: 1
@@ -27,7 +27,7 @@ warning: Ignoring invalid `SSL_CERT_FILE`. File does not exist: /etc/ssl/certs/c
 ExperimentConfig(task='translation',
                  language_code='chr',
                  include_aya=False,
-                 target_model='Qwen/Qwen2.5-7B-Instruct',
+                 target_model='Qwen/Qwen3.5-9B',
                  draft_model=None,
                  draft_model_type='ngram',
                  decoding_mode='greedy',
@@ -61,7 +61,7 @@ Found the latest cached dataset configuration 'default' at /projects/lude4390/.c
 [90m2026-04-23 13:28:17,860 [36m[WARNING] [1;33mcache[0m: Found the latest cached dataset configuration 'default' at /projects/lude4390/.cache/huggingface/datasets/lecslab___biling_chr/default/0.0.0/f42cdcf4fee29092748df05afea0e9f2ec2d1aea (last modified on Mon Apr  6 08:41:59 2026).
 [90m2026-04-23 13:28:17,874 [36m[INFO] [1;33mtranslation[0m: Using columns: 'English' (source) -> 'Cherokee' (target)
 [90m2026-04-23 13:28:17,874 [36m[INFO] [1;33mrun[0m: Loaded 10 examples
-[90m2026-04-23 13:28:17,875 [36m[INFO] [1;33mrun[0m: Loading target model: Qwen/Qwen2.5-7B-Instruct...
+[90m2026-04-23 13:28:17,875 [36m[INFO] [1;33mrun[0m: Loading target model: Qwen/Qwen3.5-9B...
 wandb: updating run metadata; uploading console lines 0-0
 wandb: uploading config.yaml; uploading wandb-metadata.json; uploading requirements.txt; uploading output.log; uploading wandb-summary.json
 wandb: 🚀 View run chr_ngram_g5 at: https://wandb.ai/lecs-general/spec-decoding/runs/na2fezio
@@ -152,7 +152,7 @@ warning: Ignoring invalid `SSL_CERT_FILE`. File does not exist: /etc/ssl/certs/c
 ExperimentConfig(task='translation',
                  language_code='amh',
                  include_aya=True,
-                 target_model='Qwen/Qwen2.5-7B-Instruct',
+                 target_model='Qwen/Qwen3.5-9B',
                  draft_model=None,
                  draft_model_type='ngram',
                  decoding_mode='greedy',
@@ -186,7 +186,7 @@ Found the latest cached dataset configuration 'default' at /projects/lude4390/.c
 [90m2026-04-23 13:28:26,136 [36m[WARNING] [1;33mcache[0m: Found the latest cached dataset configuration 'default' at /projects/lude4390/.cache/huggingface/datasets/lecslab___bilingal_amh/default/0.0.0/85c095783b290325a2dc4beff2092099f322951b (last modified on Thu Apr 23 12:04:31 2026).
 [90m2026-04-23 13:28:26,149 [36m[INFO] [1;33mtranslation[0m: Using columns: 'English' (source) -> 'Amharic' (target)
 [90m2026-04-23 13:28:26,150 [36m[INFO] [1;33mrun[0m: Loaded 10 examples
-[90m2026-04-23 13:28:26,150 [36m[INFO] [1;33mrun[0m: Loading target model: Qwen/Qwen2.5-7B-Instruct...
+[90m2026-04-23 13:28:26,150 [36m[INFO] [1;33mrun[0m: Loading target model: Qwen/Qwen3.5-9B...
 wandb: updating run metadata; uploading console lines 0-0
 wandb: uploading summary, console lines 1-8
 wandb: 🚀 View run amh_ngram_g5 at: https://wandb.ai/lecs-general/spec-decoding/runs/zghpngp6
@@ -277,7 +277,7 @@ warning: Ignoring invalid `SSL_CERT_FILE`. File does not exist: /etc/ssl/certs/c
 ExperimentConfig(task='translation',
                  language_code='yor',
                  include_aya=True,
-                 target_model='Qwen/Qwen2.5-7B-Instruct',
+                 target_model='Qwen/Qwen3.5-9B',
                  draft_model=None,
                  draft_model_type='ngram',
                  decoding_mode='greedy',
@@ -330,7 +330,7 @@ warning: Ignoring invalid `SSL_CERT_FILE`. File does not exist: /etc/ssl/certs/c
 ExperimentConfig(task='translation',
                  language_code='npi',
                  include_aya=False,
-                 target_model='Qwen/Qwen2.5-7B-Instruct',
+                 target_model='Qwen/Qwen3.5-9B',
                  draft_model=None,
                  draft_model_type='ngram',
                  decoding_mode='greedy',
@@ -364,7 +364,7 @@ Found the latest cached dataset configuration 'default' at /projects/lude4390/.c
 [90m2026-04-23 13:28:40,642 [36m[WARNING] [1;33mcache[0m: Found the latest cached dataset configuration 'default' at /projects/lude4390/.cache/huggingface/datasets/lecslab___biling_npi/default/0.0.0/0489fecc796ba956a89deadb9634650376f3772f (last modified on Mon Apr  6 10:27:20 2026).
 [90m2026-04-23 13:28:40,727 [36m[INFO] [1;33mtranslation[0m: Using columns: 'English' (source) -> 'Nepali' (target)
 [90m2026-04-23 13:28:40,728 [36m[INFO] [1;33mrun[0m: Loaded 10 examples
-[90m2026-04-23 13:28:40,728 [36m[INFO] [1;33mrun[0m: Loading target model: Qwen/Qwen2.5-7B-Instruct...
+[90m2026-04-23 13:28:40,728 [36m[INFO] [1;33mrun[0m: Loading target model: Qwen/Qwen3.5-9B...
 wandb: updating run metadata; uploading console lines 0-0
 wandb: uploading summary, console lines 1-8
 wandb: 🚀 View run npi_ngram_g5 at: https://wandb.ai/lecs-general/spec-decoding/runs/sfyiclwi
@@ -455,7 +455,7 @@ warning: Ignoring invalid `SSL_CERT_FILE`. File does not exist: /etc/ssl/certs/c
 ExperimentConfig(task='translation',
                  language_code='grn',
                  include_aya=False,
-                 target_model='Qwen/Qwen2.5-7B-Instruct',
+                 target_model='Qwen/Qwen3.5-9B',
                  draft_model=None,
                  draft_model_type='ngram',
                  decoding_mode='greedy',
@@ -489,7 +489,7 @@ Found the latest cached dataset configuration 'default' at /projects/lude4390/.c
 [90m2026-04-23 13:28:47,629 [36m[WARNING] [1;33mcache[0m: Found the latest cached dataset configuration 'default' at /projects/lude4390/.cache/huggingface/datasets/lecslab___bilingual_guarani/default/0.0.0/c3567f0621c906f1059d80333dfbc924567302c1 (last modified on Thu Apr 23 12:08:56 2026).
 [90m2026-04-23 13:28:47,674 [36m[INFO] [1;33mtranslation[0m: Using columns: 'English' (source) -> 'Guarani' (target)
 [90m2026-04-23 13:28:47,675 [36m[INFO] [1;33mrun[0m: Loaded 10 examples
-[90m2026-04-23 13:28:47,675 [36m[INFO] [1;33mrun[0m: Loading target model: Qwen/Qwen2.5-7B-Instruct...
+[90m2026-04-23 13:28:47,675 [36m[INFO] [1;33mrun[0m: Loading target model: Qwen/Qwen3.5-9B...
 wandb: updating run metadata; uploading console lines 0-0
 wandb: uploading summary, console lines 1-8
 wandb: 🚀 View run grn_ngram_g5 at: https://wandb.ai/lecs-general/spec-decoding/runs/l0zdxaak
@@ -580,7 +580,7 @@ warning: Ignoring invalid `SSL_CERT_FILE`. File does not exist: /etc/ssl/certs/c
 ExperimentConfig(task='translation',
                  language_code='yua',
                  include_aya=False,
-                 target_model='Qwen/Qwen2.5-7B-Instruct',
+                 target_model='Qwen/Qwen3.5-9B',
                  draft_model=None,
                  draft_model_type='ngram',
                  decoding_mode='greedy',
@@ -613,7 +613,7 @@ Found the latest cached dataset configuration 'default' at /projects/lude4390/.c
 [90m2026-04-23 13:28:55,145 [36m[WARNING] [1;33mcache[0m: Found the latest cached dataset configuration 'default' at /projects/lude4390/.cache/huggingface/datasets/lecslab___biling_yua/default/0.0.0/d6e7dedd548ed602f38caf370cf229148abb3283 (last modified on Mon Apr  6 16:07:28 2026).
 [90m2026-04-23 13:28:55,214 [36m[INFO] [1;33mtranslation[0m: Using columns: 'English' (source) -> 'Mayan' (target)
 [90m2026-04-23 13:28:55,215 [36m[INFO] [1;33mrun[0m: Loaded 10 examples
-[90m2026-04-23 13:28:55,215 [36m[INFO] [1;33mrun[0m: Loading target model: Qwen/Qwen2.5-7B-Instruct...
+[90m2026-04-23 13:28:55,215 [36m[INFO] [1;33mrun[0m: Loading target model: Qwen/Qwen3.5-9B...
 wandb: updating run metadata; uploading console lines 0-0
 wandb: uploading summary, console lines 1-8
 wandb: 🚀 View run yua_ngram_g5 at: https://wandb.ai/lecs-general/spec-decoding/runs/2pir29sj

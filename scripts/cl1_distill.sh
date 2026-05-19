@@ -45,7 +45,7 @@ if torch.cuda.is_available():
 PY
 
 LANGS="amh ber chr grn haw ibo npi oci que yor zgh zh"
-# DRAFT="Qwen/Qwen2.5-0.5B-Instruct Qwen/Qwen2.5-1.5B-Instruct Qwen/Qwen2.5-3B-Instruct"
+# DRAFT="Qwen/Qwen3.5-0.8B Qwen/Qwen3.5-2B Qwen/Qwen3.5-4B"
 
 # for draft in $DRAFT
 # do
@@ -54,7 +54,7 @@ LANGS="amh ber chr grn haw ibo npi oci que yor zgh zh"
         uv run scripts/distill.py "$1" \
             -o language_code=$lang \
             output_dir="/scratch/alpine/$USER/spec-dec/" \
-            dataset_path="logprobs/logprobs-Qwen2.5-7B-Instruct-$lang-$2.parquet" \
+            dataset_path="logprobs/logprobs-Qwen/Qwen3.5-9B-$lang-$2.parquet" \
             task=$2
             # draft_model=$draft \
     done
