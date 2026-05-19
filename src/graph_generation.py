@@ -11,6 +11,8 @@ plt.rcParams['font.family'] = 'sans-serif'
 plt.rcParams['axes.edgecolor'] = '#E5E5E5'
 plt.rcParams['axes.linewidth'] = 0.8
 
+langs = ["amh","ber","chr","grn","haw","ibo","npi","oci","que","yor","zgh","zh"]
+
 plt.rcParams.update({
     "font.family": "serif",
     "font.serif": ["Times New Roman", "Times"],
@@ -50,7 +52,6 @@ def fake_data(langs):
     }
 
 def placeholder_graphs():
-    langs = ["amh","ber","chr","grn","haw","ibo","npi","oci","que","yor","zgh","zh"]
     models = {
         "Baseline": fake_data(langs),
         "Task-Specific Distill": fake_data(langs),
@@ -184,6 +185,48 @@ def placeholder_graphs():
     # Create destination output directory safely
     Path("../viz").mkdir(parents=True, exist_ok=True)
     plt.savefig("../viz/speedup.pdf", format="pdf", bbox_inches="tight")
+
+    fig, ax3 = plt.subplots(figsize=(8,5))
+
+    for idx, (model_name, model_data) in enumerate(models.items()):
+        offset = (idx - (num_bars - 1) / 2) * width
+
+        ax3.bar(
+            x = x_indexes + offset,
+            height = model_data["acceptance rate"],
+            width=width,
+            color=colors[idx],
+            edgecolor='#333333',
+            linewidth=0.4,
+            label=model_name
+        )
+
+    for spine in ax3.spines.values():
+        spine.set_visible(True)
+        spine.set_linewidth(0.5)
+        spine.set_edgecolor('#333333')
+
+    # Mapping center coordinates back to textual language categories
+    ax3.set_xticks(x_indexes)
+    ax3.set_xticklabels(langs, rotation=0)
+
+    ax3.set_ylabel("Acceptance Rate")
+
+    # Place legend cleanly without taking up critical horizontal plot space
+    ax3.legend(
+        frameon=False,
+        fontsize=12,
+        loc='center left',
+        bbox_to_anchor=(1.02, 1)  # (x, y) coordinates starting right at the edge of the axis
+    )
+
+    plt.tight_layout()
+
+    # Create destination output directory safely
+    Path("../viz").mkdir(parents=True, exist_ok=True)
+    plt.savefig("../viz/acceptance_rate.pdf", format="pdf", bbox_inches="tight")
+
+def graphs()
 
 if __name__ == "__main__":
     placeholder_graphs()
