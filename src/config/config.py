@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 from typing import Literal
 
+WANDB_PROJECT = "speculative decoding v2"
+WANDB_ENTITY = "lecs-general"
+
 
 @dataclass
 class ExperimentConfig:
@@ -32,6 +35,7 @@ class ExperimentConfig:
     device: str = "auto"
 
     wandb_tag: str | None = None
+    wandb_project: str = WANDB_PROJECT
 
     def __post_init__(self):
         if self.draft_model == "None":
@@ -72,6 +76,7 @@ class DistillConfig:
     log_every: int = 5
 
     device: str = "auto"
+    wandb_project: str = WANDB_PROJECT
 
     def __post_init__(self):
         if self.dataset_path == "None":

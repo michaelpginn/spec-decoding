@@ -1,7 +1,6 @@
 import argparse
 import json
 import logging
-import os
 import pprint
 from dataclasses import asdict
 from pathlib import Path
@@ -10,7 +9,7 @@ from typing import Mapping
 import wandb
 from tqdm import tqdm
 
-from src.config.config import ExperimentConfig
+from src.config.config import WANDB_ENTITY, ExperimentConfig
 from src.config.config_to_dataclass import config_to_dataclass
 from src.data.create_inputs import create_inputs, create_prompt
 from src.data.dataset import assemble_dataset
@@ -160,8 +159,8 @@ def setup_wandb(config: ExperimentConfig):
     wandb_config["run_type"] = job_type
 
     wandb.init(
-        project=os.environ.get("WANDB_PROJECT", "spec-decoding"),
-        entity=os.environ.get("WANDB_ENTITY", "lecs-general"),
+        project=config.wandb_project,
+        entity=WANDB_ENTITY,
         config=wandb_config,
         group=group,
         job_type=job_type,
