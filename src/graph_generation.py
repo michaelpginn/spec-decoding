@@ -226,7 +226,65 @@ def placeholder_graphs():
     Path("../viz").mkdir(parents=True, exist_ok=True)
     plt.savefig("../viz/acceptance_rate.pdf", format="pdf", bbox_inches="tight")
 
-def graphs()
+def graphs(
+    data:dict[str, dict[str, int|float]] | None,
+    y_label:str,
+    ind_filename: dict[str,str]
+):
+    '''
+    ind_filename: {metric name: filename name, ...}
+    data: {model: {metric: value, ...}, ...}
+    '''
+    if data is None:
+        raise ValueError("Need to provide data in the form of {Model: {'metric': value}}")
+
+    for metric, title in ind_filename.items():
+        fig, ax = plt.subplots(figsize=(8, 5))
+
+        x_indexes = np.arange(len(langs))
+        total_group_width = 0.8
+        num_bars = len(data)
+        width = total_group_width / num_bars
+
+        colors = ['#0072B2', '#D55E00', '#009E73', '#F0E442']
+
+        for idx, (model_name, model_data) in enumerate(data.items()):
+            offset = (idx - (num_bars - 1) / 2) * width
+
+            ax.bar(
+                x = x_indexes + offset,
+                height = model_data[metric],
+                width=width,
+                color=colors[idx],
+                edgecolor='#333333',
+                linewidth=0.4,
+                label=model_name
+            )
+
+        for spine in ax.spines.values():
+            spine.set_visible(True)
+            spine.set_linewidth(0.5)
+            spine.set_edgecolor('#333333')
+
+        # Mapping center coordinates back to textual language categories
+        ax.set_xticks(x_indexes)
+        ax.set_xticklabels(langs, rotation=0)
+
+        ax.set_ylabel(y_label)
+
+        # Place legend cleanly without taking up critical horizontal plot space
+        ax.legend(
+            frameon=False,
+            fontsize=12,
+            loc='center left',
+            bbox_to_anchor=(1.02, 1)  # (x, y) coordinates starting right at the edge of the axis
+        )
+
+        plt.tight_layout()
+
+        # Create destination output directory safely
+        Path("../viz").mkdir(parents=True, exist_ok=True)
+        plt.savefig(f"../viz/{title}.pdf", format="pdf", bbox_inches="tight")
 
 if __name__ == "__main__":
     placeholder_graphs()
