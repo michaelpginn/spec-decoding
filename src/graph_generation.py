@@ -57,6 +57,9 @@ def fake_data(langs):
     mean_pass = np.mean(simulations, axis=0)
     std_pass = np.std(simulations, axis=0)
 
+    token_position = list(range(128))
+    probabilities = np.random.uniform(0, 1, 128)
+
     # Dictionary construction
     return {
         "tps spec": tps_spec,
@@ -67,7 +70,9 @@ def fake_data(langs):
         "acceptance rate": acceptance_rate,
         "standard deviation": stdev,
         "average forward pass": mean_pass,
-        "average forward pass stdev": std_pass
+        "average forward pass stdev": std_pass,
+        "token position": token_position,
+        "probability": probabilities
     }
 
 def placeholder_graphs():
@@ -299,12 +304,12 @@ def graphs(
     data:dict[str, dict[str, int|float]] | None,
     y_label:str,
     ind_filename: dict[str,str],
-    average_forward_pass: dict[str, int|float]
+    average_forward_pass: dict[str, dict[str, int|float]]
 ):
     '''
     ind_filename: {metric name: filename name, ...}
     data: {model: {metric: value, ...}, ...}
-    average_forward_pass: {model: average forward pass value, ...}
+    average_forward_pass: {model: {mean: value, stdev: value}, ...}
     '''
     if data is None:
         raise ValueError("Need to provide data in the form of {Model: {'metric': value}}")
