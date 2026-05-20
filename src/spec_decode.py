@@ -387,7 +387,7 @@ def speculative_decode(
                 for idx in octile_idxs_to_log:
                     if octile_offsets[idx] < cur_gen_idx + first_collision_idx - prompt_len:
                         per_position_accept_count[idx] += 1
-                    if octile_offsets[idx] <= cur_gen_idx + first_collision_idx - prompt_len
+                    if octile_offsets[idx] <= cur_gen_idx + first_collision_idx - prompt_len:
                         per_position_draft_count[idx] += 1
 
                 # Resample token from p_target(x) - p_draft(x)
