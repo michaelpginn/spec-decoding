@@ -30,20 +30,20 @@ if torch.cuda.is_available():
 PY
 
 LANGS="amh ber chr grn haw ibo npi oci que yor zgh zh"
-GAMMAS="2 3 4 5 6 7"
-DRAFT="Qwen/Qwen3.5-0.8B Qwen/Qwen3.5-2B Qwen/Qwen3.5-4B"
+GAMMAS="2 3 4 5"
+# DRAFT="Qwen/Qwen3.5-0.8B Qwen/Qwen3.5-2B Qwen/Qwen3.5-4B"
 
-for draft in $DRAFT
-do
+# for draft in $DRAFT
+# do
     for lang in $LANGS
     do
         for gamma in $GAMMAS
         do
             uv run python run.py "$1" \
                 -o language_code=$lang \
-                draft_model=$draft \
+                # draft_model=$draft \
                 gamma=$gamma \
                 wandb_tag=final
         done
     done
-done
+# done
