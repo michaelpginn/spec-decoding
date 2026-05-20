@@ -8,7 +8,7 @@ Contains:
 """
 
 import time
-from typing import Literal
+from typing import Literal, cast
 
 import torch
 
@@ -596,7 +596,12 @@ def apply_repetition_penalty(
         return logits
 
     for b in range(logits.size(0)):
-        window_counts = torch.nn.functional.one_hot(context_ids[b]).sum(dim=-2)
+        # window_counts = torch.nn.functional.one_hot(context_ids[b]).sum(dim=-2)
+        max_vocab_idx = torch.max(context_ids[b]).item()
+        max_vocab_idx = cast(int, max_vocab_idx)
+        window_counts = torch.zeros(max_vocab_idx, dtype=torch.long)
+        window_counts.scatter_add_(dim=0, index=context_ids[b], src=torch.ones_like(context_ids[b]))
+
         max_vocab_index = window_counts.size(-1)
         per_token_penalty = penalty ** window_counts
         logits[b,:max_vocab_index] = torch.where(
@@ -634,10 +639,17 @@ def apply_repetition_penalty_batched(
         mask *= start_mask
 
         # Replace masked positions with an unused index (hack to avoid using 0)
-        unused_idx = torch.max(generated_tokens) + 1
+        unused_idx = torch.max(generated_tokens).item() + 1
+        unused_idx = cast(unused_idx, int)
         window_tokens = generated_tokens[b].expand(seq_len + 1, seq_len).masked_fill(~mask, unused_idx)
 
-        window_counts = torch.nn.functional.one_hot(window_tokens).sum(dim=-2)[...,:-1]
+        # Old way, OOM:
+        # window_counts = torch.nn.functional.one_hot(window_tokens).sum(dim=1)[...,:-1] # cut off the unused one
+
+        window_counts = torch.zeros(window_tokens.size(0), unused_idx + 1, dtype=torch.long)
+        window_counts.scatter_add_(dim=1, index=window_tokens, src=torch.ones_like(window_tokens))
+        window_counts  = window_counts[...,:-1] # cut off the unused vocab item
+
         per_token_penalty = penalty ** window_counts
         per_token_penalty = per_token_penalty[confirmed_len:]
 
