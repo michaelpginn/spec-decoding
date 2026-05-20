@@ -44,7 +44,7 @@ if __name__ == "__main__":
         "method": "grid",
         "metric": {"goal": "minimize", "name": "eval/loss"},
         "parameters": {
-            "lr": {"values": [2e-4, 1e-4, 5e-5, 2e-5, 1e-5]}
+            "lr": {"values": [1e-4, 5e-5, 2e-5]}
         }
     }
     entity = WANDB_ENTITY
