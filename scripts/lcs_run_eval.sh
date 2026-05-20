@@ -6,9 +6,9 @@
 #SBATCH --time=3-00:00:00
 #SBATCH --output=logs/%j.log
 #SBATCH --job-name=specdec
-#SBATCH --partition=blanca-clearlab1
-#SBATCH --account=blanca-clearlab1
-#SBATCH --qos=blanca-clearlab1
+#SBATCH --partition=blanca-blast-lecs
+#SBATCH --account=blanca-blast-lecs
+#SBATCH --qos=blanca-blast-lecs
 #SBATCH --mail-type=END,FAIL
 
 export HF_HOME="/projects/$USER/.cache/huggingface"

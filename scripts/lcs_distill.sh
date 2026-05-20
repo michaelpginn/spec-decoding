@@ -6,10 +6,25 @@
 #SBATCH --time=3-00:00:00
 #SBATCH --output=logs/%j.log
 #SBATCH --job-name=specdec
-#SBATCH --partition=blanca-clearlab1
-#SBATCH --account=blanca-clearlab1
-#SBATCH --qos=blanca-clearlab1
+#SBATCH --partition=blanca-blast-lecs
+#SBATCH --account=blanca-blast-lecs
+#SBATCH --qos=blanca-blast-lecs
 #SBATCH --mail-type=END,FAIL
+
+if [ "$#" -ne 2 ]; then
+    echo "Usage: $0 <config_file> <general|translation>" >&2
+    exit 1
+fi
+
+if [ ! -f "$1" ]; then
+    echo "Error: config file '$1' does not exist" >&2
+    exit 1
+fi
+
+if [ "$2" != "general" ] && [ "$2" != "translation" ]; then
+    echo "Error: second argument must be 'general' or 'translation' (got '$2')" >&2
+    exit 1
+fi
 
 export HF_HOME="/projects/$USER/.cache/huggingface"
 mkdir -p $HF_HOME
@@ -30,19 +45,17 @@ if torch.cuda.is_available():
 PY
 
 LANGS="amh ber chr grn haw ibo npi oci que yor zgh zh"
-GAMMAS="2 3 4 5"
 # DRAFT="Qwen/Qwen3.5-0.8B Qwen/Qwen3.5-2B Qwen/Qwen3.5-4B"
 
 # for draft in $DRAFT
 # do
     for lang in $LANGS
     do
-        for gamma in $GAMMAS
-        do
-            uv run python run.py "$1" \
-                -o language_code=$lang \
-                gamma=$gamma \
-                wandb_tag=final
-        done
+        uv run scripts/distill.py "$1" \
+            -o language_code=$lang \
+            output_dir="/scratch/alpine/$USER/spec-dec/" \
+            dataset_path="logprobs/logprobs-Qwen3.5-9B-$lang-$2.parquet" \
+            task=$2
+            # draft_model=$draft \
     done
 # done
