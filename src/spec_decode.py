@@ -597,12 +597,11 @@ def apply_repetition_penalty(
 
     for b in range(logits.size(0)):
         # window_counts = torch.nn.functional.one_hot(context_ids[b]).sum(dim=-2)
-        max_vocab_idx = torch.max(context_ids[b]).item()
-        max_vocab_idx = cast(int, max_vocab_idx)
-        window_counts = torch.zeros(max_vocab_idx, dtype=torch.long, device=context_ids[b].device)
+        max_vocab_index = torch.max(context_ids[b]).item() + 1
+        max_vocab_index = cast(int, max_vocab_index)
+        window_counts = torch.zeros(max_vocab_index, dtype=torch.long, device=context_ids[b].device)
         window_counts.scatter_add_(dim=0, index=context_ids[b], src=torch.ones_like(context_ids[b]))
 
-        max_vocab_index = window_counts.size(-1)
         per_token_penalty = penalty ** window_counts
         logits[b,:max_vocab_index] = torch.where(
             logits[b,:max_vocab_index] > 0,
