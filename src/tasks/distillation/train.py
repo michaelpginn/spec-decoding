@@ -15,7 +15,7 @@ from torch.amp import GradScaler, autocast  # type: ignore[attr-defined]
 from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 
-from src.config.config import DistillConfig
+from src.config.config import WANDB_ENTITY, DistillConfig
 from src.utils import load_model
 
 logger = logging.getLogger(__name__)
@@ -53,8 +53,8 @@ def setup_wandb(config: DistillConfig):
     ]
 
     run = wandb.init(
-        project=os.environ.get("WANDB_PROJECT", "spec-decoding-distill"),
-        entity=os.environ.get("WANDB_ENTITY", "lecs-general"),
+        project=config.wandb_project,
+        entity=WANDB_ENTITY,
         config=asdict(config),
         group=group,
         job_type=f"distill-{config.task}",

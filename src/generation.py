@@ -43,6 +43,8 @@ def generate_output(
             gamma=config.gamma,  # type:ignore
             top_k=config.top_k,
             top_p=config.top_p,
+            repetition_penalty=config.repetition_penalty,
+            repetition_penalty_window=config.repetition_penalty_window,
             device=inputs["input_ids"].device,
             track_iterations=config.track_iterations,
         )

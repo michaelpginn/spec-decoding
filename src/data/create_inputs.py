@@ -2,14 +2,17 @@ from typing import Literal
 
 from torch import device
 
-Task = Literal["translation"]
+
+Task = Literal["translation", "story_gen"]
 
 
 def create_prompt(task: Task, language: str, input: str):
     if task == "translation":
-        return f"You are translating from English to {language}. Output only the raw translation, no labels, explanations, notes, or alternatives. Please translate the following: {input}"
+        return f"Translate the following English text to {language}. Output only the translation, nothing else.\n\n{input}"
+    elif task == "story_gen":
+        return f"Write a short story in {language} about a(n) {input}. Output only the story, nothing else."
     else:
-        raise NotImplementedError()
+        raise NotImplementedError(f"Unknown task: {task!r}")
 
 
 def create_inputs(
@@ -18,10 +21,10 @@ def create_inputs(
     device: device | None = None,
     debug=False,
 ):
-    """Create chat messages for translation task."""
+    """Tokenize a prompt string into model inputs."""
     messages = [{"role": "user", "content": message}]
     prompt = tokenizer.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True
+        messages, tokenize=False, add_generation_prompt=True, enable_thinking=False
     )
     if debug:
         print(f"\n[DEBUG] Prompt:\n{prompt}\n{'=' * 60}")

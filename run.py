@@ -1,6 +1,6 @@
 import argparse
+import json
 import logging
-import os
 import pprint
 from dataclasses import asdict
 from pathlib import Path
@@ -9,7 +9,7 @@ from typing import Mapping
 import wandb
 from tqdm import tqdm
 
-from src.config.config import ExperimentConfig
+from src.config.config import WANDB_ENTITY, ExperimentConfig
 from src.config.config_to_dataclass import config_to_dataclass
 from src.data.create_inputs import create_inputs, create_prompt
 from src.data.dataset import assemble_dataset
@@ -30,8 +30,10 @@ def run(config: ExperimentConfig):
     """Run experiment: load config, init wandb, dispatch to task (e.g. translation)."""
     if config.task == "translation":
         from src.tasks.translation import compute_eval_metrics, load_data
+    elif config.task == "story_gen":
+        from src.tasks.story_gen import compute_eval_metrics, load_data
     else:
-        raise NotImplementedError()
+        raise NotImplementedError(f"Unknown task: {config.task!r}")
 
     # 1. Load target model
     logger.info(f"Loading target model: {config.target_model}...")
@@ -75,7 +77,7 @@ def run(config: ExperimentConfig):
     # 4. Decoding loop
     predictions = []
     all_metrics: list[dict] = []
-    for row in tqdm(dataset, desc="Decoding"):
+    for row_idx, row in enumerate(tqdm(dataset, desc="Decoding")):
         assert isinstance(row, Mapping)
         prompt = create_prompt(config.task, language, row['source'])
         inputs = create_inputs(prompt, target_tokenizer, device)
@@ -89,8 +91,20 @@ def run(config: ExperimentConfig):
         )
         predictions.append(predicted)
         all_metrics.append(metrics)
+        if row_idx < 5:
+            logger.info(f"Prompt {row_idx}: {prompt}")
+            logger.info(f"Response {row_idx}: {predicted}\n")
 
-    # 5. Aggregate and log speculative decoding metrics
+    # 5. Save generated outputs (story gen only)
+    if config.task == "story_gen":
+        out_path = Path(wandb.run.dir) / "outputs.jsonl"  # type:ignore
+        with open(out_path, "w", encoding="utf-8") as f:
+            for pred in predictions:
+                f.write(json.dumps({"text": pred}, ensure_ascii=False) + "\n")
+        logger.info(f"Saved {len(predictions)} outputs to {out_path}")
+        wandb.save(str(out_path))
+
+    # 6. Aggregate and log speculative decoding metrics
     per_sentence_metrics, summary_metrics = summarize_metrics(
         all_metrics,
         config.gamma,
@@ -99,15 +113,15 @@ def run(config: ExperimentConfig):
     wandb.summary.update(summary_metrics)
     for entry in per_sentence_metrics:
         wandb.log(entry)
-    # Remove per-sentence keys that wandb.log in summary
     for key in list(wandb.summary.keys()):
         if key.startswith("sentence/") or key == "sentence_idx":
             del wandb.summary[key]
     log_token_flow([row['source'] for row in dataset], all_metrics, config) # type:ignore
 
-    # 6. Log evaluation metrics
+    # 7. Log evaluation metrics (skipped for tasks without references, e.g. story_gen)
     eval_metrics = compute_eval_metrics([row['target'] for row in dataset], predictions) # type:ignore
-    wandb.summary.update(eval_metrics)
+    if eval_metrics:
+        wandb.summary.update(eval_metrics)
 
 
 def setup_wandb(config: ExperimentConfig):
@@ -148,8 +162,8 @@ def setup_wandb(config: ExperimentConfig):
     wandb_config["run_type"] = job_type
 
     wandb.init(
-        project=os.environ.get("WANDB_PROJECT", "spec-decoding"),
-        entity=os.environ.get("WANDB_ENTITY", "lecs-general"),
+        project=config.wandb_project,
+        entity=WANDB_ENTITY,
         config=wandb_config,
         group=group,
         job_type=job_type,

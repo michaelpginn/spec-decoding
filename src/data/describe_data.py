@@ -28,7 +28,7 @@ languages = [
 
 # Cut: lkt,mus,oji
 
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-7B-Instruct")
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3.5-9B")
 
 def add_token_counts(row):
     return {'num_tokens': len(tokenizer.tokenize(row['text']))}

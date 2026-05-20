@@ -30,8 +30,8 @@ if torch.cuda.is_available():
 PY
 
 LANGS="amh ber chr grn haw ibo npi oci que yor zgh zh"
-GAMMAS="1 2 3 4 5 6 7"
-DRAFT="Qwen/Qwen2.5-0.5B-Instruct Qwen/Qwen2.5-1.5B-Instruct Qwen/Qwen2.5-3B-Instruct"
+GAMMAS="2 3 4 5 6 7"
+DRAFT="Qwen/Qwen3.5-0.8B Qwen/Qwen3.5-2B Qwen/Qwen3.5-4B"
 
 for draft in $DRAFT
 do

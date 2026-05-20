@@ -7,3 +7,4 @@ experiments/submit_alpine.sh
 wandb
 outputs
 logprobs
+**/*.log

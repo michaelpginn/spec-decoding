@@ -5,7 +5,21 @@ Clone with submodules:
 git clone --recursive git@github.com:michaelpginn/spec-decoding.git
 ```
 
-Please install [uv](https://docs.astral.sh/uv/getting-started/installation/) to run.
+Then, install [uv](https://docs.astral.sh/uv/getting-started/installation/) if it isn't already.
+
+```bash
+# Run a spec dec evaluation (inference only)
+uv run run.py experiments/<config>.cfg --overrides key1=val1 key2=val2
+
+# Generate logprob file for distillation
+uv run scripts/generate_teacher_logprobs.py experiments/distillation/logprobs_general.cfg
+# ... or logprobs_translation.cfg
+
+# Run distillation
+uv run scripts/distill.py experiments/distillation/distill
+```
+
+Our three main scripts each take an ini-style config file (`.cfg`). The source of truth for config parameters is in `src/config/config.py`.
 
 ## Research Questions
 

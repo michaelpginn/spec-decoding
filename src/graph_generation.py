@@ -59,7 +59,6 @@ def fake_data(langs):
 
     token_position = list(range(128))
     probabilities = np.random.uniform(0, 1, 128)
-
     # Dictionary construction
     return {
         "tps spec": tps_spec,
@@ -72,7 +71,8 @@ def fake_data(langs):
         "average forward pass": mean_pass,
         "average forward pass stdev": std_pass,
         "token position": token_position,
-        "probability": probabilities
+        "probability": probabilities,
+        "average forward pass stdev": std_pass
     }
 
 def placeholder_graphs():

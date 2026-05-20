@@ -43,8 +43,8 @@ echo "###  Quick test — Qwen 0.5B + 0.5B, gamma=5, zgh/chr/npi  ###"
 for lang in ber chr npi; do
     run_one python run.py $SPEC_CFG \
         -o language_code=$lang \
-           target_model=Qwen/Qwen2.5-0.5B-Instruct \
-           draft_model=Qwen/Qwen2.5-0.5B-Instruct \
+           target_model=Qwen/Qwen3.5-0.8B \
+           draft_model=Qwen/Qwen3.5-0.8B \
            gamma=5 \
            max_samples=$MAX_SAMPLES
 done
@@ -57,7 +57,7 @@ echo "###  Baseline — Qwen 7B  ###"
 for lang in $LANGS; do
     run_one python run.py $BASELINE_CFG \
         -o language_code=$lang \
-           target_model=Qwen/Qwen2.5-7B-Instruct \
+           target_model=Qwen/Qwen3.5-9B \
            max_samples=$MAX_SAMPLES
 done
 
@@ -66,8 +66,8 @@ for gamma in $GAMMAS; do
     for lang in $LANGS; do
         run_one python run.py $SPEC_CFG \
             -o language_code=$lang \
-               target_model=Qwen/Qwen2.5-7B-Instruct \
-               draft_model=Qwen/Qwen2.5-0.5B-Instruct \
+               target_model=Qwen/Qwen3.5-9B \
+               draft_model=Qwen/Qwen3.5-0.8B \
                gamma=$gamma \
                max_samples=$MAX_SAMPLES
     done
@@ -81,7 +81,7 @@ echo "###  Baseline — Qwen 32B  ###"
 for lang in $LANGS; do
     run_one python run.py $BASELINE_CFG \
         -o language_code=$lang \
-           target_model=Qwen/Qwen2.5-32B-Instruct \
+           target_model=Qwen/Qwen3.5-27B \
            max_samples=$MAX_SAMPLES
 done
 
@@ -91,8 +91,8 @@ for gamma in $GAMMAS; do
     for lang in $LANGS; do
         run_one python run.py $SPEC_CFG \
             -o language_code=$lang \
-               target_model=Qwen/Qwen2.5-32B-Instruct \
-               draft_model=Qwen/Qwen2.5-0.5B-Instruct \
+               target_model=Qwen/Qwen3.5-27B \
+               draft_model=Qwen/Qwen3.5-0.8B \
                gamma=$gamma \
                max_samples=$MAX_SAMPLES
     done
@@ -104,8 +104,8 @@ for gamma in $GAMMAS; do
     for lang in $LANGS; do
         run_one python run.py $SPEC_CFG \
             -o language_code=$lang \
-               target_model=Qwen/Qwen2.5-32B-Instruct \
-               draft_model=Qwen/Qwen2.5-1.5B-Instruct \
+               target_model=Qwen/Qwen3.5-27B \
+               draft_model=Qwen/Qwen3.5-2B \
                gamma=$gamma \
                max_samples=$MAX_SAMPLES
     done
@@ -117,8 +117,8 @@ for gamma in $GAMMAS; do
     for lang in $LANGS; do
         run_one python run.py $SPEC_CFG \
             -o language_code=$lang \
-               target_model=Qwen/Qwen2.5-32B-Instruct \
-               draft_model=Qwen/Qwen2.5-3B-Instruct \
+               target_model=Qwen/Qwen3.5-27B \
+               draft_model=Qwen/Qwen3.5-4B \
                gamma=$gamma \
                max_samples=$MAX_SAMPLES
     done

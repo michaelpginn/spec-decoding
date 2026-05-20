@@ -150,11 +150,18 @@ def _compute_spec_metrics(
     summary["mean_accepted_tokens"] = mean_accepted
     summary["block_efficiency"] = mean_accepted / gamma if gamma > 0 else 0
 
+    # Per-position mean acceptance rates
+    positions: list[int] = spec_results[0]["octile_positions"]
+    for idx, pos in enumerate(positions):
+        per_sentence_vals = [r["octile_position_acceptance"][idx] for r in spec_results]
+        per_sentence_vals = [acc for acc in per_sentence_vals if acc is not None]
+        summary[f"acceptance_rate_pos_{pos}"] = sum(per_sentence_vals) / len(per_sentence_vals) if len(per_sentence_vals) else None
+
     # Standard deviations
     if n >= 2:
         summary["sentence_std_acceptance_rate"] = stdev(per_sentence_acceptance_rates)
         summary["sentence_std_mean_accepted_tokens"] = stdev(per_sentence_accepted_tokens)
-    
+
     # Compute speedup factor and its std (CUDA only)
     # Pool forward-pass timing stats across all sentences
     total_d_sum = sum(r.get("average_draft_time", 0) * r.get("draft_time_count", 0) for r in spec_results)

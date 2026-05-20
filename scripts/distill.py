@@ -3,13 +3,12 @@ Entry point for knowledge distillation.
 """
 import argparse
 import logging
-import os
 from pathlib import Path
 import pprint
 
 import wandb
 
-from src.config.config import DistillConfig
+from src.config.config import WANDB_ENTITY, DistillConfig
 from src.config.config_to_dataclass import config_to_dataclass
 from src.tasks.distillation.train import build_repo_name, run_distillation, setup_wandb
 from src.utils import load_model
@@ -48,8 +47,8 @@ if __name__ == "__main__":
             "lr": {"values": [2e-4, 1e-4, 5e-5, 2e-5, 1e-5]}
         }
     }
-    entity = os.environ.get("WANDB_ENTITY", "lecs-general")
-    project =os.environ.get("WANDB_PROJECT", "spec-decoding-distill")
+    entity = WANDB_ENTITY
+    project = config.wandb_project
     sweep_id = wandb.sweep(
         sweep=sweep_config,
         entity=entity,
