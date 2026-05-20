@@ -301,8 +301,7 @@ def speculative_decode(
                 <= pos
                 < cur_gen_idx + new_draft_tokens.size(-1) - prompt_len
             ]
-            for idx in octile_idxs_to_log:
-                per_position_draft_count[idx] += 1
+
 
             #  Step 2: Target model verifies
             target_input_ids = torch.concat(
@@ -388,6 +387,8 @@ def speculative_decode(
                 for idx in octile_idxs_to_log:
                     if octile_offsets[idx] < cur_gen_idx + first_collision_idx - prompt_len:
                         per_position_accept_count[idx] += 1
+                    if octile_offsets[idx] <= cur_gen_idx + first_collision_idx - prompt_len
+                        per_position_draft_count[idx] += 1
 
                 # Resample token from p_target(x) - p_draft(x)
                 resample_dist = (
@@ -410,6 +411,7 @@ def speculative_decode(
                 total_draft_tokens += new_draft_tokens.size(-1)
                 for idx in octile_idxs_to_log:
                     per_position_accept_count[idx] += 1
+                    per_position_draft_count[idx] += 1
 
                 if new_draft_tokens.size(-1) > 0 and torch.isin(new_draft_tokens[:, -1], stop_token_ids).any():
                     # If we've reached <eos>, don't add bonus token
