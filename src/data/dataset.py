@@ -209,5 +209,10 @@ def assemble_dataset(lang_code: str, type: Literal["mono", "bi"], tokenizer, max
         logger.info(f"Filtered full dataset from {old_size} to {max_samples} examples")
     logger.info(f"Data source breakdown: {Counter(dataset['origin'])}")
     splits = dataset.train_test_split(test_size=0.2, seed=42)
+
+    # FIXME: Temporarily truncated to 400 for paper, revert this later!
+    if type == 'bi':
+        splits["test"] = splits["test"].select(range(min(400, len(splits['test']))))
+
     logger.info(f"Data splits: {splits}")
     return splits
