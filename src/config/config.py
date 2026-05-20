@@ -65,7 +65,7 @@ class DistillConfig:
     weight_decay: float = 0.01
     warmup_ratio: float = 0.06
     lr_scheduler: Literal["cosine", "linear", "constant"] = "cosine"
-    max_length: int = 512
+    max_length: int = 128
     eval_split_ratio: float = 0.05
     eval_every: int = 50
 
