@@ -28,7 +28,6 @@ class ExperimentConfig:
     use_hf_assisted: bool = False
     hf_schedule: Literal["heuristic", "constant"] | None = None
 
-    data_source: str = "tatoeba"
     max_samples: int = 6000
     max_samples_mono: int = 20000
     max_new_tokens: int = 128

@@ -153,13 +153,13 @@ bi_source_table = """\\begin{table}[h!]
     \\centering
         \\begin{tabular}{l c l}
             \\toprule
-            \\textbf{Language} & \\textbf{Total Tokens} & \\textbf{Sources} \\\\
+            \\textbf{Language} & \\textbf{Total Examples} & \\textbf{Sources} \\\\
             \\midrule
 """
 
 for lang in sorted(languages):
     d = lang_data[lang]
-    total_tokens = short(d['bi']['train']['num_examples'] + d['bi']['test']['num_examples'])
+    total_tokens = d['bi']['train']['num_examples'] + d['bi']['test']['num_examples']
     temp = ""
     for item in d['bi']['train']['sources'].keys():
         if item.lower() == "tateoba":
