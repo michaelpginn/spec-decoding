@@ -60,7 +60,7 @@ def _shades(hex_color: str, n: int, light: float = 0.78, dark: float = 0.25) -> 
 def load_real_data() -> pd.DataFrame:
     records = []
     logger.info("Loading runs")
-    for run in tqdm(wandb.Api().runs(path="lecs-general/speculative decoding v2", lazy=False, filters={"state": "finished", "config.task": "translation"})):
+    for run in tqdm(wandb.Api().runs(path="lecs-general/speculative decoding v2", lazy=False, filters={"state": "finished"})):
         if run.config["draft_model"] is None:
             setting = "N-Gram"
             size = "N-Gram"
@@ -104,7 +104,7 @@ def _finalize(fig, filename: str):
     plt.close(fig)
 
 
-def _bar_plot(data: pd.DataFrame, y: str, y_std: str):
+def _bar_plot(data: pd.DataFrame, y: str, y_std: str, filename: str):
     fig, ax = plt.subplots(figsize=(8, 2))
     sns.barplot(
         data=data,
@@ -150,7 +150,7 @@ def _bar_plot(data: pd.DataFrame, y: str, y_std: str):
         borderaxespad=0.1,
     )
 
-    _finalize(fig, y)
+    _finalize(fig, filename)
 
 
 def _violin_plot(data, x: str, y: str, y_std: str):
@@ -250,22 +250,29 @@ def _chrf_acceptance_plot(data: pd.DataFrame):
 
 def create_graphs(data: pd.DataFrame):
     # _bar_plot(data,             "Tokens / Second (Spec)", "tps_spec")
-    _bar_plot(data, "sentence_avg_tokens_per_second", "sentence_std_tokens_per_second")
-    _bar_plot(data, "speedup_factor", "speedup_factor_std")
-    _bar_plot(data, "sentence_avg_acceptance_rate", "sentence_std_acceptance_rate")
-    _chrf_acceptance_plot(data)
+    translation_data = data[data['task'] == 'translation']
+    _bar_plot(translation_data, "sentence_avg_tokens_per_second", "sentence_std_tokens_per_second", "translation_tps")
+    _bar_plot(translation_data, "speedup_factor", "speedup_factor_std", "translation_speedup")
+    _bar_plot(translation_data, "sentence_avg_acceptance_rate", "sentence_std_acceptance_rate", "translation_acceptance")
+    _chrf_acceptance_plot(translation_data)
 
-    forward_pass_data = data[data["setting"] == "Baseline"][
+    story_data = data[data['task'] == 'story_gen']
+    _bar_plot(story_data, "sentence_avg_tokens_per_second", "sentence_std_tokens_per_second", "story_tps")
+    _bar_plot(story_data, "speedup_factor", "speedup_factor_std", "story_speedup")
+    _bar_plot(story_data, "sentence_avg_acceptance_rate", "sentence_std_acceptance_rate", "story_acceptance")
+
+
+    forward_pass_data = translation_data[translation_data["setting"] == "Baseline"][
         ["model_size", "average_draft_time", "draft_time_std"]
     ]
-    verifier_data = data.drop(columns=["average_draft_time", "draft_time_std"]).rename(
+    verifier_data = translation_data.drop(columns=["average_draft_time", "draft_time_std"]).rename(
         columns={
             "average_verifier_time": "average_draft_time",
             "verifier_time_std": "draft_time_std",
         }
-    )[data["setting"] == "Baseline"][["model_size", "average_draft_time", "draft_time_std"]]
+    )[translation_data["setting"] == "Baseline"][["model_size", "average_draft_time", "draft_time_std"]]
     verifier_data["model_size"] = "9B"
-    ngram_pass_data = data[data["setting"] == "N-Gram"][
+    ngram_pass_data = translation_data[translation_data["setting"] == "N-Gram"][
         ["model_size", "average_draft_time", "draft_time_std"]
     ]
     _violin_plot(
