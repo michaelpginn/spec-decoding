@@ -1,4 +1,6 @@
 import colorsys
+import logging
+import re
 from pathlib import Path
 
 import matplotlib.colors as mcolors
@@ -7,9 +9,8 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from tqdm import tqdm
+
 import wandb
-import re
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -42,10 +43,10 @@ PALETTE = ['#0072B2', '#D55E00', '#009E73', '#F0E442', '#CC79A7']
 SETTINGS = ["Baseline", "N-Gram", "Distilled (task)", "Distilled (general)"]
 FORWARD_PASS_MODELS = ["N-Gram", "0.8B", "2B", "4B", "9B"]
 KEY_TO_TITLE = {
-    "sentence_avg_tokens_per_second": "Tokens/sec",
+    "sentence_avg_tokens_per_second": "Tokens/s",
     "sentence_avg_acceptance_rate": "Acceptance Rate (α)",
     "speedup_factor": "Speedup Factor",
-    "average_draft_time": "Forward Pass Time (ms)"
+    "average_draft_time": "Forward Pass Time (s)"
 }
 
 def _shades(hex_color: str, n: int, light: float = 0.78, dark: float = 0.25) -> list[str]:
@@ -254,11 +255,25 @@ def create_graphs(data: pd.DataFrame):
     _bar_plot(data, "sentence_avg_acceptance_rate", "sentence_std_acceptance_rate")
     _chrf_acceptance_plot(data)
 
-    forward_pass_data = data[data['setting'] == 'Baseline'][['model_size', "average_draft_time", "draft_time_std"]]
-    ngram_pass_data = data[data['setting'] == 'N-Gram'][['model_size', "average_draft_time", "draft_time_std"]]
+    forward_pass_data = data[data["setting"] == "Baseline"][
+        ["model_size", "average_draft_time", "draft_time_std"]
+    ]
+    verifier_data = data.drop(columns=["average_draft_time", "draft_time_std"]).rename(
+        columns={
+            "average_verifier_time": "average_draft_time",
+            "verifier_time_std": "draft_time_std",
+        }
+    )[data["setting"] == "Baseline"][["model_size", "average_draft_time", "draft_time_std"]]
+    verifier_data["model_size"] = "9B"
+    ngram_pass_data = data[data["setting"] == "N-Gram"][
+        ["model_size", "average_draft_time", "draft_time_std"]
+    ]
     _violin_plot(
-        pd.concat([forward_pass_data, ngram_pass_data]),  # type:ignore
-        "model_size", "average_draft_time", "draft_time_std")
+        pd.concat([forward_pass_data, verifier_data, ngram_pass_data]),  # type:ignore
+        "model_size",
+        "average_draft_time",
+        "draft_time_std",
+    )
 
 
 if __name__ == "__main__":
