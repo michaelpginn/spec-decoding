@@ -123,18 +123,23 @@ def _bar_plot(data: pd.DataFrame, y: str, y_std: str, filename: str):
     for container, setting in zip(ax.containers, SETTINGS):
         s_df = data[data["setting"] == setting]
         xs = [patch.get_x() + patch.get_width() / 2 for patch in container]
-        ys = [patch.get_height() for patch in container]
+        ys = np.array([patch.get_height() for patch in container])
+        stds = s_df[y_std].to_numpy()
+        lower = np.minimum(stds, ys)
         try:
             ax.errorbar(
                 xs, ys,
-                yerr=s_df[y_std].to_numpy(),
+                yerr=[lower, stds],
                 fmt='none',
-                ecolor='#333333',
-                capsize=3,
-                linewidth=0.8,
+                ecolor='#444444',
+                capsize=2,
+                linewidth=0.6,
+                capthick=0.6,
             )
         except:
             breakpoint()
+
+    ax.set_ylim(bottom=0)
 
     _style_spines(ax)
     ax.set_xlabel("")
