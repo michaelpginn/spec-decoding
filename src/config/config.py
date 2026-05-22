@@ -31,6 +31,7 @@ class ExperimentConfig:
     max_samples: int = 6000
     max_samples_mono: int = 20000
     max_new_tokens: int = 128
+    story_seed: int | None = 0
     device: str = "auto"
 
     wandb_tag: str | None = None
@@ -44,6 +45,9 @@ class ExperimentConfig:
             assert self.gamma > 0
             assert self.draft_model is not None
 
+        if isinstance(self.story_seed, str):
+            self.story_seed = None if self.story_seed == "None" else int(self.story_seed)
+            
 @dataclass
 class DistillConfig:
     task: Literal['general', 'translation']
