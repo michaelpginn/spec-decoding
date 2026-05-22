@@ -11,8 +11,10 @@
 #SBATCH --qos=blanca-blast-lecs
 #SBATCH --mail-type=END,FAIL
 
-export HF_HOME="/projects/$USER/.cache/huggingface"
+export HF_HOME="/scratch/alpine/$USER/.cache/huggingface"
 mkdir -p $HF_HOME
+export WANDB_DIR="/scratch/alpine/$USER/wandb"
+mkdir -p $WANDB_DIR
 
 module load uv
 uv sync

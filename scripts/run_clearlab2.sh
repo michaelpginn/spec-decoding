@@ -11,7 +11,7 @@
 #SBATCH --qos=blanca-clearlab2
 #SBATCH --mail-type=END,FAIL
 
-export HF_HOME="/projects/$USER/.cache/huggingface"
+export HF_HOME="/scratch/alpine/$USER/.cache/huggingface"
 mkdir -p $HF_HOME
 
 module load uv

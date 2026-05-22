@@ -26,7 +26,7 @@ if [ "$2" != "general" ] && [ "$2" != "translation" ]; then
     exit 1
 fi
 
-export HF_HOME="/projects/$USER/.cache/huggingface"
+export HF_HOME="/scratch/alpine/$USER/.cache/huggingface"
 mkdir -p $HF_HOME
 
 module load uv
