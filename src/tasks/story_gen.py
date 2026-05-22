@@ -62,7 +62,7 @@ def _load_concrete_nouns() -> list[str]:
     """Concrete single-word nouns from Brysbaert ratings on HF Hub."""
     nouns: list[str] = []
     seen: set[str] = set()
-    with open(_concreteness_csv_path(), newline="") as f:
+    with open(_concreteness_csv_path(), newline="", encoding="utf-8") as f:
         for row in csv.reader(f):
             if len(row) != 2:
                 continue
@@ -121,6 +121,11 @@ def load_data(config: ExperimentConfig, tokenizer) -> tuple[DatasetDict, str]:
     vecs = _load_vectors()
     adjs = [w for w in _load_descriptive_adjs() if w in vecs]
     nouns = [w for w in _load_concrete_nouns() if w in vecs]
+    if not adjs or not nouns:
+        raise RuntimeError(
+            f"Adjective pool ({len(adjs)}) or noun pool ({len(nouns)}) is empty "
+            f"after filtering to words present in '{EMBEDDING_MODEL}' vocabulary."
+        )
     rng.shuffle(nouns)
 
     adj_matrix = np.stack([vecs[a] for a in adjs])
