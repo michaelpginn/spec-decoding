@@ -17,6 +17,10 @@ from nltk.corpus import brown
 from src.config.config import ExperimentConfig
 from src.data.dataset import get_language_name
 
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
+
+
 nltk.download("brown", quiet=True)
 
 CONCRETENESS_MIN = 4.0
