@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+import os
 import pprint
 from dataclasses import asdict
 from pathlib import Path
@@ -161,6 +162,7 @@ def setup_wandb(config: ExperimentConfig):
         f"{target_short}+{draft_short}" if is_spec else target_short
     )
     wandb_config["run_type"] = job_type
+    wandb_config["slurm_job_id"] = os.environ.get("SLURM_JOB_ID")
 
     wandb.init(
         project=config.wandb_project,

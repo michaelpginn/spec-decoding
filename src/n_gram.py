@@ -31,8 +31,18 @@ class NGramModel:
         self.tokenizer = tokenizer
         self.vocab_size = vocab_size
         self.config = SimpleNamespace(vocab_size=vocab_size)
-        self._logprob_buf = torch.full((vocab_size,), float("-inf"))
-        self._last_modified: list[int] = []
+        self._logprob_buf: torch.Tensor | None = None
+        self._last_modified: torch.Tensor | None = None
+        self._device: torch.device | None = None
+        self._full_buf: torch.Tensor | None = None
+
+    def _ensure_device(self, device: torch.device):
+        if self._device == device:
+            return
+        self._device = device
+        self._logprob_buf = torch.full((self.vocab_size,), float("-inf"), device=device)
+        self._full_buf = torch.full((self.vocab_size,), 1 / len(self.tokenizer), device=device)
+        self._last_modified = None
 
     def train(self, train: Dataset):
         """Learn an n-gram model with gram frequencies"""
@@ -50,34 +60,43 @@ class NGramModel:
             self.conditional_logprobs[context_key] = {
                 k: math.log(freq / marginal_sum) for k, freq in token_freqs.items()
             }
+        # Precompute context cache for fast forward
+        self._context_cache = {
+            ctx: (torch.tensor(list(d.keys()), dtype=torch.long),
+                torch.tensor(list(d.values()), dtype=torch.float32))
+            for ctx, d in self.conditional_logprobs.items()
+        }
         logger.info(
             f"N-gram model trained with {self.ngram_vocab_size} unique {self.n}-grams"
         )
 
-    def predict(self, tokens: list[int] | str):
+    def predict(self, tokens: list[int] | str) -> torch.Tensor:
         """Predict the next token using the last (n-1)-gram. Returns a (vocab_size,) tensor of log probabilities."""
         if isinstance(tokens, str):
             tokens = cast(
                 list[int],
                 self.tokenizer.convert_tokens_to_ids(self.tokenizer.tokenize(tokens)),
             )
+        if self._logprob_buf is None:
+            self._ensure_device(torch.device("cpu"))
+        assert self._logprob_buf is not None and self._full_buf is not None
 
-        if len(tokens) < self.n - 1:
-            return torch.full((len(self.tokenizer),), 1 / len(self.tokenizer))
-
+        device = self._device or torch.device("cpu")
         context_key = tuple(tokens[-(self.n - 1) :])
-        if context_key not in self.conditional_logprobs:
-            return torch.full((len(self.tokenizer),), 1 / len(self.tokenizer))
+        if len(tokens) < self.n - 1 or context_key not in self.conditional_logprobs:
+            return self._full_buf
 
-        if self._last_modified:
-            self._logprob_buf[self._last_modified] = float("-inf")
+        if self._last_modified is not None:
+            self._logprob_buf.index_fill_(0, self._last_modified, float("-inf"))
 
-        modified = []
-        for token_id, prob in self.conditional_logprobs[context_key].items():
-            self._logprob_buf[token_id] = prob
-            modified.append(token_id)
-        self._last_modified = modified
+        indices, values = self._context_cache[context_key]
+        if indices.device != device:
+            indices = indices.to(device)
+            values = values.to(device)
+            self._context_cache[context_key] = (indices, values)
 
+        self._logprob_buf[indices] = values
+        self._last_modified = indices
         return self._logprob_buf
 
     def __call__(
@@ -98,6 +117,7 @@ class NGramModel:
             )
         else:
             full_seq = input_ids
-        logits = self.predict(full_seq[0, -(self.n - 1):].tolist()).to(input_ids.device)
-        logits = logits.unsqueeze(0).unsqueeze(0)  # (batch_size, seq_length, d_vocab)
+        self._ensure_device(input_ids.device)
+        logits = self.predict(full_seq[0, -(self.n - 1):].tolist())
+        logits = logits.unsqueeze(0).unsqueeze(0)
         return CausalLMOutputWithPast(logits=logits, past_key_values=(full_seq,))  # type:ignore

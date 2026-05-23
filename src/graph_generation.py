@@ -69,7 +69,7 @@ def load_real_data() -> pd.DataFrame:
             if "general" in run.config["draft_model"]:
                 setting = "Distilled (general)"
             elif "translation" in run.config["draft_model"]:
-                setting = "Distilled (translation)"
+                setting = "Distilled (task)"
             else:
                 setting = "Baseline"
         records.append({
@@ -187,6 +187,30 @@ def _violin_plot(data, x: str, y: str, y_std: str):
         label.set_ha('right')
 
     _finalize(fig, y)
+
+
+def load_distill_data() -> pd.DataFrame:
+    records = []
+    logger.info("Loading distillation runs")
+    for run in tqdm(wandb.Api().runs(
+        path="lecs-general/spec-dec-distill",
+        lazy=False,
+        filters={"state": "finished"},
+    )):
+        best_loss = run.summary.get("eval/best_loss")
+        if best_loss is None:
+            continue
+        student = run.config.get("student_model", "")
+        m = re.match(r".*Qwen3\.5-([\d\.]+B)", student)
+        if not m:
+            continue
+        records.append({
+            "language": run.config["language_code"],
+            "model_size": m.group(1),
+            "task": run.config.get("task", "translation"),
+            "eval_ce_loss": best_loss,
+        })
+    return pd.DataFrame.from_records(records)
 
 
 def _chrf_acceptance_plot(data: pd.DataFrame):

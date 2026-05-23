@@ -28,6 +28,8 @@ fi
 
 export HF_HOME="/scratch/alpine/$USER/.cache/huggingface"
 mkdir -p $HF_HOME
+export WANDB_DIR="/scratch/alpine/$USER/wandb"
+mkdir -p $WANDB_DIR
 
 module load uv
 uv sync
@@ -51,11 +53,22 @@ LANGS="amh ber chr grn haw ibo npi oci que yor zgh zh"
 # do
     for lang in $LANGS
     do
-        uv run scripts/distill.py "$1" \
-            -o language_code=$lang \
-            output_dir="/scratch/alpine/$USER/spec-dec/" \
-            dataset_path="logprobs/logprobs-Qwen3.5-9B-$lang-$2.parquet" \
-            task=$2
-            # draft_model=$draft \
+        if [ "$lang" = "amh" ]; then
+            uv run scripts/distill.py "$1" \
+                -o language_code=$lang \
+                output_dir="/scratch/alpine/$USER/spec-dec/" \
+                dataset_path="logprobs/logprobs-Qwen3.5-9B-$lang-$2.parquet" \
+                task=$2 \
+                batch_size=24 \
+                grad_accum_steps=6
+                # draft_model=$draft \
+        else
+            uv run scripts/distill.py "$1" \
+                -o language_code=$lang \
+                output_dir="/scratch/alpine/$USER/spec-dec/" \
+                dataset_path="logprobs/logprobs-Qwen3.5-9B-$lang-$2.parquet" \
+                task=$2
+                # draft_model=$draft \
+        fi
     done
 # done
