@@ -8,3 +8,4 @@ wandb
 outputs
 logprobs
 **/*.log
+viz/*.pdf
