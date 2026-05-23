@@ -69,7 +69,7 @@ def load_real_data() -> pd.DataFrame:
             if "general" in run.config["draft_model"]:
                 setting = "Distilled (general)"
             elif "translation" in run.config["draft_model"]:
-                setting = "Distilled (translation)"
+                setting = "Distilled (task)"
             else:
                 setting = "Baseline"
         records.append({
