@@ -77,7 +77,7 @@ table = """\\begin{table}[h!]
     \\centering
         \\begin{tabular}{l c c c}
             \\toprule
-            \\textbf{Language} & \\textbf{Corpora type} & \\textbf{# Tran/Test} \\\\
+            \\textbf{Language} & \\textbf{Corpora type} & \\textbf{\\# Train/Test} \\\\
             \\midrule
 """
 
