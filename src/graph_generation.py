@@ -288,6 +288,78 @@ def create_graphs(data: pd.DataFrame):
     )
 
 
+def _pinsker_plot(kl_df: pd.DataFrame, spec_df: pd.DataFrame):
+    kl_df = kl_df.rename(columns={"language_code": "language"})
+
+    distilled_spec = spec_df[
+        (spec_df["task"] == "translation") &
+        (spec_df["setting"].isin(["Distilled (translation)", "Distilled (general)"]))
+    ].copy()
+    distilled_spec["distill_type"] = distilled_spec["setting"].map({
+        "Distilled (translation)": "translation",
+        "Distilled (general)": "general",
+    })
+
+    merged = distilled_spec.groupby(["language", "distill_type"])["sentence_avg_acceptance_rate"].mean().reset_index()
+    merged = merged.merge(kl_df[["language", "kl_divergence"]], on="language", how="inner")
+
+    if merged.empty:
+        logger.warning("Pinsker plot: no data after merging distill and spec decode runs")
+        return
+
+    # Pinsker bound curve: acceptance >= 1 - sqrt(KL/2)
+    kl_max = merged["kl_divergence"].max() + 0.3
+    kl_range = np.linspace(0, kl_max, 300)
+    pinsker_bound = np.maximum(0.0, 1.0 - np.sqrt(kl_range / 2))
+
+    type_to_color  = {"translation": PALETTE[0], "general": PALETTE[1]}
+    type_to_label  = {"translation": "Distilled (translation)", "general": "Distilled (general)"}
+    type_to_marker = {"translation": "o", "general": "s"}
+
+    fig, ax = plt.subplots(figsize=(5, 4))
+
+    ax.plot(
+        kl_range, pinsker_bound,
+        color="black", linewidth=1.2, linestyle="--",
+        label="Pinsker bound",
+        zorder=1,
+    )
+
+    for dtype in ["translation", "general"]:
+        subset = merged[merged["distill_type"] == dtype]
+        if subset.empty:
+            continue
+        ax.scatter(
+            subset["kl_divergence"],
+            subset["sentence_avg_acceptance_rate"],
+            color=type_to_color[dtype],
+            label=type_to_label[dtype],
+            marker=type_to_marker[dtype],
+            s=40,
+            zorder=3,
+            edgecolors="black",
+            linewidths=0.4,
+        )
+        for _, row in subset.iterrows():
+            ax.annotate(
+                row["language"],
+                (row["kl_divergence"], row["sentence_avg_acceptance_rate"]),
+                fontsize=7,
+                xytext=(3, 3),
+                textcoords="offset points",
+            )
+
+    ax.set_xlabel("KL Divergence (teacher ∥ student)")
+    ax.set_ylabel("Acceptance Rate (α)")
+    ax.set_xlim(left=0)
+    ax.set_ylim(0, 1.05)
+    ax.legend(frameon=False, fontsize=9, loc="upper right")
+    _style_spines(ax)
+    _finalize(fig, "pinsker_bound")
+
+
 if __name__ == "__main__":
-    data = load_real_data()
-    create_graphs(data)
+    kl_data = pd.read_csv("viz/kl_results.csv")
+    spec_data = load_real_data()
+    _pinsker_plot(kl_data, spec_data)
+    create_graphs(spec_data)
