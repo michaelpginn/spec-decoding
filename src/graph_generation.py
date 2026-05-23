@@ -89,6 +89,14 @@ def load_real_data() -> pd.DataFrame:
     return df
 
 
+def _log_stats(data: pd.DataFrame, group: str, y: str, label: str):
+    logger.info(f"Stats for {label} ({y}):")
+    for group_value, sub in data.groupby(group):
+        logger.info(
+            f"  {group_value}: avg={sub[y].mean():.4f}, min={sub[y].min():.4f}, max={sub[y].max():.4f}"
+        )
+
+
 def _style_spines(ax):
     for spine in ax.spines.values():
         spine.set_visible(True)
@@ -105,6 +113,7 @@ def _finalize(fig, filename: str):
 
 
 def _bar_plot(data: pd.DataFrame, y: str, y_std: str, filename: str):
+    _log_stats(data, "setting", y, filename)
     fig, ax = plt.subplots(figsize=(8, 2))
     sns.barplot(
         data=data,
@@ -159,6 +168,7 @@ def _bar_plot(data: pd.DataFrame, y: str, y_std: str, filename: str):
 
 
 def _violin_plot(data, x: str, y: str, y_std: str):
+    _log_stats(data, x, y, y)
     order = [m for m in FORWARD_PASS_MODELS if m in set(data['model_size'])]
     fig, ax = plt.subplots(figsize=(4, 3))
 
@@ -289,6 +299,7 @@ def _pinsker_plot(distill_df: pd.DataFrame, spec_df: pd.DataFrame):
 
 
 def _chrf_acceptance_plot(data: pd.DataFrame):
+    _log_stats(data, "setting", "sentence_avg_acceptance_rate", "chrf_acceptance")
     fig, ax = plt.subplots(figsize=(8, 4))
     data = data.copy()
     baseline_chrf_by_lang = (
@@ -389,6 +400,7 @@ def create_graphs(data: pd.DataFrame):
 
 if __name__ == "__main__":
     spec_data = load_real_data()
+    spec_data = spec_data[spec_data['language'] != 'zh']
     distill_data = load_distill_data()
     _pinsker_plot(distill_data, spec_data)
     create_graphs(spec_data)
