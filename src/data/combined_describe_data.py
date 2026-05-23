@@ -77,7 +77,7 @@ table = """\\begin{table}[h!]
     \\centering
         \\begin{tabular}{l c c c}
             \\toprule
-            \\textbf{Language} & \\textbf{Corpora type} & \\textbf{\\# Train/Test} \\\\
+            \\textbf{Language} & \\textbf{Monolingual \\# Train/Test} & \\textbf{Bilingual \\# Train/Test} \\\\
             \\midrule
 """
 
@@ -90,9 +90,7 @@ for lang in sorted(languages):
     d = lang_data[lang]
     num_tokens_train = short(d['mono']['train']['num_tokens'])
     num_tokens_test = short(d['mono']['test']['num_tokens'])
-    table += f"            {d['name']} [{lang}] & Monolingual & {num_tokens_train}/{num_tokens_test} \\\\ \n"
-
-    table += f"            {d['name']} [{lang}] & Bilingual & {d['bi']['train']['num_examples']}/{d['bi']['test']['num_examples']} \\\\ \n"
+    table += f"            {d['name']} [{lang}] & {num_tokens_train}/{num_tokens_test} & {d['bi']['train']['num_examples']}/{d['bi']['test']['num_examples']} \\\\ \n"
 
 table += """            \\bottomrule
         \\end{tabular}
