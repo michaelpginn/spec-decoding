@@ -93,16 +93,17 @@ def run(config: ExperimentConfig):
         )
         predictions.append(predicted)
         all_metrics.append(metrics)
-        if row_idx < 5:
+        if row_idx < 10:
             logger.info(f"Prompt {row_idx}: {prompt}")
             logger.info(f"Response {row_idx}: {predicted}\n")
 
     # 5. Save generated outputs (story gen only)
     if config.task == "story_gen":
+        sources = [row['source'] for row in dataset]  # type:ignore
         out_path = Path(wandb.run.dir) / "outputs.jsonl"  # type:ignore
         with open(out_path, "w", encoding="utf-8") as f:
-            for pred in predictions:
-                f.write(json.dumps({"text": pred}, ensure_ascii=False) + "\n")
+            for topic, pred in zip(sources, predictions):
+                f.write(json.dumps({"topic": topic, "text": pred}, ensure_ascii=False) + "\n")
         logger.info(f"Saved {len(predictions)} outputs to {out_path}")
         wandb.save(str(out_path))
 

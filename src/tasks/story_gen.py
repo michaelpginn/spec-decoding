@@ -23,6 +23,19 @@ ssl._create_default_https_context = ssl._create_unverified_context
 
 nltk.download("brown", quiet=True)
 
+CURATED_TOPICS = [
+    "golden meadow",
+    "sunlit garden",
+    "peaceful harbor",
+    "blooming orchard",
+    "radiant sunrise",
+    "warm lighthouse",
+    "vibrant festival",
+    "ancient forest",
+    "crystal waterfall",
+    "cozy cottage",
+]
+
 CONCRETENESS_MIN = 4.0
 ADJ_POS_MIN = 0.7
 ADJ_MIN_OCCURRENCES = 2
@@ -120,6 +133,12 @@ def load_data(config: ExperimentConfig, tokenizer) -> tuple[DatasetDict, str]:
     """Generate semantically-related adj+noun seeds as story prompts."""
     lang_name = get_language_name(config.language_code)
     n = config.max_samples
+
+    if config.use_curated_topics:
+        seeds = CURATED_TOPICS[:n]
+        dataset = Dataset.from_dict({"source": seeds, "target": [""] * len(seeds)})
+        return DatasetDict({"test": dataset}), lang_name
+
     rng = random.Random(config.story_seed)
 
     vecs = _load_vectors()

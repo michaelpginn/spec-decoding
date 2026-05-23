@@ -32,6 +32,7 @@ class ExperimentConfig:
     max_samples_mono: int = 20000
     max_new_tokens: int = 128
     story_seed: int | None = 0
+    use_curated_topics: bool = False
     device: str = "auto"
 
     wandb_tag: str | None = None
