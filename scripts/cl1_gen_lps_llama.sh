@@ -22,5 +22,6 @@ uv sync
 for lang in amh ber chr grn haw ibo npi oci que yor zgh
 do
     uv run scripts/generate_teacher_logprobs.py "$1" \
-        -o language_code=$lang
+        -o language_code=$lang \
+            target_model="meta-llama/Llama-3.2-3B-Instruct"
 done

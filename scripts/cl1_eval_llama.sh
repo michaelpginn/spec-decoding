@@ -11,8 +11,10 @@
 #SBATCH --qos=blanca-clearlab1
 #SBATCH --mail-type=END,FAIL
 
-export HF_HOME="/projects/$USER/.cache/huggingface"
+export HF_HOME="/scratch/alpine/$USER/.cache/huggingface"
 mkdir -p $HF_HOME
+export WANDB_DIR="/scratch/alpine/$USER/wandb"
+mkdir -p $WANDB_DIR
 
 module load uv
 uv sync
@@ -43,7 +45,8 @@ GAMMAS="2 3 4"
                 -o language_code=$lang \
                 gamma=$gamma \
                 wandb_tag=final \
-                draft_model="lecslab/$lang-general-Qwen3.5-9B-Qwen3.5-0.8B"
+                target_model="meta-llama/Llama-3.2-3B-Instruct" \
+                draft_model="meta-llama/Llama-3.2-1B-Instruct"
         done
     done
 # done
