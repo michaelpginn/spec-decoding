@@ -46,14 +46,16 @@ if torch.cuda.is_available():
     print("GPU 0:", torch.cuda.get_device_name(0))
 PY
 
-LANGS="amh ber chr grn haw ibo npi oci que yor zgh"
+LANGS="amh ber chr grn haw ibo npi oci que yor zgh zh"
+NEEDS_SMALLER_BS=(amh que yor)
+
 # DRAFT="Qwen/Qwen3.5-0.8B Qwen/Qwen3.5-2B Qwen/Qwen3.5-4B"
 
 # for draft in $DRAFT
 # do
     for lang in $LANGS
     do
-        if [ "$lang" = "amh" ]; then
+        if [[ " ${NEEDS_SMALLER_BS[*]} " == *" $lang "* ]]; then
             uv run scripts/distill.py "$1" \
                 -o language_code=$lang \
                 output_dir="/scratch/alpine/$USER/spec-dec/" \
