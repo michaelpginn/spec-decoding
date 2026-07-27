@@ -57,7 +57,7 @@ LANGS="amh ber chr grn haw ibo npi oci que yor zgh"
             uv run scripts/distill.py "$1" \
                 -o language_code=$lang \
                 output_dir="/scratch/alpine/$USER/spec-dec/" \
-                dataset_path="logprobs/logprobs-Qwen3.5-9B-$lang-$2.parquet" \
+                dataset_path="logprobs/logprobs-Llama-3.2-3B-Instruct-$lang-$2.parquet" \
                 task=$2 \
                 batch_size=24 \
                 grad_accum_steps=6 \
@@ -67,7 +67,7 @@ LANGS="amh ber chr grn haw ibo npi oci que yor zgh"
             uv run scripts/distill.py "$1" \
                 -o language_code=$lang \
                 output_dir="/scratch/alpine/$USER/spec-dec/" \
-                dataset_path="logprobs/logprobs-Qwen3.5-9B-$lang-$2.parquet" \
+                dataset_path="logprobs/logprobs-Llama-3.2-3B-Instruct-$lang-$2.parquet" \
                 task=$2 \
                 target_model="meta-llama/Llama-3.2-3B-Instruct" \
                 draft_model="meta-llama/Llama-3.2-1B-Instruct"
