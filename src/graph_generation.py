@@ -42,7 +42,24 @@ langs = ["amh","ber","chr","grn","haw","ibo","npi","oci","que","yor","zgh","zh"]
 PALETTE = ['#0072B2', '#D55E00', '#009E73', '#F0E442', '#CC79A7']
 
 SETTINGS = ["Baseline", "N-Gram", "Distilled (task)", "Distilled (general)"]
-FORWARD_PASS_MODELS = ["N-Gram", "0.8B", "2B", "4B", "9B"]
+
+# Per model family: how to parse the draft-model size, the order of models to
+# show along the forward-pass axis, the draft size used for the setting
+# comparison plots, and the size label used for the verifier.
+FAMILIES = {
+    "qwen": {
+        "size_pattern": r".*Qwen3.5-([\d\.]+B)",
+        "forward_pass_models": ["N-Gram", "0.8B", "2B", "4B", "9B"],
+        "baseline_size": "0.8B",
+        "verifier_size": "9B",
+    },
+    "llama": {
+        "size_pattern": r".*Llama-3\.2-([\d\.]+B)",
+        "forward_pass_models": ["N-Gram", "1B", "3B"],
+        "baseline_size": "1B",
+        "verifier_size": "3B",
+    },
+}
 KEY_TO_TITLE = {
     "sentence_avg_tokens_per_second": "Tokens/s",
     "sentence_avg_acceptance_rate": "Acceptance Rate (α)",
@@ -58,24 +75,39 @@ def _shades(hex_color: str, n: int, light: float = 0.78, dark: float = 0.25) -> 
     ]
 
 
+def _detect_family(target_model: str) -> str:
+    """Map a run's target model onto a model family in FAMILIES."""
+    if "Llama" in target_model:
+        return "llama"
+    return "qwen"
+
+
 def load_real_data() -> pd.DataFrame:
     records = []
     logger.info("Loading runs")
     for run in tqdm(wandb.Api().runs(path="lecs-general/speculative decoding v2", lazy=False, filters={"state": "finished"})):
-        if run.config["draft_model"] is None:
+        family = _detect_family(run.config["target_model"])
+        draft_model = run.config["draft_model"]
+        # N-Gram runs are flagged by draft_model_type. Qwen leaves draft_model
+        # unset for these, but Llama keeps the base draft model name, so we can't
+        # rely on draft_model being None to detect them.
+        if run.config.get("draft_model_type") == "ngram" or draft_model is None:
             setting = "N-Gram"
             size = "N-Gram"
+            draft_label = "ngram"
         else:
-            size = re.match(r".*Qwen3.5-([\d\.]+B)", run.config["draft_model"]).group(1) # type:ignore
-            if "general" in run.config["draft_model"]:
+            size = re.match(FAMILIES[family]["size_pattern"], draft_model).group(1) # type:ignore
+            if "general" in draft_model:
                 setting = "Distilled (general)"
-            elif "translation" in run.config["draft_model"]:
+            elif "translation" in draft_model:
                 setting = "Distilled (task)"
             else:
                 setting = "Baseline"
+            draft_label = draft_model
         records.append({
             "language": run.config["language_code"],
-            "draft_model": run.config["draft_model"] or "ngram",
+            "family": family,
+            "draft_model": draft_label,
             "gamma": run.config["gamma"],
             "setting":setting,
             "model_size": size,
@@ -85,7 +117,9 @@ def load_real_data() -> pd.DataFrame:
     df = pd.DataFrame.from_records(records)
     del records
     df = df[df["sentence_avg_acceptance_rate"].notna()]
-    best_gamma = df.groupby(["language", "draft_model", "task"])["sentence_avg_acceptance_rate"].idxmax()
+    # Include family because the "ngram" draft label is shared across families
+    # and would otherwise collide.
+    best_gamma = df.groupby(["family", "language", "draft_model", "task"])["sentence_avg_acceptance_rate"].idxmax()
     df = df.loc[best_gamma]
     return df
 
@@ -105,15 +139,16 @@ def _style_spines(ax):
         spine.set_edgecolor('black')
 
 
-def _finalize(fig, filename: str):
+def _finalize(fig, filename: str, family: str | None = None):
     plt.tight_layout(pad=0.2)
-    Path("viz").mkdir(parents=True, exist_ok=True)
-    fig.savefig(f"viz/{filename}.pdf", format="pdf", bbox_inches="tight", pad_inches=0.02)
+    out_dir = Path("viz") / family if family else Path("viz")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_dir / f"{filename}.pdf", format="pdf", bbox_inches="tight", pad_inches=0.02)
     plt.show()
     plt.close(fig)
 
 
-def _bar_plot(data: pd.DataFrame, y: str, y_std: str, filename: str, show_legend: bool = True):
+def _bar_plot(data: pd.DataFrame, y: str, y_std: str, filename: str, family: str | None = None, show_legend: bool = True):
     _log_stats(data, "setting", y, filename)
     fig, ax = plt.subplots(figsize=(8, 1.6 if show_legend else 1.3))
     bar_palette = ['#8C8C8C', *PALETTE[1:len(SETTINGS)]]
@@ -174,12 +209,12 @@ def _bar_plot(data: pd.DataFrame, y: str, y_std: str, filename: str, show_legend
     else:
         ax.get_legend().remove()
 
-    _finalize(fig, filename)
+    _finalize(fig, filename, family)
 
 
-def _violin_plot(data, x: str, y: str, y_std: str):
+def _violin_plot(data, x: str, y: str, y_std: str, family: str):
     _log_stats(data, x, y, y)
-    order = [m for m in FORWARD_PASS_MODELS if m in set(data['model_size'])]
+    order = [m for m in FAMILIES[family]["forward_pass_models"] if m in set(data['model_size'])]
     fig, ax = plt.subplots(figsize=(4, 1.5))
 
     sns.violinplot(
@@ -204,7 +239,7 @@ def _violin_plot(data, x: str, y: str, y_std: str):
     ax.set_ylabel("")
     ax.set_xlabel(KEY_TO_TITLE[y])
 
-    _finalize(fig, y)
+    _finalize(fig, y, family)
 
 
 def load_distill_data() -> pd.DataFrame:
@@ -231,7 +266,7 @@ def load_distill_data() -> pd.DataFrame:
     return pd.DataFrame.from_records(records)
 
 
-def _chrf_acceptance_plot(data: pd.DataFrame):
+def _chrf_acceptance_plot(data: pd.DataFrame, family: str | None = None):
     _log_stats(data, "setting", "sentence_avg_acceptance_rate", "chrf_acceptance")
     fig, ax = plt.subplots(figsize=(8, 2))
     data = data.copy()
@@ -290,9 +325,9 @@ def _chrf_acceptance_plot(data: pd.DataFrame):
             row += 1
         txt.set_y(base_y + row * row_spacing)
         placed.append((x_left, x_right, row))
-    _finalize(fig, "chrf_acceptance")
+    _finalize(fig, "chrf_acceptance", family)
 
-def _task_acceptance_scatter(data: pd.DataFrame):
+def _task_acceptance_scatter(data: pd.DataFrame, family: str | None = None):
     settings_to_show = ["Baseline", "Distilled (task)"]
     setting_to_color = {"Baseline": "#8C8C8C", "Distilled (task)": PALETTE[2]}
 
@@ -374,10 +409,10 @@ def _task_acceptance_scatter(data: pd.DataFrame):
         borderaxespad=0.1,
     )
     _style_spines(ax)
-    _finalize(fig, "task_acceptance_scatter")
+    _finalize(fig, "task_acceptance_scatter", family)
 
 
-def _size_scaling_plot(data: pd.DataFrame, y: str, filename: str):
+def _size_scaling_plot(data: pd.DataFrame, y: str, filename: str, family: str | None = None):
     size_order = ["0.8B", "2B", "4B"]
     lang_order = ["amh", "ber", "grn"]
     sub = data[
@@ -414,41 +449,61 @@ def _size_scaling_plot(data: pd.DataFrame, y: str, filename: str):
     ax.set_xlabel("Draft Model Size")
     ax.set_ylabel(KEY_TO_TITLE[y])
     _style_spines(ax)
-    _finalize(fig, filename)
+    _finalize(fig, filename, family)
 
 
 def create_graphs(data: pd.DataFrame):
-    # _bar_plot(data,             "Tokens / Second (Spec)", "tps_spec")
-    translation_data = data[(data['task'] == 'translation') & (data['model_size'].isin(['0.8B', 'N-Gram']))]
-    _bar_plot(translation_data, "sentence_avg_tokens_per_second", "sentence_std_tokens_per_second", "translation_tps")
-    _bar_plot(translation_data, "speedup_factor", "speedup_factor_std", "translation_speedup", show_legend=False)
-    _bar_plot(translation_data, "sentence_avg_acceptance_rate", "sentence_std_acceptance_rate", "translation_acceptance")
-    _chrf_acceptance_plot(translation_data)
+    for family in sorted(data["family"].unique()):
+        logger.info(f"Creating graphs for model family: {family}")
+        _create_family_graphs(data[data["family"] == family], family)
 
-    story_data = data[(data['task'] == 'story_gen')  & (data['model_size'].isin(['0.8B', 'N-Gram']))]
-    _bar_plot(story_data, "sentence_avg_tokens_per_second", "sentence_std_tokens_per_second", "story_tps")
-    _bar_plot(story_data, "speedup_factor", "speedup_factor_std", "story_speedup")
-    _bar_plot(story_data, "sentence_avg_acceptance_rate", "sentence_std_acceptance_rate", "story_acceptance")
 
-    _task_acceptance_scatter(data[data['model_size'].isin(['0.8B', 'N-Gram'])])
+def _create_family_graphs(data: pd.DataFrame, family: str):
+    cfg = FAMILIES[family]
+    baseline_size = cfg["baseline_size"]
+    # The setting-comparison plots compare Baseline vs. Distilled at a fixed
+    # draft size (matching the distilled draft) alongside N-Gram.
+    comparison_sizes = [baseline_size, 'N-Gram']
 
+    # _bar_plot(data,             "Tokens / Second (Spec)", "tps_spec", family)
+    translation_data = data[(data['task'] == 'translation') & (data['model_size'].isin(comparison_sizes))]
+    if translation_data.empty:
+        logger.info(f"[{family}] no translation runs; skipping translation plots")
+    else:
+        _bar_plot(translation_data, "sentence_avg_tokens_per_second", "sentence_std_tokens_per_second", "translation_tps", family)
+        _bar_plot(translation_data, "speedup_factor", "speedup_factor_std", "translation_speedup", family, show_legend=False)
+        _bar_plot(translation_data, "sentence_avg_acceptance_rate", "sentence_std_acceptance_rate", "translation_acceptance", family)
+        _chrf_acceptance_plot(translation_data, family)
+
+    story_data = data[(data['task'] == 'story_gen')  & (data['model_size'].isin(comparison_sizes))]
+    if story_data.empty:
+        logger.info(f"[{family}] no story_gen runs; skipping story plots")
+    else:
+        _bar_plot(story_data, "sentence_avg_tokens_per_second", "sentence_std_tokens_per_second", "story_tps", family)
+        _bar_plot(story_data, "speedup_factor", "speedup_factor_std", "story_speedup", family)
+        _bar_plot(story_data, "sentence_avg_acceptance_rate", "sentence_std_acceptance_rate", "story_acceptance", family)
+
+    # Task-acceptance scatter needs both translation and story runs.
+    if not translation_data.empty and not story_data.empty:
+        _task_acceptance_scatter(data[data['model_size'].isin(comparison_sizes)], family)
+
+    if translation_data.empty:
+        return
 
     forward_pass_data = data[
         (data["task"] == "translation") & (data["setting"] == "Baseline")
     ][["model_size", "average_draft_time", "draft_time_std"]]
     verifier_data = (
-        data[(data["task"] == "translation") & (data["setting"] == "Baseline") & (data["model_size"] == "0.8B")]
+        data[(data["task"] == "translation") & (data["setting"] == "Baseline") & (data["model_size"] == baseline_size)]
         .drop(columns=["average_draft_time", "draft_time_std"])
         .rename(
             columns={
                 "average_verifier_time": "average_draft_time",
                 "verifier_time_std": "draft_time_std",
             }
-        )[translation_data["setting"] == "Baseline"][
-            ["model_size", "average_draft_time", "draft_time_std"]
-        ]
+        )[["model_size", "average_draft_time", "draft_time_std"]]
     )
-    verifier_data["model_size"] = "9B"
+    verifier_data["model_size"] = cfg["verifier_size"]
     ngram_pass_data = data[(data["task"] == "translation") & (data["setting"] == "N-Gram")][
         ["model_size", "average_draft_time", "draft_time_std"]
     ]
@@ -457,13 +512,19 @@ def create_graphs(data: pd.DataFrame):
         "model_size",
         "average_draft_time",
         "draft_time_std",
+        family,
     )
 
-    _size_scaling_plot(data, "sentence_avg_acceptance_rate", "size_scaling_acceptance")
-    _size_scaling_plot(data, "speedup_factor", "size_scaling_speedup")
+    # Size scaling only applies where multiple baseline draft sizes were run.
+    n_baseline_sizes = data[(data["task"] == "translation") & (data["setting"] == "Baseline")]["model_size"].nunique()
+    if n_baseline_sizes > 1:
+        _size_scaling_plot(data, "sentence_avg_acceptance_rate", "size_scaling_acceptance", family)
+        _size_scaling_plot(data, "speedup_factor", "size_scaling_speedup", family)
+    else:
+        logger.info(f"[{family}] only one baseline draft size; skipping size-scaling plots")
 
 
-def _pinsker_plot(kl_df: pd.DataFrame, spec_df: pd.DataFrame):
+def _pinsker_plot(kl_df: pd.DataFrame, spec_df: pd.DataFrame, family: str | None = None):
     kl_df = kl_df.rename(columns={"language_code": "language"})
 
     distilled_spec = spec_df[
@@ -479,7 +540,7 @@ def _pinsker_plot(kl_df: pd.DataFrame, spec_df: pd.DataFrame):
     merged = merged.merge(kl_df[["language", "kl_divergence"]], on="language", how="inner")
 
     if merged.empty:
-        logger.warning("Pinsker plot: no data after merging distill and spec decode runs")
+        logger.warning(f"Pinsker plot ({family}): no data after merging distill and spec decode runs")
         return
 
     # Pinsker bound curve: acceptance >= 1 - sqrt(KL/2)
@@ -530,12 +591,13 @@ def _pinsker_plot(kl_df: pd.DataFrame, spec_df: pd.DataFrame):
     ax.set_ylim(0, 1.05)
     ax.legend(frameon=False, fontsize=9, loc="upper right")
     _style_spines(ax)
-    _finalize(fig, "pinsker_bound")
+    _finalize(fig, "pinsker_bound", family)
 
 
 if __name__ == "__main__":
     kl_data = pd.read_csv("viz/kl_results.csv")
     spec_data = load_real_data()
     spec_data = spec_data[spec_data['language'] != 'zh']
-    _pinsker_plot(kl_data, spec_data)
+    for family in sorted(spec_data["family"].unique()):
+        _pinsker_plot(kl_data, spec_data[spec_data["family"] == family], family)
     create_graphs(spec_data)
