@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.ticker import AutoMinorLocator
 from tqdm import tqdm
 
 import wandb
@@ -45,7 +46,7 @@ FORWARD_PASS_MODELS = ["N-Gram", "0.8B", "2B", "4B", "9B"]
 KEY_TO_TITLE = {
     "sentence_avg_tokens_per_second": "Tokens/s",
     "sentence_avg_acceptance_rate": "Acceptance Rate (α)",
-    "speedup_factor": "Speedup Factor",
+    "speedup_factor": "Speed-up Fact. (f)",
     "average_draft_time": "Forward Pass Time (s)"
 }
 
@@ -112,9 +113,10 @@ def _finalize(fig, filename: str):
     plt.close(fig)
 
 
-def _bar_plot(data: pd.DataFrame, y: str, y_std: str, filename: str):
+def _bar_plot(data: pd.DataFrame, y: str, y_std: str, filename: str, show_legend: bool = True):
     _log_stats(data, "setting", y, filename)
-    fig, ax = plt.subplots(figsize=(8, 2))
+    fig, ax = plt.subplots(figsize=(8, 1.6 if show_legend else 1.3))
+    bar_palette = ['#8C8C8C', *PALETTE[1:len(SETTINGS)]]
     sns.barplot(
         data=data,
         x="language",
@@ -122,7 +124,7 @@ def _bar_plot(data: pd.DataFrame, y: str, y_std: str, filename: str):
         hue="setting",
         hue_order=SETTINGS,
         order=langs,
-        palette=PALETTE[:len(SETTINGS)],
+        palette=bar_palette,
         edgecolor='#333333',
         linewidth=0.4,
         errorbar=None,
@@ -148,21 +150,29 @@ def _bar_plot(data: pd.DataFrame, y: str, y_std: str, filename: str):
         except:
             breakpoint()
 
-    ax.set_ylim(bottom=0)
+    if y != "speedup_factor":
+        ax.set_ylim(bottom=0)
+
+    ax.yaxis.set_minor_locator(AutoMinorLocator(2))
+    ax.tick_params(axis='y', which='minor', length=0)
+    ax.grid(which='minor', axis='y', color='#E5E5E5', linewidth=0.5, alpha=0.7)
 
     _style_spines(ax)
     ax.set_xlabel("")
     ax.set_ylabel(KEY_TO_TITLE[y])
 
-    ax.legend(
-        frameon=False,
-        fontsize=10,
-        loc='lower center',
-        bbox_to_anchor=(0.5, 1.0),
-        ncol=len(SETTINGS),
-        title=None,
-        borderaxespad=0.1,
-    )
+    if show_legend:
+        ax.legend(
+            frameon=False,
+            fontsize=10,
+            loc='lower center',
+            bbox_to_anchor=(0.5, 1.0),
+            ncol=len(SETTINGS),
+            title=None,
+            borderaxespad=0.1,
+        )
+    else:
+        ax.get_legend().remove()
 
     _finalize(fig, filename)
 
@@ -170,7 +180,7 @@ def _bar_plot(data: pd.DataFrame, y: str, y_std: str, filename: str):
 def _violin_plot(data, x: str, y: str, y_std: str):
     _log_stats(data, x, y, y)
     order = [m for m in FORWARD_PASS_MODELS if m in set(data['model_size'])]
-    fig, ax = plt.subplots(figsize=(4, 2.5))
+    fig, ax = plt.subplots(figsize=(4, 1.5))
 
     sns.violinplot(
         data=data,
@@ -223,7 +233,7 @@ def load_distill_data() -> pd.DataFrame:
 
 def _chrf_acceptance_plot(data: pd.DataFrame):
     _log_stats(data, "setting", "sentence_avg_acceptance_rate", "chrf_acceptance")
-    fig, ax = plt.subplots(figsize=(8, 3))
+    fig, ax = plt.subplots(figsize=(8, 2))
     data = data.copy()
     baseline_chrf_by_lang = (
         data[data['setting'] == 'Baseline'].set_index('language')['chrf2']
@@ -239,16 +249,17 @@ def _chrf_acceptance_plot(data: pd.DataFrame):
     r = baseline_chrfs['chrf2'].corr(baseline_chrfs['sentence_avg_acceptance_rate'])
     logger.info(f"Pearson r (chrF++ vs acceptance rate) for Baseline: r={r:.4f} (n={len(baseline_chrfs)})")
 
-    ax.plot(
+    ax.scatter(
         baseline_chrfs['chrf2'], baseline_chrfs['sentence_avg_acceptance_rate'],
-        marker='o',
-        markersize=5,
-        color=PALETTE[0],
-        linewidth=0,
+        facecolors="none",
+        edgecolors="#8C8C8C",
+        s=40,
+        linewidths=1.0,
+        zorder=3,
     )
     slope, intercept = np.polyfit(baseline_chrfs['chrf2'], baseline_chrfs['sentence_avg_acceptance_rate'], 1)
     x_fit = np.array([baseline_chrfs['chrf2'].min(), baseline_chrfs['chrf2'].max()])
-    ax.plot(x_fit, slope * x_fit + intercept, color=PALETTE[0], linewidth=1.5, linestyle='--')
+    ax.plot(x_fit, slope * x_fit + intercept, color="#8C8C8C", linewidth=1.5, linestyle='--')
     ax.text(
         0.98, 0.02, f"r = {r:.3f}",
         transform=ax.transAxes,
@@ -281,31 +292,164 @@ def _chrf_acceptance_plot(data: pd.DataFrame):
         placed.append((x_left, x_right, row))
     _finalize(fig, "chrf_acceptance")
 
+def _task_acceptance_scatter(data: pd.DataFrame):
+    settings_to_show = ["Baseline", "Distilled (task)"]
+    setting_to_color = {"Baseline": "#8C8C8C", "Distilled (task)": PALETTE[2]}
+
+    pivoted = (
+        data[data["setting"].isin(settings_to_show)]
+        .pivot_table(
+            index=["language", "setting"],
+            columns="task",
+            values="sentence_avg_acceptance_rate",
+        )
+        .dropna(subset=["translation", "story_gen"])
+        .reset_index()
+    )
+
+    fig, ax = plt.subplots(figsize=(4, 3))
+
+    x_lo, x_hi = pivoted["translation"].min(), pivoted["translation"].max()
+    y_lo, y_hi = pivoted["story_gen"].min(), pivoted["story_gen"].max()
+    x_span, y_span = x_hi - x_lo, y_hi - y_lo
+    x_lims = (max(0, x_lo - 0.05 * x_span), min(1, x_hi + 0.05 * x_span))
+    y_lims = (max(0, y_lo - 0.08 * y_span), min(1, y_hi + 0.08 * y_span))
+    diag_lo = min(x_lims[0], y_lims[0])
+    diag_hi = max(x_lims[1], y_lims[1])
+    # ax.plot([diag_lo, diag_hi], [diag_lo, diag_hi], color="#BFBFBF", linewidth=0.8, linestyle="--", zorder=0)
+
+    paired = pivoted.pivot(index="language", columns="setting", values=["translation", "story_gen"])
+    for lang, row in paired.iterrows():
+        if pd.isna(row[("translation", "Baseline")]) or pd.isna(row[("translation", "Distilled (task)")]):
+            continue
+        ax.annotate(
+            "",
+            xy=(row[("translation", "Distilled (task)")], row[("story_gen", "Distilled (task)")]),
+            xytext=(row[("translation", "Baseline")], row[("story_gen", "Baseline")]),
+            arrowprops=dict(arrowstyle="-", color="#999999", alpha=0.25, linewidth=0.6, shrinkA=5, shrinkB=5),
+            zorder=1,
+        )
+
+    for setting in settings_to_show:
+        sub = pivoted[pivoted["setting"] == setting]
+        if setting == "Baseline":
+            ax.scatter(
+                sub["translation"], sub["story_gen"],
+                facecolors="none",
+                edgecolors=setting_to_color[setting],
+                label=setting,
+                s=40,
+                zorder=3,
+                linewidths=1.0,
+            )
+        else:
+            ax.scatter(
+                sub["translation"], sub["story_gen"],
+                color=setting_to_color[setting],
+                label=setting,
+                s=40,
+                zorder=3,
+                edgecolors="black",
+                linewidths=0.4,
+            )
+        for _, row in sub.iterrows():
+            ax.annotate(
+                row["language"],
+                (row["translation"], row["story_gen"]),
+                fontsize=7,
+                xytext=(3, 3),
+                textcoords="offset points",
+            )
+
+    ax.set_xlim(x_lims)
+    ax.set_ylim(y_lims)
+    ax.set_xlabel("Acceptance Rate (Translation)")
+    ax.set_ylabel("Acceptance Rate (Story Generation)")
+    ax.legend(
+        frameon=False,
+        fontsize=10,
+        loc='lower center',
+        bbox_to_anchor=(0.5, 1.0),
+        ncol=len(settings_to_show),
+        borderaxespad=0.1,
+    )
+    _style_spines(ax)
+    _finalize(fig, "task_acceptance_scatter")
+
+
+def _size_scaling_plot(data: pd.DataFrame, y: str, filename: str):
+    size_order = ["0.8B", "2B", "4B"]
+    lang_order = ["amh", "ber", "grn"]
+    sub = data[
+        (data["task"] == "translation")
+        & (data["setting"] == "Baseline")
+        & (data["language"].isin(lang_order))
+        & (data["model_size"].isin(size_order))
+    ]
+    pivot = sub.pivot_table(index="model_size", columns="language", values=y).reindex(size_order)
+
+    fig, ax = plt.subplots(figsize=(4, 2.2))
+    colors = _shades(PALETTE[0], len(lang_order))
+    xs = np.arange(len(size_order))
+    for lang, color in zip(lang_order, colors):
+        ys = pivot[lang].to_numpy()
+        ax.plot(xs, ys, color=color, linewidth=1.5, marker="o", markersize=4, markeredgecolor="black", markeredgewidth=0.4)
+        last = np.where(~np.isnan(ys))[0]
+        if len(last):
+            i = last[-1]
+            ax.annotate(
+                lang,
+                (xs[i], ys[i]),
+                xytext=(5, 0),
+                textcoords="offset points",
+                fontsize=10,
+                fontweight="bold",
+                color=color,
+                va="center",
+            )
+
+    ax.set_xticks(xs)
+    ax.set_xticklabels(size_order)
+    ax.set_xlim(-0.2, len(size_order) - 1 + 0.5)
+    ax.set_xlabel("Draft Model Size")
+    ax.set_ylabel(KEY_TO_TITLE[y])
+    _style_spines(ax)
+    _finalize(fig, filename)
+
+
 def create_graphs(data: pd.DataFrame):
     # _bar_plot(data,             "Tokens / Second (Spec)", "tps_spec")
-    translation_data = data[data['task'] == 'translation']
+    translation_data = data[(data['task'] == 'translation') & (data['model_size'].isin(['0.8B', 'N-Gram']))]
     _bar_plot(translation_data, "sentence_avg_tokens_per_second", "sentence_std_tokens_per_second", "translation_tps")
-    _bar_plot(translation_data, "speedup_factor", "speedup_factor_std", "translation_speedup")
+    _bar_plot(translation_data, "speedup_factor", "speedup_factor_std", "translation_speedup", show_legend=False)
     _bar_plot(translation_data, "sentence_avg_acceptance_rate", "sentence_std_acceptance_rate", "translation_acceptance")
     _chrf_acceptance_plot(translation_data)
 
-    story_data = data[data['task'] == 'story_gen']
+    story_data = data[(data['task'] == 'story_gen')  & (data['model_size'].isin(['0.8B', 'N-Gram']))]
     _bar_plot(story_data, "sentence_avg_tokens_per_second", "sentence_std_tokens_per_second", "story_tps")
     _bar_plot(story_data, "speedup_factor", "speedup_factor_std", "story_speedup")
     _bar_plot(story_data, "sentence_avg_acceptance_rate", "sentence_std_acceptance_rate", "story_acceptance")
 
+    _task_acceptance_scatter(data[data['model_size'].isin(['0.8B', 'N-Gram'])])
 
-    forward_pass_data = translation_data[translation_data["setting"] == "Baseline"][
-        ["model_size", "average_draft_time", "draft_time_std"]
-    ]
-    verifier_data = translation_data.drop(columns=["average_draft_time", "draft_time_std"]).rename(
-        columns={
-            "average_verifier_time": "average_draft_time",
-            "verifier_time_std": "draft_time_std",
-        }
-    )[translation_data["setting"] == "Baseline"][["model_size", "average_draft_time", "draft_time_std"]]
+
+    forward_pass_data = data[
+        (data["task"] == "translation") & (data["setting"] == "Baseline")
+    ][["model_size", "average_draft_time", "draft_time_std"]]
+    verifier_data = (
+        data[(data["task"] == "translation") & (data["setting"] == "Baseline") & (data["model_size"] == "0.8B")]
+        .drop(columns=["average_draft_time", "draft_time_std"])
+        .rename(
+            columns={
+                "average_verifier_time": "average_draft_time",
+                "verifier_time_std": "draft_time_std",
+            }
+        )[translation_data["setting"] == "Baseline"][
+            ["model_size", "average_draft_time", "draft_time_std"]
+        ]
+    )
     verifier_data["model_size"] = "9B"
-    ngram_pass_data = translation_data[translation_data["setting"] == "N-Gram"][
+    ngram_pass_data = data[(data["task"] == "translation") & (data["setting"] == "N-Gram")][
         ["model_size", "average_draft_time", "draft_time_std"]
     ]
     _violin_plot(
@@ -315,16 +459,19 @@ def create_graphs(data: pd.DataFrame):
         "draft_time_std",
     )
 
+    _size_scaling_plot(data, "sentence_avg_acceptance_rate", "size_scaling_acceptance")
+    _size_scaling_plot(data, "speedup_factor", "size_scaling_speedup")
+
 
 def _pinsker_plot(kl_df: pd.DataFrame, spec_df: pd.DataFrame):
     kl_df = kl_df.rename(columns={"language_code": "language"})
 
     distilled_spec = spec_df[
         (spec_df["task"] == "translation") &
-        (spec_df["setting"].isin(["Distilled (translation)", "Distilled (general)"]))
+        (spec_df["setting"] == "Distilled (task)") & (spec_df['model_size'].isin(['0.8B', 'N-Gram']))
     ].copy()
     distilled_spec["distill_type"] = distilled_spec["setting"].map({
-        "Distilled (translation)": "translation",
+        "Distilled (task)": "translation",
         "Distilled (general)": "general",
     })
 
@@ -340,11 +487,11 @@ def _pinsker_plot(kl_df: pd.DataFrame, spec_df: pd.DataFrame):
     kl_range = np.linspace(0, kl_max, 300)
     pinsker_bound = np.maximum(0.0, 1.0 - np.sqrt(kl_range / 2))
 
-    type_to_color  = {"translation": PALETTE[0], "general": PALETTE[1]}
+    type_to_color  = {"translation": PALETTE[2], "general": PALETTE[1]}
     type_to_label  = {"translation": "Distilled (translation)", "general": "Distilled (general)"}
     type_to_marker = {"translation": "o", "general": "s"}
 
-    fig, ax = plt.subplots(figsize=(5, 4))
+    fig, ax = plt.subplots(figsize=(4, 3))
 
     ax.plot(
         kl_range, pinsker_bound,
@@ -377,7 +524,7 @@ def _pinsker_plot(kl_df: pd.DataFrame, spec_df: pd.DataFrame):
                 textcoords="offset points",
             )
 
-    ax.set_xlabel("KL Divergence (teacher ∥ student)")
+    ax.set_xlabel("KL Divergence (teacher || student)")
     ax.set_ylabel("Acceptance Rate (α)")
     ax.set_xlim(left=0)
     ax.set_ylim(0, 1.05)
