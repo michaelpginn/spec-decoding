@@ -212,6 +212,90 @@ def _bar_plot(data: pd.DataFrame, y: str, y_std: str, filename: str, family: str
     _finalize(fig, filename, family)
 
 
+def _combined_speedup_plot(data: pd.DataFrame, task: str = "translation", filename: str = "combined_speedup"):
+    """Speed-up factor for both model families on one chart. Laid out like the
+    grouped bar charts (languages on x, settings dodged and colour-coded), but
+    each setting shows a filled circle for Qwen and an open circle for Llama
+    joined by a connecting line."""
+    y = "speedup_factor"
+    frames = []
+    for fam in sorted(data["family"].unique()):
+        bs = FAMILIES[fam]["baseline_size"]
+        frames.append(
+            data[(data["family"] == fam) & (data["task"] == task) & (data["model_size"].isin([bs, "N-Gram"]))]
+        )
+    d = pd.concat(frames)
+    values = d.groupby(["language", "setting", "family"])[y].mean()
+
+    present_langs = [lang for lang in langs if lang in set(d["language"])]
+    setting_color = dict(zip(SETTINGS, ['#8C8C8C', *PALETTE[1:len(SETTINGS)]]))
+    families = sorted(d["family"].unique())
+    # Qwen filled, Llama open (falls back gracefully for any family order).
+    family_style = {
+        fam: ({"facecolor": "fill", "label": fam.capitalize()} if fam == "qwen" else {"facecolor": "open", "label": fam.capitalize()})
+        for fam in families
+    }
+
+    fig, ax = plt.subplots(figsize=(8, 1.6))
+    group_width = 0.8
+    slot = group_width / len(SETTINGS)
+    for j, setting in enumerate(SETTINGS):
+        offset = -group_width / 2 + (j + 0.5) * slot
+        color = setting_color[setting]
+        for i, lang in enumerate(present_langs):
+            x = i + offset
+            pts = {
+                fam: values.get((lang, setting, fam))
+                for fam in families
+                if (lang, setting, fam) in values.index
+            }
+            if len(pts) == 2:
+                ys = list(pts.values())
+                ax.plot([x, x], ys, color=color, linewidth=0.8, zorder=2)
+            for fam, val in pts.items():
+                if family_style[fam]["facecolor"] == "fill":
+                    ax.scatter([x], [val], facecolor=color, edgecolor="#333333", linewidths=0.4, s=20, zorder=3)
+                else:
+                    ax.scatter([x], [val], facecolor="white", edgecolor=color, linewidths=1.0, s=20, zorder=3)
+
+    ax.set_xticks(range(len(present_langs)))
+    ax.set_xticklabels(present_langs)
+    ax.set_xlim(-0.5, len(present_langs) - 0.5)
+
+    ax.yaxis.set_minor_locator(AutoMinorLocator(2))
+    ax.tick_params(axis='y', which='minor', length=0)
+    ax.grid(which='minor', axis='y', color='#E5E5E5', linewidth=0.5, alpha=0.7)
+
+    _style_spines(ax)
+    ax.set_xlabel("")
+    ax.set_ylabel(KEY_TO_TITLE[y])
+
+    # Model legend (filled Qwen / open Llama) drawn inside the axes as an added
+    # artist; the setting-colour legend is the primary one on top, matching the
+    # bar charts and so it is reliably kept by tight-layout / tight bbox.
+    model_handles = [
+        plt.Line2D([], [], marker='o', markerfacecolor='#333333' if family_style[f]["facecolor"] == "fill" else 'white',
+                   markeredgecolor='#333333', color='none', markersize=6, label=family_style[f]["label"])
+        for f in families
+    ]
+    model_legend = ax.legend(
+        handles=model_handles, frameon=False, fontsize=9,
+        loc='lower left', bbox_to_anchor=(0.0, 0.0), handletextpad=0.3, borderaxespad=0.2,
+    )
+    ax.add_artist(model_legend)
+    setting_handles = [
+        plt.Line2D([], [], marker='o', color=setting_color[s], linestyle='none', markersize=6, label=s)
+        for s in SETTINGS
+    ]
+    ax.legend(
+        handles=setting_handles,
+        frameon=False, fontsize=10, loc='lower center',
+        bbox_to_anchor=(0.5, 1.0), ncol=len(SETTINGS), title=None, borderaxespad=0.1,
+    )
+
+    _finalize(fig, filename)
+
+
 def _violin_plot(data, x: str, y: str, y_std: str, family: str):
     _log_stats(data, x, y, y)
     order = [m for m in FAMILIES[family]["forward_pass_models"] if m in set(data['model_size'])]
@@ -601,3 +685,4 @@ if __name__ == "__main__":
     for family in sorted(spec_data["family"].unique()):
         _pinsker_plot(kl_data, spec_data[spec_data["family"] == family], family)
     create_graphs(spec_data)
+    _combined_speedup_plot(spec_data)
