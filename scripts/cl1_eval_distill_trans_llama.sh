@@ -44,7 +44,7 @@ GAMMAS="2 3 4"
                 gamma=$gamma \
                 wandb_tag=final \
                 target_model="meta-llama/Llama-3.2-3B-Instruct" \
-                draft_model="lecslab/$lang-translation-Llama-3.2-3B-Llama-3.2-1B-Instruct"
+                draft_model="lecslab/$lang-translation-Llama-3.2-3B-Instruct-Llama-3.2-1B-Instruct"
         done
     done
 # done
