@@ -61,6 +61,8 @@ for language_code in languages:
     print(f"LK: {mean_lk}")
     divergences.append([language, mean_kl, mean_lk])
 
-with open("viz/divergences.csv", 'w') as f:
+p_model_name = args.p.split("/")[-1]
+q_model_name = args.q.split("/")[-1]
+with open(f"viz/divergences_{p_model_name}_{q_model_name}.csv", 'w') as f:
     for d in divergences:
         f.write(",".join(d) + "\n")
