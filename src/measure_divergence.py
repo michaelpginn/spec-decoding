@@ -26,12 +26,12 @@ device = next(p_model.parameters()).device
 divergences = []
 
 for language_code in LANGUAGES:
-    language = get_language_name(args.language_code)
+    language = get_language_name(language_code)
     logger.info(f"Running on {language}")
-    dataset = assemble_dataset(args.language_code, 'mono', p_tokenizer, None)['test']
+    dataset = assemble_dataset(language_code, 'mono', p_tokenizer, None)['test']
     dataloader = DataLoader(
         dataset,  # type: ignore[arg-type]
-        batch_size=16,
+        batch_size=32,
         shuffle=False,
         pin_memory=(device.type == "cuda"),
     )
