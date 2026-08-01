@@ -32,7 +32,10 @@ for row in dataset:
     assert isinstance(row, Mapping)
     inputs = p_tokenizer(row['text'], return_tensors="pt", truncation=True, max_length=128).to(device)
     with torch.no_grad():
-        out_p = p_model(**inputs)
-        out_q = q_model(**inputs)
+        p_out = p_model(**inputs)
+        q_out = q_model(**inputs)
+        p_logprobs = torch.nn.functional.log_softmax(p_out.logits[..., :-1, :].contiguous(), dim=-1)
+        q_logprobs = torch.nn.functional.log_softmax(q_out.logits[..., :-1, :].contiguous(), dim=-1)
+        kl = (torch.exp(p_logprobs) * (p_logprobs - q_logprobs)).sum(-1)
+        lk = (1/2 * torch.abs(p_logprobs - q_logprobs)).sum(-1)
         breakpoint()
-        kl = (torch.exp(topk_logprobs) * (topk_logprobs - student_logprobs)).sum(-1)
