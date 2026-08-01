@@ -129,6 +129,8 @@ def assemble_dataset(lang_code: str, type: Literal["mono", "bi"], tokenizer, max
     dataset_list = []
     for _, row in paths.iterrows():
         path = row["hugging face"]
+        if "aya_dataset" in path:
+            continue
         assert isinstance(path, str)
 
         if str(path).startswith("http"):
