@@ -6,6 +6,7 @@ import argparse
 from typing import Mapping
 
 import torch
+from tqdm import tqdm
 
 from src.data.dataset import assemble_dataset, get_language_name
 from src.utils import load_model
@@ -28,7 +29,7 @@ q_model.eval()
 
 mean_kl = 0.
 mean_lk = 0.
-for row in dataset:
+for row in tqdm(dataset):
     assert isinstance(row, Mapping)
     inputs = p_tokenizer(row['text'], return_tensors="pt", truncation=True, max_length=128).to(device)
     with torch.no_grad():
