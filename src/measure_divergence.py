@@ -3,7 +3,6 @@
 This is a bit redundant with the eval_kl script, we should probably unify later"""
 
 import argparse
-from typing import Mapping
 
 import torch
 from torch.utils.data.dataloader import DataLoader
@@ -26,7 +25,7 @@ language = get_language_name(args.language_code)
 dataset = assemble_dataset(args.language_code, 'mono', p_tokenizer, None)['test']
 dataloader = DataLoader(
     dataset,  # type: ignore[arg-type]
-    batch_size=4,
+    batch_size=16,
     shuffle=False,
     pin_memory=(device.type == "cuda"),
 )
@@ -37,15 +36,18 @@ q_model.eval()
 mean_kl = 0.
 mean_lk = 0.
 for batch in tqdm(dataloader):
-    breakpoint()
     inputs = p_tokenizer(row['text'], return_tensors="pt", truncation=True, max_length=128).to(device)
     with torch.no_grad():
         p_out = p_model(**inputs)
         q_out = q_model(**inputs)
         p_logprobs = torch.nn.functional.log_softmax(p_out.logits[..., :-1, :].contiguous(), dim=-1)
         q_logprobs = torch.nn.functional.log_softmax(q_out.logits[..., :-1, :].contiguous(), dim=-1)
-        kl = (torch.exp(p_logprobs) * (p_logprobs - q_logprobs)).sum(-1).mean()
-        lk = (1/2 * torch.abs(p_logprobs - q_logprobs)).sum(-1).mean()
+        kl = (torch.exp(p_logprobs) * (p_logprobs - q_logprobs)).sum(-1)
+        lk = (1/2 * torch.abs(p_logprobs - q_logprobs)).sum(-1)
+        label_mask = inputs['attention_mask'][:, 1:]
+        label_mask = torch.concat([label_mask, torch.zeros(label_mask.size(0), 1)], dim=-1)
+        kl = kl * label_mask
+        lk = lk * label_mask
         mean_kl += kl.item() / len(dataset)
         mean_lk += lk.item()/ len(dataset)
 
