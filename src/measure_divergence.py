@@ -36,6 +36,10 @@ for row in dataset:
         q_out = q_model(**inputs)
         p_logprobs = torch.nn.functional.log_softmax(p_out.logits[..., :-1, :].contiguous(), dim=-1)
         q_logprobs = torch.nn.functional.log_softmax(q_out.logits[..., :-1, :].contiguous(), dim=-1)
-        kl = (torch.exp(p_logprobs) * (p_logprobs - q_logprobs)).sum(-1)
-        lk = (1/2 * torch.abs(p_logprobs - q_logprobs)).sum(-1)
-        breakpoint()
+        kl = (torch.exp(p_logprobs) * (p_logprobs - q_logprobs)).sum(-1).mean()
+        lk = (1/2 * torch.abs(p_logprobs - q_logprobs)).sum(-1).mean()
+        mean_kl += kl.item() / len(dataset)
+        mean_lk += lk.item()/ len(dataset)
+
+print(f"KL: {mean_kl}")
+print(f"LK: {mean_lk}")
