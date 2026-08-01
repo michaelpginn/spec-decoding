@@ -11,7 +11,7 @@ from pprint import pprint
 from transformers import AutoTokenizer
 
 #
-from src.data.dataset import assemble_dataset, get_language_name
+from src.data.dataset import assemble_dataset, get_language_name, LANGUAGES
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,9 +22,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 MAX_MONO = 20000
 MAX_BI=6000
 
-languages = [
-    "amh", "ber", "chr", "grn", "haw", "ibo", "npi", "oci","que", "yor", "zgh"
-]
+
 
 # Cut: lkt,mus,oji
 
@@ -34,7 +32,7 @@ def add_token_counts(row):
     return {'num_tokens': len(tokenizer.tokenize(row['text']))}
 
 lang_data = {}
-for language in languages:
+for language in LANGUAGES:
     data: dict = {'code': language}
     data['name'] = get_language_name(language)
     print(data['name'])
@@ -86,7 +84,7 @@ def short(n):
         if abs(n) >= div: return f"{n/div:.1f}{suf}"
     return str(n)
 
-for lang in sorted(languages):
+for lang in sorted(LANGUAGES):
     d = lang_data[lang]
     num_tokens_train = short(d['mono']['train']['num_tokens'])
     num_tokens_test = short(d['mono']['test']['num_tokens'])
@@ -109,7 +107,7 @@ parallel_table = """\\begin{table}[h!]
             \\midrule
 """
 
-for lang in sorted(languages):
+for lang in sorted(LANGUAGES):
     d = lang_data[lang]
     parallel_table += f"            {d['name']} [{lang}] & {d['bi']['train']['num_examples']} & {d['bi']['test']['num_examples']} \\\\ \n"
 
@@ -130,7 +128,7 @@ mono_source_table = """\\begin{table}[h!]
             \\textbf{Language} & \\textbf{Total Tokens} & \\textbf{Sources} \\\\
             \\midrule
 """
-for lang in sorted(languages):
+for lang in sorted(LANGUAGES):
     d = lang_data[lang]
     total_tokens = short(d['mono']['train']['num_tokens'] + d['mono']['test']['num_tokens'])
 
@@ -157,7 +155,7 @@ bi_source_table = """\\begin{table}[h!]
             \\midrule
 """
 
-for lang in sorted(languages):
+for lang in sorted(LANGUAGES):
     d = lang_data[lang]
     total_tokens = d['bi']['train']['num_examples'] + d['bi']['test']['num_examples']
     temp = ""

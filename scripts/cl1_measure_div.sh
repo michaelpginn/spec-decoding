@@ -28,5 +28,5 @@ if torch.cuda.is_available():
     print("GPU 0:", torch.cuda.get_device_name(0))
 PY
 
-uv run -m src.measure_divergence amh --p Qwen/Qwen3.5-9B --q Qwen/Qwen3.5-0.8B
-uv run -m src.measure_divergence amh --p meta-llama/Llama-3.2-3B-Instruct --q meta-llama/Llama-3.2-1B-Instruct
+uv run -m src.measure_divergence --p Qwen/Qwen3.5-9B --q Qwen/Qwen3.5-0.8B
+uv run -m src.measure_divergence --p meta-llama/Llama-3.2-3B-Instruct --q meta-llama/Llama-3.2-1B-Instruct

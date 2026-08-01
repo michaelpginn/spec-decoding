@@ -11,8 +11,6 @@
 #SBATCH --qos=blanca-clearlab1
 #SBATCH --mail-type=END,FAIL
 
-export HF_HOME="/scratch/alpine/$USER/.cache/huggingface"
-
 if [ "$#" -ne 2 ]; then
     echo "Usage: $0 <config_file> <general|translation>" >&2
     exit 1

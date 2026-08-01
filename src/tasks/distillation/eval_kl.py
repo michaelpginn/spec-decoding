@@ -23,6 +23,7 @@ import torch
 from torch.amp import autocast  # type: ignore[attr-defined]
 from torch.utils.data import DataLoader
 
+from src.data.dataset import LANGUAGES
 from src.utils import load_model
 
 logging.basicConfig(
@@ -31,7 +32,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-LANGUAGES = ["amh", "ber", "chr", "grn", "haw", "ibo", "npi", "oci", "que", "yor", "zgh"]
 
 
 def compute_kl(student, batch, device) -> torch.Tensor:
