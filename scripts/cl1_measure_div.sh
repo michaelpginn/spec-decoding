@@ -29,3 +29,4 @@ if torch.cuda.is_available():
 PY
 
 uv run -m src.measure_divergence amh --p Qwen/Qwen3.5-9B --q Qwen/Qwen3.5-0.8B
+uv run -m src.measure_divergence amh --p meta-llama/Llama-3.2-3B-Instruct --q meta-llama/Llama-3.2-1B-Instruct
