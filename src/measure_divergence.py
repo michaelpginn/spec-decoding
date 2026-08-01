@@ -9,8 +9,7 @@ import torch
 from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
 
-from src.data.dataset import assemble_dataset, get_language_name
-from src.data.describe_data import languages
+from src.data.dataset import assemble_dataset, get_language_name, LANGUAGES
 from src.utils import load_model
 
 logger = getLogger(__name__)
@@ -26,9 +25,9 @@ device = next(p_model.parameters()).device
 
 divergences = []
 
-for language_code in languages:
+for language_code in LANGUAGES:
     language = get_language_name(args.language_code)
-    logger.info("Running on {}")
+    logger.info(f"Running on {language}")
     dataset = assemble_dataset(args.language_code, 'mono', p_tokenizer, None)['test']
     dataloader = DataLoader(
         dataset,  # type: ignore[arg-type]
@@ -57,8 +56,8 @@ for language_code in languages:
             mean_kl += kl.mean().item() / len(dataset)
             mean_lk += lk.mean().item()/ len(dataset)
 
-    print(f"KL: {mean_kl}")
-    print(f"LK: {mean_lk}")
+    logger.info(f"KL: {mean_kl}")
+    logger.info(f"LK: {mean_lk}")
     divergences.append([language, mean_kl, mean_lk])
 
 p_model_name = args.p.split("/")[-1]
