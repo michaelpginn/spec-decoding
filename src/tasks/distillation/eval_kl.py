@@ -31,7 +31,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-LANGUAGES = ["amh", "ber", "chr", "grn", "haw", "ibo", "npi", "oci", "que", "yor", "zgh", "zh"]
+LANGUAGES = ["amh", "ber", "chr", "grn", "haw", "ibo", "npi", "oci", "que", "yor", "zgh"]
 
 
 def compute_kl(student, batch, device) -> torch.Tensor:
