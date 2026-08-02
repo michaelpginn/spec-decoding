@@ -8,12 +8,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from matplotlib.ticker import AutoMinorLocator
+from matplotlib.ticker import AutoMinorLocator, MaxNLocator
 from matplotlib.transforms import Bbox
 from tqdm import tqdm
 
 import wandb
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="\033[90m%(asctime)s \033[36m[%(levelname)s] \033[1;33m%(module)s\033[0m: %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 plt.rcParams.update({
@@ -38,7 +42,7 @@ plt.rcParams.update({
     "axes.axisbelow": True,
 })
 
-langs = ["amh","ber","chr","grn","haw","ibo","npi","oci","que","yor","zgh","zh"]
+langs = ["amh","ber","chr","grn","haw","ibo","npi","oci","que","yor","zgh"]
 
 PALETTE = ['#0072B2', '#D55E00', '#009E73', '#F0E442', '#CC79A7']
 
@@ -67,6 +71,19 @@ KEY_TO_TITLE = {
     "speedup_factor": "Speed-up Fact. (f)",
     "average_draft_time": "Forward Pass Time (s)"
 }
+
+# One colour per model family, shared by every plot that distinguishes them, so
+# blue always means Qwen and green always means Llama. Per-family plots (violin,
+# size scaling) build their shade ramp from the same colour.
+FAMILY_STYLE = {
+    "qwen": {"marker": "o", "color": PALETTE[0], "label": "Qwen"},
+    "llama": {"marker": "s", "color": PALETTE[2], "label": "Llama"},
+}
+
+
+def _family_color(family: str | None) -> str:
+    return FAMILY_STYLE.get(family or "", {}).get("color", PALETTE[0])  # type:ignore[return-value]
+
 
 def _shades(hex_color: str, n: int, light: float = 0.78, dark: float = 0.25) -> list[str]:
     h, _, s = colorsys.rgb_to_hls(*mcolors.to_rgb(hex_color))
@@ -309,7 +326,7 @@ def _violin_plot(data, x: str, y: str, y_std: str, family: str):
         order=order,
         hue=x,
         hue_order=order,
-        palette=_shades(PALETTE[0], len(order)),
+        palette=_shades(_family_color(family), len(order)),
         legend=False,
         inner="quartile",
         linewidth=0.6,
@@ -450,9 +467,9 @@ def _task_acceptance_scatter(
 ):
     settings_to_show = ["Baseline", distill_setting]
     setting_to_color = {
-        "Baseline": "#8C8C8C",
-        "Distilled (task)": PALETTE[2],
-        "Distilled (general)": PALETTE[1],
+        "Baseline": PALETTE[0],
+        "Distilled (task)": PALETTE[1],
+        "Distilled (general)": PALETTE[4],
     }
 
     pivoted = (
@@ -571,21 +588,98 @@ def _task_acceptance_scatter(
 TASK_TO_TITLE = {"translation": "Translation", "story_gen": "Story Generation"}
 
 
+def _baseline_family_rows(data: pd.DataFrame, task: str) -> pd.DataFrame:
+    """Baseline runs at each family's comparison draft size, for one task."""
+    return pd.concat([
+        data[
+            (data["family"] == fam)
+            & (data["task"] == task)
+            & (data["setting"] == "Baseline")
+            & (data["model_size"] == FAMILIES[fam]["baseline_size"])
+        ]
+        for fam in sorted(data["family"].unique())
+    ])
+
+
+def _resourcedness_order(present: list[str], counts: pd.DataFrame) -> list[str]:
+    """Languages left to right in the same order the resourcedness plots lay
+    them out: the unknown counts (-1) first, then ascending token count. A
+    language absent from the counts table is treated as unknown."""
+    words = counts.set_index("language_code")["words"]
+    unknown = [lang for lang in present if words.get(lang, -1) <= 0]
+    known = sorted((lang for lang in present if words.get(lang, -1) > 0), key=lambda l: words[l])
+    return unknown + known
+
+
+def _baseline_speedup_bars(data: pd.DataFrame, counts: pd.DataFrame, task: str, filename: str):
+    """Baseline speed-up factor per language, Qwen and Llama as paired bars.
+    Bars are anchored at f = 1 (break-even), so a run that is slower than
+    autoregressive decoding reads as a bar below the line. Languages are ordered
+    by resourcedness to match the acceptance-vs-resourcedness scatters."""
+    d = _baseline_family_rows(data, task)
+    if d.empty:
+        logger.info(f"no baseline {task} runs; skipping {filename}")
+        return
+
+    values = d.groupby(["language", "family"])["speedup_factor"].mean()
+    stds = d.groupby(["language", "family"])["speedup_factor_std"].mean()
+    present = _resourcedness_order(
+        [lang for lang in langs if lang in set(values.index.get_level_values("language"))],
+        counts,
+    )
+    families = [f for f in FAMILY_STYLE if f in set(values.index.get_level_values("family"))]
+
+    fig, ax = plt.subplots(figsize=(8, 1.6))
+    width = 0.8 / len(families)
+    xs = np.arange(len(present))
+    for j, fam in enumerate(families):
+        offset = -0.4 + (j + 0.5) * width
+        idx = [i for i, lang in enumerate(present) if (lang, fam) in values.index]
+        ys = np.array([values[(present[i], fam)] for i in idx])
+        errs = np.array([stds.get((present[i], fam), np.nan) for i in idx])
+        ax.bar(
+            xs[idx] + offset, ys - 1.0, width=width, bottom=1.0,
+            color=FAMILY_STYLE[fam]["color"], label=FAMILY_STYLE[fam]["label"],
+            edgecolor="#333333", linewidth=0.4,
+        )
+        ax.errorbar(
+            xs[idx] + offset, ys, yerr=np.nan_to_num(errs),
+            fmt="none", ecolor="#444444", capsize=2, linewidth=0.6, capthick=0.6,
+        )
+        below = [present[i] for i, y in zip(idx, ys) if y < 1]
+        logger.info(
+            f"{filename}: {fam} avg f={ys.mean():.4f}, min={ys.min():.4f}, max={ys.max():.4f}"
+            + (f", below 1.0: {below}" if below else "")
+        )
+
+    ax.axhline(1.0, color="black", linewidth=1.0, zorder=3)
+    ax.set_xticks(xs)
+    ax.set_xticklabels(present)
+    ax.set_xlim(-0.5, len(present) - 0.5)
+
+    # Allow 0.25 steps so the region below break-even still gets a labelled tick.
+    ax.yaxis.set_major_locator(MaxNLocator(nbins=5, steps=[1, 2, 2.5, 5, 10]))
+    ax.yaxis.set_minor_locator(AutoMinorLocator(2))
+    ax.tick_params(axis="y", which="minor", length=0)
+    ax.grid(which="minor", axis="y", color="#E5E5E5", linewidth=0.5, alpha=0.7)
+
+    _style_spines(ax)
+    ax.set_xlabel("")
+    ax.set_ylabel(f"{KEY_TO_TITLE['speedup_factor']}\n{TASK_TO_TITLE.get(task, task)}")
+    ax.legend(
+        frameon=False, fontsize=10, loc="lower center",
+        bbox_to_anchor=(0.5, 1.0), ncol=len(families), borderaxespad=0.1,
+    )
+    _finalize(fig, filename)
+
+
 def _resourcedness_acceptance_plot(data: pd.DataFrame, counts: pd.DataFrame, task: str, filename: str):
     """Baseline acceptance rate vs. language resourcedness, both model families
     on one axes (colour + marker shape per family). Resourcedness is the log10
     FineWeb token count; languages counted as -1 (absent from FineWeb) are laid
     out side by side in a separate region on the left, where the x-axis is
     blank because no count is defined for them."""
-    frames = []
-    for fam in sorted(data["family"].unique()):
-        frames.append(data[
-            (data["family"] == fam)
-            & (data["task"] == task)
-            & (data["setting"] == "Baseline")
-            & (data["model_size"] == FAMILIES[fam]["baseline_size"])
-        ])
-    d = pd.concat(frames)
+    d = _baseline_family_rows(data, task)
     if d.empty:
         logger.info(f"no baseline {task} runs; skipping {filename}")
         return
@@ -613,15 +707,12 @@ def _resourcedness_acceptance_plot(data: pd.DataFrame, counts: pd.DataFrame, tas
     for i, lang in enumerate(unknown):
         x[lang] = lo - gap - (len(unknown) - 1 - i) * spacing
 
-    fam_style = {
-        "qwen": {"marker": "o", "color": PALETTE[0], "label": "Qwen"},
-        "llama": {"marker": "s", "color": PALETTE[1], "label": "Llama"},
-    }
-    families = [f for f in ["qwen", "llama"] if f in set(values.index.get_level_values("family"))]
+    families = [f for f in FAMILY_STYLE if f in set(values.index.get_level_values("family"))]
 
     fig, ax = plt.subplots(figsize=(4.5, 2.8))
+    fits = []
     for fam in families:
-        style = fam_style[fam]
+        style = FAMILY_STYLE[fam]
         pts = [(x[lang], values[(lang, fam)]) for lang in present if (lang, fam) in values.index]
         if not pts:
             continue
@@ -630,10 +721,32 @@ def _resourcedness_acceptance_plot(data: pd.DataFrame, counts: pd.DataFrame, tas
             marker=style["marker"], color=style["color"], label=style["label"],
             s=40, zorder=3, edgecolors="black", linewidths=0.4,
         )
+        # Best fit over the counted languages only: the unknown-count ones have
+        # no meaningful x, so they can't inform the trend.
         fam_known = [(x[lang], values[(lang, fam)]) for lang in known if (lang, fam) in values.index]
         if len(fam_known) > 2:
-            r = np.corrcoef([p[0] for p in fam_known], [p[1] for p in fam_known])[0, 1]
-            logger.info(f"{filename}: Pearson r (log tokens vs acceptance, {fam}) = {r:.4f} (n={len(fam_known)})")
+            fx = np.array([p[0] for p in fam_known])
+            fy = np.array([p[1] for p in fam_known])
+            r = np.corrcoef(fx, fy)[0, 1]
+            slope, intercept = np.polyfit(fx, fy, 1)
+            logger.info(
+                f"{filename}: log tokens vs acceptance ({fam}): r={r:.4f}, "
+                f"slope={slope:.4f}, n={len(fam_known)}"
+            )
+            x_fit = np.array([fx.min(), fx.max()])
+            ax.plot(x_fit, slope * x_fit + intercept, color=style["color"], linewidth=1.2, zorder=2)
+            fits.append((fam, r ** 2))
+
+    # Fit quality, colour-matched to each line, in the empty lower-right corner.
+    r2_texts = [
+        ax.text(
+            0.98, 0.04 + 0.09 * (len(fits) - 1 - k),
+            f"{FAMILY_STYLE[fam]['label']} R$^2$ = {r2:.2f}",
+            transform=ax.transAxes, ha="right", va="bottom",
+            fontsize=8, color=FAMILY_STYLE[fam]["color"], zorder=4,
+        )
+        for k, (fam, r2) in enumerate(fits)
+    ]
 
     # Label each language once, above its highest point. Some languages have
     # near-identical token counts (haw/ibo), so nudge labels up until they clear
@@ -646,7 +759,7 @@ def _resourcedness_acceptance_plot(data: pd.DataFrame, counts: pd.DataFrame, tas
         for lang in present
         for fam in families
         if (lang, fam) in values.index
-    ]
+    ] + [t.get_window_extent() for t in r2_texts]
     for lang in sorted(present, key=lambda l: x[l]):
         ys = [values[(lang, fam)] for fam in families if (lang, fam) in values.index]
         txt = ax.annotate(
@@ -697,7 +810,7 @@ def _size_scaling_plot(data: pd.DataFrame, y: str, filename: str, family: str | 
     pivot = sub.pivot_table(index="model_size", columns="language", values=y).reindex(size_order)
 
     fig, ax = plt.subplots(figsize=(4, 2.2))
-    colors = _shades(PALETTE[0], len(lang_order))
+    colors = _shades(_family_color(family), len(lang_order))
     xs = np.arange(len(size_order))
     for lang, color in zip(lang_order, colors):
         ys = pivot[lang].to_numpy()
@@ -828,7 +941,7 @@ def _pinsker_plot(kl_df: pd.DataFrame, spec_df: pd.DataFrame, family: str | None
     kl_range = np.linspace(0, kl_max, 300)
     pinsker_bound = np.maximum(0.0, 1.0 - np.sqrt(kl_range / 2))
 
-    type_to_color  = {"translation": PALETTE[2], "general": PALETTE[1]}
+    type_to_color  = {"translation": PALETTE[1], "general": PALETTE[4]}
     type_to_label  = {"translation": "Distilled (translation)", "general": "Distilled (general)"}
     type_to_marker = {"translation": "o", "general": "s"}
 
@@ -886,3 +999,4 @@ if __name__ == "__main__":
     fineweb_counts = pd.read_csv("viz/fineweb_counts.csv")
     for task, name in [("translation", "translation"), ("story_gen", "story")]:
         _resourcedness_acceptance_plot(spec_data, fineweb_counts, task, f"resourcedness_acceptance_{name}")
+        _baseline_speedup_bars(spec_data, fineweb_counts, task, f"baseline_speedup_{name}")

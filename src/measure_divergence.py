@@ -10,10 +10,11 @@ from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
 
 from src.data.dataset import assemble_dataset, get_language_name, LANGUAGES
-from src.data.describe_data import MAX_MONO
 from src.utils import load_model
 
 logger = getLogger(__name__)
+
+MAX_MONO = 20000
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--p", help="HF model key to use for P distribution")
