@@ -665,6 +665,81 @@ def _baseline_speedup_bars(data: pd.DataFrame, counts: pd.DataFrame, task: str, 
     _finalize(fig, filename)
 
 
+def _scatter_with_fits(
+    ax,
+    points: dict[str, list[tuple[str, float, float]]],
+    fit_langs: set[str],
+    metric_label: str,
+    filename: str,
+) -> list[Bbox]:
+    """Scatter one series per model family — points[fam] holds (language, x, y)
+    triples — with a colour-matched least-squares fit over the languages in
+    fit_langs and each family's R^2 in whichever bottom corner the trend leaves
+    empty. Returns display-space boxes for the markers and the R^2 text, so the
+    caller can lay out labels around them."""
+    fits = []
+    for fam, pts in points.items():
+        if not pts:
+            continue
+        style = FAMILY_STYLE[fam]
+        ax.scatter(
+            [p[1] for p in pts], [p[2] for p in pts],
+            marker=style["marker"], color=style["color"], label=style["label"],
+            s=40, zorder=3, edgecolors="black", linewidths=0.4,
+        )
+        fit_pts = [p for p in pts if p[0] in fit_langs]
+        if len(fit_pts) > 2:
+            fx = np.array([p[1] for p in fit_pts])
+            fy = np.array([p[2] for p in fit_pts])
+            r = np.corrcoef(fx, fy)[0, 1]
+            slope, intercept = np.polyfit(fx, fy, 1)
+            logger.info(
+                f"{filename}: {metric_label} vs acceptance ({fam}): r={r:.4f}, "
+                f"slope={slope:.4f}, n={len(fit_pts)}"
+            )
+            x_fit = np.array([fx.min(), fx.max()])
+            ax.plot(x_fit, slope * x_fit + intercept, color=style["color"], linewidth=1.2, zorder=2)
+            fits.append((fam, r ** 2, slope))
+
+    # A rising trend leaves the lower right empty; a falling one the lower left.
+    falling = fits and np.mean([f[2] for f in fits]) < 0
+    r2_x, r2_ha = (0.02, "left") if falling else (0.98, "right")
+    r2_texts = [
+        ax.text(
+            r2_x, 0.04 + 0.09 * (len(fits) - 1 - k),
+            f"{FAMILY_STYLE[fam]['label']} R$^2$ = {r2:.2f}",
+            transform=ax.transAxes, ha=r2_ha, va="bottom",
+            fontsize=8, color=FAMILY_STYLE[fam]["color"], zorder=4,
+        )
+        for k, (fam, r2, _) in enumerate(fits)
+    ]
+
+    ax.figure.canvas.draw()
+    return [
+        Bbox.from_bounds(*(ax.transData.transform((px, py)) - 5), 10, 10)
+        for pts in points.values()
+        for _, px, py in pts
+    ] + [t.get_window_extent() for t in r2_texts]
+
+
+def _place_labels(ax, items: list[tuple[str, float, float]], obstacles: list[Bbox]):
+    """Annotate (text, x, y) items, nudging each label upward until it clears
+    the markers and the labels already placed."""
+    placed = list(obstacles)
+    for text, px, py in items:
+        txt = ax.annotate(
+            text, (px, py), fontsize=7, xytext=(0, 6),
+            textcoords="offset points", ha="center",
+        )
+        dy = 6
+        for _ in range(6):
+            if not any(txt.get_window_extent().overlaps(p) for p in placed):
+                break
+            dy += 8
+            txt.set_position((0, dy))
+        placed.append(txt.get_window_extent())
+
+
 def _resourcedness_acceptance_plot(data: pd.DataFrame, counts: pd.DataFrame, task: str, filename: str):
     """Baseline acceptance rate vs. language resourcedness, both model families
     on one axes (colour + marker shape per family). Resourcedness is the log10
@@ -702,69 +777,21 @@ def _resourcedness_acceptance_plot(data: pd.DataFrame, counts: pd.DataFrame, tas
     families = [f for f in FAMILY_STYLE if f in set(values.index.get_level_values("family"))]
 
     fig, ax = plt.subplots(figsize=(4.5, 2.8))
-    fits = []
-    for fam in families:
-        style = FAMILY_STYLE[fam]
-        pts = [(x[lang], values[(lang, fam)]) for lang in present if (lang, fam) in values.index]
-        if not pts:
-            continue
-        ax.scatter(
-            [p[0] for p in pts], [p[1] for p in pts],
-            marker=style["marker"], color=style["color"], label=style["label"],
-            s=40, zorder=3, edgecolors="black", linewidths=0.4,
-        )
-        # Best fit over the counted languages only: the unknown-count ones have
-        # no meaningful x, so they can't inform the trend.
-        fam_known = [(x[lang], values[(lang, fam)]) for lang in known if (lang, fam) in values.index]
-        if len(fam_known) > 2:
-            fx = np.array([p[0] for p in fam_known])
-            fy = np.array([p[1] for p in fam_known])
-            r = np.corrcoef(fx, fy)[0, 1]
-            slope, intercept = np.polyfit(fx, fy, 1)
-            logger.info(
-                f"{filename}: log tokens vs acceptance ({fam}): r={r:.4f}, "
-                f"slope={slope:.4f}, n={len(fam_known)}"
-            )
-            x_fit = np.array([fx.min(), fx.max()])
-            ax.plot(x_fit, slope * x_fit + intercept, color=style["color"], linewidth=1.2, zorder=2)
-            fits.append((fam, r ** 2))
-
-    # Fit quality, colour-matched to each line, in the empty lower-right corner.
-    r2_texts = [
-        ax.text(
-            0.98, 0.04 + 0.09 * (len(fits) - 1 - k),
-            f"{FAMILY_STYLE[fam]['label']} R$^2$ = {r2:.2f}",
-            transform=ax.transAxes, ha="right", va="bottom",
-            fontsize=8, color=FAMILY_STYLE[fam]["color"], zorder=4,
-        )
-        for k, (fam, r2) in enumerate(fits)
-    ]
-
-    # Label each language once, above its highest point. Some languages have
-    # near-identical token counts (haw/ibo), so nudge labels up until they clear
-    # the ones already placed.
-    fig.canvas.draw()
-    # Seed the occupied regions with the markers themselves, so a label never
-    # lands on a neighbouring point.
-    placed = [
-        Bbox.from_bounds(*(ax.transData.transform((x[lang], values[(lang, fam)])) - 5), 10, 10)
-        for lang in present
+    points = {
+        fam: [(lang, x[lang], values[(lang, fam)]) for lang in present if (lang, fam) in values.index]
         for fam in families
-        if (lang, fam) in values.index
-    ] + [t.get_window_extent() for t in r2_texts]
-    for lang in sorted(present, key=lambda l: x[l]):
-        ys = [values[(lang, fam)] for fam in families if (lang, fam) in values.index]
-        txt = ax.annotate(
-            lang, (x[lang], max(ys)),
-            fontsize=7, xytext=(0, 6), textcoords="offset points", ha="center",
-        )
-        dy = 6
-        for _ in range(6):
-            if not any(txt.get_window_extent().overlaps(p) for p in placed):
-                break
-            dy += 8
-            txt.set_position((0, dy))
-        placed.append(txt.get_window_extent())
+    }
+    obstacles = _scatter_with_fits(ax, points, set(known), "log tokens", filename)
+    # One label per language: both families share an x here, so a per-point
+    # label would just duplicate the code.
+    _place_labels(
+        ax,
+        [
+            (lang, x[lang], max(values[(lang, fam)] for fam in families if (lang, fam) in values.index))
+            for lang in sorted(present, key=lambda l: x[l])
+        ],
+        obstacles,
+    )
 
     if unknown:
         # Visual break marking where the x-axis stops being meaningful.
@@ -781,6 +808,94 @@ def _resourcedness_acceptance_plot(data: pd.DataFrame, counts: pd.DataFrame, tas
     ax.set_xticks(ticks)
 
     ax.set_xlabel("FineWeb Tokens (log$_{10}$)")
+    ax.set_ylabel(f"Acceptance Rate ({TASK_TO_TITLE.get(task, task)})")
+    ax.legend(
+        frameon=False, fontsize=10, loc="lower center",
+        bbox_to_anchor=(0.5, 1.0), ncol=len(families), borderaxespad=0.1,
+    )
+    _style_spines(ax)
+    _finalize(fig, filename)
+
+
+METRIC_TO_TITLE = {
+    "kl": "KL Divergence (target || draft)",
+    "lk": "Total Variation Distance (target || draft)",
+}
+
+
+def load_divergences() -> pd.DataFrame:
+    """Read the viz/divergences_<P>_<Q> files into (language, family, kl, lk).
+
+    src/measure_divergence.py writes them headerless and keyed by full language
+    name, so map the names back onto the codes used everywhere else. The model
+    family comes from the filename, which carries both model keys."""
+    ref = pd.read_csv(Path(__file__).resolve().parent / "data" / "reference_table_bilingual.csv")
+    name_to_code = dict(zip(ref["Language"].str.strip(), ref["Code"].str.strip()))
+
+    records = []
+    for path in sorted(Path("viz").glob("divergences_*")):
+        if path.suffix not in {".csv", ".tsv"}:
+            continue
+        family = _detect_family(path.stem)
+        df = pd.read_csv(path, header=None, names=["language_name", "kl", "lk"], sep=None, engine="python")
+        for _, row in df.iterrows():
+            code = name_to_code.get(str(row["language_name"]).strip())
+            if code is None:
+                logger.warning(f"{path.name}: unrecognised language {row['language_name']!r}; skipping")
+                continue
+            records.append({"language": code, "family": family, "kl": row["kl"], "lk": row["lk"]})
+        logger.info(f"Loaded {len(df)} divergence rows from {path.name} as family={family}")
+    return pd.DataFrame.from_records(records)
+
+
+def _divergence_acceptance_plot(
+    data: pd.DataFrame,
+    divergences: pd.DataFrame,
+    metric: str,
+    filename: str,
+    task: str = "translation",
+):
+    """Baseline acceptance rate against the measured target/draft divergence,
+    laid out like the resourcedness scatters. Unlike those, x is per model pair
+    rather than per language, so each family's points sit at their own x and
+    every point carries its own label."""
+    d = _baseline_family_rows(data, task)
+    if d.empty or divergences.empty:
+        logger.info(f"no baseline {task} runs or no divergence files; skipping {filename}")
+        return
+
+    values = d.groupby(["language", "family"])["sentence_avg_acceptance_rate"].mean()
+    div = divergences.dropna(subset=[metric]).set_index(["language", "family"])[metric]
+    dropped = len(divergences) - len(div)
+    if dropped:
+        logger.warning(f"{filename}: dropped {dropped} row(s) with no {metric} value")
+
+    families = [f for f in FAMILY_STYLE if f in set(values.index.get_level_values("family"))]
+    present = [lang for lang in langs if lang in set(values.index.get_level_values("language"))]
+    points = {
+        fam: [
+            (lang, float(div[(lang, fam)]), values[(lang, fam)])
+            for lang in present
+            if (lang, fam) in div.index and (lang, fam) in values.index
+        ]
+        for fam in families
+    }
+    if not any(points.values()):
+        logger.info(f"{filename}: no languages with both a {metric} value and a baseline run; skipping")
+        return
+
+    fig, ax = plt.subplots(figsize=(4.5, 2.8))
+    obstacles = _scatter_with_fits(ax, points, set(present), metric, filename)
+    _place_labels(
+        ax,
+        sorted(
+            [(lang, px, py) for pts in points.values() for lang, px, py in pts],
+            key=lambda item: item[1],
+        ),
+        obstacles,
+    )
+
+    ax.set_xlabel(METRIC_TO_TITLE.get(metric, metric))
     ax.set_ylabel(f"Acceptance Rate ({TASK_TO_TITLE.get(task, task)})")
     ax.legend(
         frameon=False, fontsize=10, loc="lower center",
@@ -909,13 +1024,44 @@ def _create_family_graphs(data: pd.DataFrame, family: str):
         logger.info(f"[{family}] only one baseline draft size; skipping size-scaling plots")
 
 
+# eval_kl.py writes one teacher||student KL file per distillation setup, and the
+# teacher/student template is baked into the run rather than the file, so the
+# files are per family. The unqualified name is the original Qwen run.
+KL_RESULTS_FILES = {
+    "qwen": ["kl_results_qwen.csv", "kl_results.csv"],
+    "llama": ["kl_results_llama.csv"],
+}
+
+
+def _load_kl_results(family: str) -> pd.DataFrame | None:
+    """Teacher||student KL for one family's distilled students, or None if that
+    family has no file. Never falls back to another family's file: the values
+    are specific to a teacher/student pair."""
+    names = KL_RESULTS_FILES.get(family, [f"kl_results_{family}.csv"])
+    for name in names:
+        path = Path("viz") / name
+        if path.exists():
+            logger.info(f"[{family}] KL results from {path}")
+            return pd.read_csv(path)
+    logger.warning(
+        f"[{family}] no teacher||student KL file (looked for {names}); skipping the "
+        f"Pinsker plot. Generate one with src/tasks/distillation/eval_kl.py using this "
+        f"family's --teacher-short and --model-template."
+    )
+    return None
+
+
 def _pinsker_plot(kl_df: pd.DataFrame, spec_df: pd.DataFrame, family: str | None = None):
     kl_df = kl_df.rename(columns={"language_code": "language"})
 
+    sizes = [FAMILIES[family]["baseline_size"], "N-Gram"] if family in FAMILIES else None
     distilled_spec = spec_df[
         (spec_df["task"] == "translation") &
-        (spec_df["setting"] == "Distilled (task)") & (spec_df['model_size'].isin(['0.8B', 'N-Gram']))
-    ].copy()
+        (spec_df["setting"] == "Distilled (task)")
+    ]
+    if sizes:
+        distilled_spec = distilled_spec[distilled_spec["model_size"].isin(sizes)]
+    distilled_spec = distilled_spec.copy()
     distilled_spec["distill_type"] = distilled_spec["setting"].map({
         "Distilled (task)": "translation",
         "Distilled (general)": "general",
@@ -980,15 +1126,22 @@ def _pinsker_plot(kl_df: pd.DataFrame, spec_df: pd.DataFrame, family: str | None
 
 
 if __name__ == "__main__":
-    kl_data = pd.read_csv("viz/kl_results.csv")
     spec_data = load_real_data()
     spec_data = spec_data[spec_data['language'] != 'zh']
-    for family in sorted(spec_data["family"].unique()):
-        _pinsker_plot(kl_data, spec_data[spec_data["family"] == family], family)
+    families = sorted(spec_data["family"].unique())
+    for family in families:
+        kl_data = _load_kl_results(family)
+        if kl_data is not None:
+            _pinsker_plot(kl_data, spec_data[spec_data["family"] == family], family)
     create_graphs(spec_data)
 
     fineweb_counts = pd.read_csv("viz/fineweb_counts.csv")
     for task, name in [("translation", "translation"), ("story_gen", "story")]:
         _resourcedness_acceptance_plot(spec_data, fineweb_counts, task, f"resourcedness_acceptance_{name}")
         _baseline_speedup_bars(spec_data, fineweb_counts, task, f"baseline_speedup_{name}")
-        _ngram_vs_distilled_scatter(spec_data, task, f"ngram_vs_distilled_{name}")
+        for family in families:
+            _ngram_vs_distilled_scatter(spec_data, task, f"ngram_vs_distilled_{name}", family)
+
+    divergence_data = load_divergences()
+    for metric in ["kl", "lk"]:
+        _divergence_acceptance_plot(spec_data, divergence_data, metric, f"divergence_acceptance_{metric}")
