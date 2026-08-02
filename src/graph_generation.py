@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib.ticker import AutoMinorLocator
+from matplotlib.transforms import Bbox
 from tqdm import tqdm
 
 import wandb
@@ -411,9 +412,48 @@ def _chrf_acceptance_plot(data: pd.DataFrame, family: str | None = None):
         placed.append((x_left, x_right, row))
     _finalize(fig, "chrf_acceptance", family)
 
-def _task_acceptance_scatter(data: pd.DataFrame, family: str | None = None):
-    settings_to_show = ["Baseline", "Distilled (task)"]
-    setting_to_color = {"Baseline": "#8C8C8C", "Distilled (task)": PALETTE[2]}
+def _speedup_threshold_alpha(c: float, gammas=range(2, 6)) -> tuple[float, int] | None:
+    """Acceptance rate at which the speed-up factor first reaches 1.
+
+    Solves f = 1 = (1 - a^(g+1)) / ((1 - a)(g*c + 1)) for a, where c is the
+    ratio of mean draft to mean verifier forward-pass times. f is increasing in
+    a (f(0) = 1/(g*c+1) < 1), so bisection finds the unique root per gamma; the
+    optimal gamma is the one with the lowest threshold, since any alpha above it
+    yields f > 1 for at least one gamma in the range.
+    """
+    def f(alpha: float, gamma: int) -> float:
+        return (1 - alpha ** (gamma + 1)) / ((1 - alpha) * (gamma * c + 1))
+
+    best: tuple[float, int] | None = None
+    for gamma in gammas:
+        # Ceiling of f as alpha -> 1 is (g+1)/(g*c+1); unreachable if <= 1.
+        if (gamma + 1) / (gamma * c + 1) <= 1:
+            continue
+        lo, hi = 0.0, 1.0 - 1e-6
+        for _ in range(100):
+            mid = (lo + hi) / 2
+            if f(mid, gamma) < 1:
+                lo = mid
+            else:
+                hi = mid
+        root = (lo + hi) / 2
+        if best is None or root < best[0]:
+            best = (root, gamma)
+    return best
+
+
+def _task_acceptance_scatter(
+    data: pd.DataFrame,
+    family: str | None = None,
+    distill_setting: str = "Distilled (task)",
+    filename: str = "task_acceptance_scatter",
+):
+    settings_to_show = ["Baseline", distill_setting]
+    setting_to_color = {
+        "Baseline": "#8C8C8C",
+        "Distilled (task)": PALETTE[2],
+        "Distilled (general)": PALETTE[1],
+    }
 
     pivoted = (
         data[data["setting"].isin(settings_to_show)]
@@ -425,6 +465,9 @@ def _task_acceptance_scatter(data: pd.DataFrame, family: str | None = None):
         .dropna(subset=["translation", "story_gen"])
         .reset_index()
     )
+    if pivoted.empty or distill_setting not in set(pivoted["setting"]):
+        logger.info(f"[{family}] no {distill_setting} runs with both tasks; skipping {filename}")
+        return
 
     fig, ax = plt.subplots(figsize=(4, 3))
 
@@ -437,13 +480,35 @@ def _task_acceptance_scatter(data: pd.DataFrame, family: str | None = None):
     diag_hi = max(x_lims[1], y_lims[1])
     # ax.plot([diag_lo, diag_hi], [diag_lo, diag_hi], color="#BFBFBF", linewidth=0.8, linestyle="--", zorder=0)
 
+    # Acceptance rate above which speculative decoding is a net win (f > 1) on
+    # each task. The cost ratio c is the mean draft / mean verifier
+    # forward-pass time across the runs shown here.
+    timings = data[data["setting"].isin(settings_to_show)]
+    mu_d = timings["average_draft_time"].mean()
+    mu_v = timings["average_verifier_time"].mean()
+    threshold = _speedup_threshold_alpha(mu_d / mu_v) if mu_v > 0 and mu_d > 0 else None
+    if threshold is not None:
+        alpha_star, gamma_star = threshold
+        logger.info(
+            f"[{family}] {filename}: c={mu_d / mu_v:.4f}, optimal gamma={gamma_star}, "
+            f"f>1 above alpha={alpha_star:.4f}"
+        )
+        ax.axvline(alpha_star, color="black", linestyle="--", linewidth=0.8, zorder=1)
+        ax.axhline(alpha_star, color="black", linestyle="--", linewidth=0.8, zorder=1)
+        # Keep the threshold in frame even when every run sits on one side of it.
+        pad = 0.02
+        x_lims = (min(x_lims[0], alpha_star - pad), max(x_lims[1], alpha_star + pad))
+        y_lims = (min(y_lims[0], alpha_star - pad), max(y_lims[1], alpha_star + pad))
+    else:
+        logger.info(f"[{family}] {filename}: no gamma in [2, 5] can reach f > 1; skipping threshold lines")
+
     paired = pivoted.pivot(index="language", columns="setting", values=["translation", "story_gen"])
     for lang, row in paired.iterrows():
-        if pd.isna(row[("translation", "Baseline")]) or pd.isna(row[("translation", "Distilled (task)")]):
+        if pd.isna(row[("translation", "Baseline")]) or pd.isna(row[("translation", distill_setting)]):
             continue
         ax.annotate(
             "",
-            xy=(row[("translation", "Distilled (task)")], row[("story_gen", "Distilled (task)")]),
+            xy=(row[("translation", distill_setting)], row[("story_gen", distill_setting)]),
             xytext=(row[("translation", "Baseline")], row[("story_gen", "Baseline")]),
             arrowprops=dict(arrowstyle="-", color="#999999", alpha=0.25, linewidth=0.6, shrinkA=5, shrinkB=5),
             zorder=1,
@@ -484,7 +549,14 @@ def _task_acceptance_scatter(data: pd.DataFrame, family: str | None = None):
     ax.set_ylim(y_lims)
     ax.set_xlabel("Acceptance Rate (Translation)")
     ax.set_ylabel("Acceptance Rate (Story Generation)")
+    handles, _ = ax.get_legend_handles_labels()
+    if threshold is not None:
+        handles.append(
+            plt.Line2D([], [], color="black", linestyle="--", linewidth=0.8,
+                       label="Positive speed-up threshold")
+        )
     ax.legend(
+        handles=handles,
         frameon=False,
         fontsize=10,
         loc='lower center',
@@ -493,7 +565,124 @@ def _task_acceptance_scatter(data: pd.DataFrame, family: str | None = None):
         borderaxespad=0.1,
     )
     _style_spines(ax)
-    _finalize(fig, "task_acceptance_scatter", family)
+    _finalize(fig, filename, family)
+
+
+TASK_TO_TITLE = {"translation": "Translation", "story_gen": "Story Generation"}
+
+
+def _resourcedness_acceptance_plot(data: pd.DataFrame, counts: pd.DataFrame, task: str, filename: str):
+    """Baseline acceptance rate vs. language resourcedness, both model families
+    on one axes (colour + marker shape per family). Resourcedness is the log10
+    FineWeb token count; languages counted as -1 (absent from FineWeb) are laid
+    out side by side in a separate region on the left, where the x-axis is
+    blank because no count is defined for them."""
+    frames = []
+    for fam in sorted(data["family"].unique()):
+        frames.append(data[
+            (data["family"] == fam)
+            & (data["task"] == task)
+            & (data["setting"] == "Baseline")
+            & (data["model_size"] == FAMILIES[fam]["baseline_size"])
+        ])
+    d = pd.concat(frames)
+    if d.empty:
+        logger.info(f"no baseline {task} runs; skipping {filename}")
+        return
+
+    words = counts.set_index("language_code")["words"]
+    values = d.groupby(["language", "family"])["sentence_avg_acceptance_rate"].mean()
+    present = [lang for lang in langs if lang in set(values.index.get_level_values("language"))]
+    missing = [lang for lang in present if lang not in words.index]
+    if missing:
+        logger.warning(f"{filename}: no FineWeb count for {missing}; dropping")
+    present = [lang for lang in present if lang in words.index]
+
+    known = [lang for lang in present if words[lang] > 0]
+    unknown = [lang for lang in present if words[lang] <= 0]
+    if not known:
+        logger.info(f"{filename}: no languages with a FineWeb count; skipping")
+        return
+
+    x = {lang: float(np.log10(words[lang])) for lang in known}
+    lo, hi = min(x.values()), max(x.values())
+    span = (hi - lo) or 1.0
+    # Unknown-count languages sit left of the counted ones, evenly spaced, with
+    # a gap wide enough to read as a separate region.
+    spacing, gap = span * 0.07, span * 0.20
+    for i, lang in enumerate(unknown):
+        x[lang] = lo - gap - (len(unknown) - 1 - i) * spacing
+
+    fam_style = {
+        "qwen": {"marker": "o", "color": PALETTE[0], "label": "Qwen"},
+        "llama": {"marker": "s", "color": PALETTE[1], "label": "Llama"},
+    }
+    families = [f for f in ["qwen", "llama"] if f in set(values.index.get_level_values("family"))]
+
+    fig, ax = plt.subplots(figsize=(4.5, 2.8))
+    for fam in families:
+        style = fam_style[fam]
+        pts = [(x[lang], values[(lang, fam)]) for lang in present if (lang, fam) in values.index]
+        if not pts:
+            continue
+        ax.scatter(
+            [p[0] for p in pts], [p[1] for p in pts],
+            marker=style["marker"], color=style["color"], label=style["label"],
+            s=40, zorder=3, edgecolors="black", linewidths=0.4,
+        )
+        fam_known = [(x[lang], values[(lang, fam)]) for lang in known if (lang, fam) in values.index]
+        if len(fam_known) > 2:
+            r = np.corrcoef([p[0] for p in fam_known], [p[1] for p in fam_known])[0, 1]
+            logger.info(f"{filename}: Pearson r (log tokens vs acceptance, {fam}) = {r:.4f} (n={len(fam_known)})")
+
+    # Label each language once, above its highest point. Some languages have
+    # near-identical token counts (haw/ibo), so nudge labels up until they clear
+    # the ones already placed.
+    fig.canvas.draw()
+    # Seed the occupied regions with the markers themselves, so a label never
+    # lands on a neighbouring point.
+    placed = [
+        Bbox.from_bounds(*(ax.transData.transform((x[lang], values[(lang, fam)])) - 5), 10, 10)
+        for lang in present
+        for fam in families
+        if (lang, fam) in values.index
+    ]
+    for lang in sorted(present, key=lambda l: x[l]):
+        ys = [values[(lang, fam)] for fam in families if (lang, fam) in values.index]
+        txt = ax.annotate(
+            lang, (x[lang], max(ys)),
+            fontsize=7, xytext=(0, 6), textcoords="offset points", ha="center",
+        )
+        dy = 6
+        for _ in range(6):
+            if not any(txt.get_window_extent().overlaps(p) for p in placed):
+                break
+            dy += 8
+            txt.set_position((0, dy))
+        placed.append(txt.get_window_extent())
+
+    if unknown:
+        # Visual break marking where the x-axis stops being meaningful.
+        ax.axvline(lo - gap / 2, color="#BFBFBF", linestyle=":", linewidth=0.8, zorder=0)
+        left = min(x[lang] for lang in unknown) - spacing
+    else:
+        left = lo - span * 0.08
+    ax.set_xlim(left, hi + span * 0.08)
+
+    # Ticks only over the counted region, so the unknown region reads as blank.
+    ticks = np.arange(np.ceil(lo), np.floor(hi) + 1)
+    if len(ticks) < 2:
+        ticks = np.round(np.linspace(lo, hi, 3), 1)
+    ax.set_xticks(ticks)
+
+    ax.set_xlabel("FineWeb Tokens (log$_{10}$)")
+    ax.set_ylabel(f"Acceptance Rate ({TASK_TO_TITLE.get(task, task)})")
+    ax.legend(
+        frameon=False, fontsize=10, loc="lower center",
+        bbox_to_anchor=(0.5, 1.0), ncol=len(families), borderaxespad=0.1,
+    )
+    _style_spines(ax)
+    _finalize(fig, filename)
 
 
 def _size_scaling_plot(data: pd.DataFrame, y: str, filename: str, family: str | None = None):
@@ -569,7 +758,14 @@ def _create_family_graphs(data: pd.DataFrame, family: str):
 
     # Task-acceptance scatter needs both translation and story runs.
     if not translation_data.empty and not story_data.empty:
-        _task_acceptance_scatter(data[data['model_size'].isin(comparison_sizes)], family)
+        scatter_data = data[data['model_size'].isin(comparison_sizes)]
+        _task_acceptance_scatter(scatter_data, family)
+        _task_acceptance_scatter(
+            scatter_data,
+            family,
+            distill_setting="Distilled (general)",
+            filename="task_acceptance_scatter_general",
+        )
 
     if translation_data.empty:
         return
@@ -686,3 +882,7 @@ if __name__ == "__main__":
         _pinsker_plot(kl_data, spec_data[spec_data["family"] == family], family)
     create_graphs(spec_data)
     _combined_speedup_plot(spec_data)
+
+    fineweb_counts = pd.read_csv("viz/fineweb_counts.csv")
+    for task, name in [("translation", "translation"), ("story_gen", "story")]:
+        _resourcedness_acceptance_plot(spec_data, fineweb_counts, task, f"resourcedness_acceptance_{name}")
