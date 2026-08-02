@@ -56,12 +56,13 @@ for language_code in LANGUAGES:
             label_mask = inputs['attention_mask'][:, 1:]
             kl = kl * label_mask
             lk = lk * label_mask
-            mean_kl += kl.mean().item() / len(dataset)
-            mean_lk += lk.mean().item()/ len(dataset)
+            # Per-example mean
+            mean_kl += (kl.sum(dim=-1) / label_mask.sum(dim=-1)).sum().item() / len(dataset)
+            mean_lk += (lk.sum(dim=-1) / label_mask.sum(dim=-1)).sum().item() / len(dataset)
 
     logger.info(f"KL: {mean_kl}")
     logger.info(f"LK: {mean_lk}")
-    divergences.append([language, mean_kl, mean_lk])
+    divergences.append([language, str(mean_kl), str(mean_lk)])
 
 p_model_name = args.p.split("/")[-1]
 q_model_name = args.q.split("/")[-1]
