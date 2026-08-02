@@ -81,6 +81,16 @@ FAMILY_STYLE = {
 }
 
 
+# Colour per setting on the plots that compare settings head to head (the dual
+# acceptance scatters and the n-gram vs. distilled scatters).
+SETTING_COLOR = {
+    "Baseline": PALETTE[0],
+    "Distilled (task)": PALETTE[1],
+    "Distilled (general)": PALETTE[4],
+    "N-Gram": "black",
+}
+
+
 def _family_color(family: str | None) -> str:
     return FAMILY_STYLE.get(family or "", {}).get("color", PALETTE[0])  # type:ignore[return-value]
 
@@ -228,90 +238,6 @@ def _bar_plot(data: pd.DataFrame, y: str, y_std: str, filename: str, family: str
         ax.get_legend().remove()
 
     _finalize(fig, filename, family)
-
-
-def _combined_speedup_plot(data: pd.DataFrame, task: str = "translation", filename: str = "combined_speedup"):
-    """Speed-up factor for both model families on one chart. Laid out like the
-    grouped bar charts (languages on x, settings dodged and colour-coded), but
-    each setting shows a filled circle for Qwen and an open circle for Llama
-    joined by a connecting line."""
-    y = "speedup_factor"
-    frames = []
-    for fam in sorted(data["family"].unique()):
-        bs = FAMILIES[fam]["baseline_size"]
-        frames.append(
-            data[(data["family"] == fam) & (data["task"] == task) & (data["model_size"].isin([bs, "N-Gram"]))]
-        )
-    d = pd.concat(frames)
-    values = d.groupby(["language", "setting", "family"])[y].mean()
-
-    present_langs = [lang for lang in langs if lang in set(d["language"])]
-    setting_color = dict(zip(SETTINGS, ['#8C8C8C', *PALETTE[1:len(SETTINGS)]]))
-    families = sorted(d["family"].unique())
-    # Qwen filled, Llama open (falls back gracefully for any family order).
-    family_style = {
-        fam: ({"facecolor": "fill", "label": fam.capitalize()} if fam == "qwen" else {"facecolor": "open", "label": fam.capitalize()})
-        for fam in families
-    }
-
-    fig, ax = plt.subplots(figsize=(8, 1.6))
-    group_width = 0.8
-    slot = group_width / len(SETTINGS)
-    for j, setting in enumerate(SETTINGS):
-        offset = -group_width / 2 + (j + 0.5) * slot
-        color = setting_color[setting]
-        for i, lang in enumerate(present_langs):
-            x = i + offset
-            pts = {
-                fam: values.get((lang, setting, fam))
-                for fam in families
-                if (lang, setting, fam) in values.index
-            }
-            if len(pts) == 2:
-                ys = list(pts.values())
-                ax.plot([x, x], ys, color=color, linewidth=0.8, zorder=2)
-            for fam, val in pts.items():
-                if family_style[fam]["facecolor"] == "fill":
-                    ax.scatter([x], [val], facecolor=color, edgecolor="#333333", linewidths=0.4, s=20, zorder=3)
-                else:
-                    ax.scatter([x], [val], facecolor="white", edgecolor=color, linewidths=1.0, s=20, zorder=3)
-
-    ax.set_xticks(range(len(present_langs)))
-    ax.set_xticklabels(present_langs)
-    ax.set_xlim(-0.5, len(present_langs) - 0.5)
-
-    ax.yaxis.set_minor_locator(AutoMinorLocator(2))
-    ax.tick_params(axis='y', which='minor', length=0)
-    ax.grid(which='minor', axis='y', color='#E5E5E5', linewidth=0.5, alpha=0.7)
-
-    _style_spines(ax)
-    ax.set_xlabel("")
-    ax.set_ylabel(KEY_TO_TITLE[y])
-
-    # Model legend (filled Qwen / open Llama) drawn inside the axes as an added
-    # artist; the setting-colour legend is the primary one on top, matching the
-    # bar charts and so it is reliably kept by tight-layout / tight bbox.
-    model_handles = [
-        plt.Line2D([], [], marker='o', markerfacecolor='#333333' if family_style[f]["facecolor"] == "fill" else 'white',
-                   markeredgecolor='#333333', color='none', markersize=6, label=family_style[f]["label"])
-        for f in families
-    ]
-    model_legend = ax.legend(
-        handles=model_handles, frameon=False, fontsize=9,
-        loc='lower left', bbox_to_anchor=(0.0, 0.0), handletextpad=0.3, borderaxespad=0.2,
-    )
-    ax.add_artist(model_legend)
-    setting_handles = [
-        plt.Line2D([], [], marker='o', color=setting_color[s], linestyle='none', markersize=6, label=s)
-        for s in SETTINGS
-    ]
-    ax.legend(
-        handles=setting_handles,
-        frameon=False, fontsize=10, loc='lower center',
-        bbox_to_anchor=(0.5, 1.0), ncol=len(SETTINGS), title=None, borderaxespad=0.1,
-    )
-
-    _finalize(fig, filename)
 
 
 def _violin_plot(data, x: str, y: str, y_std: str, family: str):
@@ -466,11 +392,7 @@ def _task_acceptance_scatter(
     filename: str = "task_acceptance_scatter",
 ):
     settings_to_show = ["Baseline", distill_setting]
-    setting_to_color = {
-        "Baseline": PALETTE[0],
-        "Distilled (task)": PALETTE[1],
-        "Distilled (general)": PALETTE[4],
-    }
+    setting_to_color = SETTING_COLOR
 
     pivoted = (
         data[data["setting"].isin(settings_to_show)]
@@ -599,6 +521,76 @@ def _baseline_family_rows(data: pd.DataFrame, task: str) -> pd.DataFrame:
         ]
         for fam in sorted(data["family"].unique())
     ])
+
+
+def _ngram_vs_distilled_scatter(data: pd.DataFrame, task: str, filename: str, family: str = "qwen"):
+    """Acceptance rate against speed-up factor for the two cheap drafters: the
+    n-gram model and, per language, whichever distilled model does better. The
+    distilled dot is coloured by which distillation won, so the figure shows
+    both how the two approaches compare and which flavour of distillation the
+    language preferred."""
+    distill_settings = ["Distilled (task)", "Distilled (general)"]
+    d = data[(data["family"] == family) & (data["task"] == task)]
+    cols = ["language", "setting", "sentence_avg_acceptance_rate", "speedup_factor"]
+
+    ngram = d[d["setting"] == "N-Gram"].dropna(subset=["speedup_factor"])[cols]
+    distilled = d[
+        d["setting"].isin(distill_settings)
+        & (d["model_size"] == FAMILIES[family]["baseline_size"])
+    ].dropna(subset=["speedup_factor"])[cols]
+    if ngram.empty and distilled.empty:
+        logger.info(f"[{family}] no n-gram or distilled {task} runs; skipping {filename}")
+        return
+
+    # "Best" distilled model per language, by speed-up factor.
+    best = distilled.loc[distilled.groupby("language")["speedup_factor"].idxmax()]
+    won = best.groupby("setting").size().to_dict()
+    logger.info(f"[{family}] {filename}: best distillation per language: {won}")
+
+    fig, ax = plt.subplots(figsize=(4.5, 3))
+    ax.axhline(1.0, color="black", linewidth=1.0, zorder=1)
+
+    # Join each language's two drafters so the pair is readable at a glance.
+    paired = ngram.set_index("language").join(
+        best.set_index("language"), lsuffix="_ngram", rsuffix="_best", how="inner"
+    )
+    for _, row in paired.iterrows():
+        ax.plot(
+            [row["sentence_avg_acceptance_rate_ngram"], row["sentence_avg_acceptance_rate_best"]],
+            [row["speedup_factor_ngram"], row["speedup_factor_best"]],
+            color="#999999", alpha=0.25, linewidth=0.6, zorder=1,
+        )
+
+    groups = [("N-Gram", ngram)] + [(s, best[best["setting"] == s]) for s in distill_settings]
+    for setting, sub in groups:
+        if sub.empty:
+            continue
+        ax.scatter(
+            sub["sentence_avg_acceptance_rate"], sub["speedup_factor"],
+            color=SETTING_COLOR[setting], label=setting,
+            s=40, zorder=3, edgecolors="black", linewidths=0.4,
+        )
+        for _, row in sub.iterrows():
+            ax.annotate(
+                row["language"],
+                (row["sentence_avg_acceptance_rate"], row["speedup_factor"]),
+                fontsize=7, xytext=(3, 3), textcoords="offset points",
+            )
+        logger.info(
+            f"[{family}] {filename}: {setting} n={len(sub)}, "
+            f"avg α={sub['sentence_avg_acceptance_rate'].mean():.4f}, "
+            f"avg f={sub['speedup_factor'].mean():.4f}"
+        )
+
+    ax.set_xlabel(f"Acceptance Rate ({TASK_TO_TITLE.get(task, task)})")
+    ax.set_ylabel(KEY_TO_TITLE["speedup_factor"])
+    ax.legend(
+        frameon=False, fontsize=8, loc="lower center",
+        bbox_to_anchor=(0.5, 1.0), ncol=3, borderaxespad=0.1,
+        columnspacing=1.0, handletextpad=0.3,
+    )
+    _style_spines(ax)
+    _finalize(fig, filename, family)
 
 
 def _resourcedness_order(present: list[str], counts: pd.DataFrame) -> list[str]:
@@ -776,7 +768,7 @@ def _resourcedness_acceptance_plot(data: pd.DataFrame, counts: pd.DataFrame, tas
 
     if unknown:
         # Visual break marking where the x-axis stops being meaningful.
-        ax.axvline(lo - gap / 2, color="#BFBFBF", linestyle=":", linewidth=0.8, zorder=0)
+        ax.axvline(lo - gap / 2, color="#666666", linestyle=":", linewidth=1.4, zorder=2)
         left = min(x[lang] for lang in unknown) - spacing
     else:
         left = lo - span * 0.08
@@ -994,9 +986,9 @@ if __name__ == "__main__":
     for family in sorted(spec_data["family"].unique()):
         _pinsker_plot(kl_data, spec_data[spec_data["family"] == family], family)
     create_graphs(spec_data)
-    _combined_speedup_plot(spec_data)
 
     fineweb_counts = pd.read_csv("viz/fineweb_counts.csv")
     for task, name in [("translation", "translation"), ("story_gen", "story")]:
         _resourcedness_acceptance_plot(spec_data, fineweb_counts, task, f"resourcedness_acceptance_{name}")
         _baseline_speedup_bars(spec_data, fineweb_counts, task, f"baseline_speedup_{name}")
+        _ngram_vs_distilled_scatter(spec_data, task, f"ngram_vs_distilled_{name}")
