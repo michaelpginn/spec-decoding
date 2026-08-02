@@ -22,6 +22,8 @@ args = parser.parse_args()
 
 p_model, p_tokenizer = load_model(args.p)
 q_model, q_tokenizer = load_model(args.q)
+if not p_tokenizer.pad_token:
+    p_tokenizer.pad_token = p_tokenizer.eos_token
 device = next(p_model.parameters()).device
 
 divergences = []
@@ -43,7 +45,7 @@ for language_code in LANGUAGES:
     mean_kl = 0.
     mean_lk = 0.
     for batch in tqdm(dataloader):
-        inputs = p_tokenizer(batch['text'], return_tensors="pt", truncation=True, max_length=128, padding=True, pad_token=p_tokenizer.eos_token).to(device)
+        inputs = p_tokenizer(batch['text'], return_tensors="pt", truncation=True, max_length=128, padding=True).to(device)
         with torch.no_grad():
             p_out = p_model(**inputs)
             q_out = q_model(**inputs)
