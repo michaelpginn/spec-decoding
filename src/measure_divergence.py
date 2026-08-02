@@ -43,8 +43,10 @@ for language_code in LANGUAGES:
     p_model.eval()
     q_model.eval()
 
-    mean_kl = 0.
-    mean_lk = 0.
+    total_kl = 0.
+    total_lk = 0.
+    n_scored = 0
+    n_skipped = 0
     for batch in tqdm(dataloader):
         inputs = p_tokenizer(batch['text'], return_tensors="pt", truncation=True, max_length=128, padding=True).to(device)
         with torch.no_grad():
@@ -57,10 +59,26 @@ for language_code in LANGUAGES:
             label_mask = inputs['attention_mask'][:, 1:]
             kl = kl * label_mask
             lk = lk * label_mask
-            # Per-example mean
-            mean_kl += (kl.sum(dim=-1) / label_mask.sum(dim=-1)).sum().item() / len(dataset)
-            mean_lk += (lk.sum(dim=-1) / label_mask.sum(dim=-1)).sum().item() / len(dataset)
+            # Per-example mean over scored positions. A single-token example has
+            # no scored position at all; dividing by zero there turns the whole
+            # language's mean into NaN, so drop it from the sums and the count.
+            # Aya rows bypass the length filter in assemble_dataset, so this does
+            # happen (it is what produced the NaN for Yoruba).
+            scored = label_mask.sum(dim=-1)
+            keep = scored > 0
+            total_kl += (kl.sum(dim=-1)[keep] / scored[keep]).sum().item()
+            total_lk += (lk.sum(dim=-1)[keep] / scored[keep]).sum().item()
+            n_scored += int(keep.sum().item())
+            n_skipped += int((~keep).sum().item())
 
+    if n_skipped:
+        logger.warning(f"{language}: skipped {n_skipped} example(s) with no scored positions")
+    if n_scored == 0:
+        logger.warning(f"{language}: no scorable examples, omitting from output")
+        continue
+
+    mean_kl = total_kl / n_scored
+    mean_lk = total_lk / n_scored
     logger.info(f"KL: {mean_kl}")
     logger.info(f"LK: {mean_lk}")
     divergences.append([language, str(mean_kl), str(mean_lk)])
