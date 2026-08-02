@@ -10,6 +10,7 @@ from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
 
 from src.data.dataset import assemble_dataset, get_language_name, LANGUAGES
+from src.data.describe_data import MAX_MONO
 from src.utils import load_model
 
 logger = getLogger(__name__)
@@ -28,7 +29,7 @@ divergences = []
 for language_code in LANGUAGES:
     language = get_language_name(language_code)
     logger.info(f"Running on {language}")
-    dataset = assemble_dataset(language_code, 'mono', p_tokenizer, None)['test']
+    dataset = assemble_dataset(language_code, 'mono', p_tokenizer, MAX_MONO)['test']
     dataloader = DataLoader(
         dataset,  # type: ignore[arg-type]
         batch_size=16,
