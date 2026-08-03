@@ -15,7 +15,7 @@ base_draft_model, _ = load_model("meta-llama/Llama-3.2-1B-Instruct")
 device = next(base_draft_model.parameters()).device
 metrics = dict()
 for lang in langs:
-    distilled_model, _ = load_model(f"lecslab/{lang}-translation-meta-llama/Llama-3.2-3B-Instruct-meta-llama/Llama-3.2-1B-Instruct")
+    distilled_model, _ = load_model(f"lecslab/{lang}-translation-Llama-3.2-3B-Instruct-Llama-3.2-1B-Instruct")
     config = ExperimentConfig(
         task="translation",
         language_code=lang,
