@@ -669,14 +669,15 @@ def _scatter_with_fits(
     ax,
     points: dict[str, list[tuple[str, float, float]]],
     fit_langs: set[str],
-    metric_label: str,
+    relation: str,
     filename: str,
 ) -> list[Bbox]:
     """Scatter one series per model family — points[fam] holds (language, x, y)
     triples — with a colour-matched least-squares fit over the languages in
     fit_langs and each family's R^2 in whichever bottom corner the trend leaves
-    empty. Returns display-space boxes for the markers and the R^2 text, so the
-    caller can lay out labels around them."""
+    empty. `relation` names the x-vs-y pairing for the log line. Returns
+    display-space boxes for the markers and the R^2 text, so the caller can lay
+    out labels around them."""
     fits = []
     for fam, pts in points.items():
         if not pts:
@@ -694,65 +695,143 @@ def _scatter_with_fits(
             r = np.corrcoef(fx, fy)[0, 1]
             slope, intercept = np.polyfit(fx, fy, 1)
             logger.info(
-                f"{filename}: {metric_label} vs acceptance ({fam}): r={r:.4f}, "
+                f"{filename}: {relation} ({fam}): r={r:.4f}, "
                 f"slope={slope:.4f}, n={len(fit_pts)}"
             )
             x_fit = np.array([fx.min(), fx.max()])
             ax.plot(x_fit, slope * x_fit + intercept, color=style["color"], linewidth=1.2, zorder=2)
             fits.append((fam, r ** 2, slope))
 
-    # A rising trend leaves the lower right empty; a falling one the lower left.
-    falling = fits and np.mean([f[2] for f in fits]) < 0
-    r2_x, r2_ha = (0.02, "left") if falling else (0.98, "right")
-    r2_texts = [
-        ax.text(
-            r2_x, 0.04 + 0.09 * (len(fits) - 1 - k),
-            f"{FAMILY_STYLE[fam]['label']} R$^2$ = {r2:.2f}",
-            transform=ax.transAxes, ha=r2_ha, va="bottom",
-            fontsize=8, color=FAMILY_STYLE[fam]["color"], zorder=4,
-        )
-        for k, (fam, r2, _) in enumerate(fits)
-    ]
+    # Reserve headroom for the language labels the caller stacks above each
+    # point, so they stay inside the axes instead of running into the legend.
+    lo, hi = ax.get_ylim()
+    ax.set_ylim(lo, hi + 0.16 * (hi - lo))
 
     ax.figure.canvas.draw()
-    return [
+    marker_boxes = [
         Bbox.from_bounds(*(ax.transData.transform((px, py)) - 5), 10, 10)
         for pts in points.values()
         for _, px, py in pts
-    ] + [t.get_window_extent() for t in r2_texts]
+    ]
+
+    r2_texts = [
+        ax.text(
+            0, 0, f"{FAMILY_STYLE[fam]['label']} R$^2$ = {r2:.2f}",
+            transform=ax.transAxes, fontsize=8,
+            color=FAMILY_STYLE[fam]["color"], zorder=4,
+        )
+        for fam, r2, _ in fits
+    ]
+    if r2_texts:
+        # A rising trend tends to leave the lower right and upper left empty, and
+        # vice versa, but points still land there — so try every corner in that
+        # order of preference and take the first that no marker overlaps.
+        falling = np.mean([f[2] for f in fits]) < 0
+        corners = [
+            (0.02, "left", "bottom"), (0.98, "right", "top"),
+            (0.02, "left", "top"), (0.98, "right", "bottom"),
+        ] if falling else [
+            (0.98, "right", "bottom"), (0.02, "left", "top"),
+            (0.98, "right", "top"), (0.02, "left", "bottom"),
+        ]
+        best = None
+        for cx, ha, va in corners:
+            for k, txt in enumerate(r2_texts):
+                row = len(r2_texts) - 1 - k if va == "bottom" else k
+                cy = 0.04 + 0.09 * row if va == "bottom" else 0.96 - 0.09 * row
+                txt.set_position((cx, cy))
+                txt.set_ha(ha)
+                txt.set_va(va)
+            ax.figure.canvas.draw()
+            boxes = [t.get_window_extent() for t in r2_texts]
+            hits = sum(any(b.overlaps(m) for m in marker_boxes) for b in boxes)
+            if best is None or hits < best[0]:
+                best = (hits, cx, ha, va)
+            if hits == 0:
+                break
+        hits, cx, ha, va = best  # type:ignore[misc]
+        if hits:
+            # Every corner is occupied, so make an empty one: push the axis limit
+            # out until the nearest marker clears the text band. Preferred over
+            # letting the text hide a data point.
+            band = 0.09 * len(r2_texts) + 0.14
+            lo, hi = ax.get_ylim()
+            ys = [py for pts in points.values() for _, _, py in pts]
+            if va == "bottom":
+                ax.set_ylim((min(ys) - band * hi) / (1 - band), hi)
+            else:
+                ax.set_ylim(lo, (max(ys) - band * lo) / (1 - band))
+            ax.figure.canvas.draw()
+            marker_boxes = [
+                Bbox.from_bounds(*(ax.transData.transform((px, py)) - 5), 10, 10)
+                for pts in points.values()
+                for _, px, py in pts
+            ]
+        for k, txt in enumerate(r2_texts):
+            row = len(r2_texts) - 1 - k if va == "bottom" else k
+            txt.set_position((cx, 0.04 + 0.09 * row if va == "bottom" else 0.96 - 0.09 * row))
+            txt.set_ha(ha)
+            txt.set_va(va)
+        ax.figure.canvas.draw()
+
+    return marker_boxes + [t.get_window_extent() for t in r2_texts]
 
 
 def _place_labels(ax, items: list[tuple[str, float, float]], obstacles: list[Bbox]):
-    """Annotate (text, x, y) items, nudging each label upward until it clears
-    the markers and the labels already placed."""
+    """Annotate (text, x, y) items, lifting each label until it clears the
+    markers and the labels already placed. Each step jumps straight above the
+    highest thing it hit — stepping by a fixed amount instead runs out of
+    attempts where several points nearly coincide (haw/ibo)."""
     placed = list(obstacles)
-    for text, px, py in items:
+    px_to_pt = 72 / ax.figure.dpi
+    for text, x, y in items:
         txt = ax.annotate(
-            text, (px, py), fontsize=7, xytext=(0, 6),
+            text, (x, y), fontsize=7, xytext=(0, 6),
             textcoords="offset points", ha="center",
         )
+        ceiling = ax.get_window_extent().y1
         dy = 6
-        for _ in range(6):
-            if not any(txt.get_window_extent().overlaps(p) for p in placed):
+        for _ in range(8):
+            box = txt.get_window_extent()
+            hits = [p for p in placed if box.overlaps(p)]
+            if not hits:
                 break
-            dy += 8
+            dy += (max(p.y1 for p in hits) - box.y0 + 2) * px_to_pt
             txt.set_position((0, dy))
+            if txt.get_window_extent().y1 > ceiling:
+                # Out of room above (a tall stack, or the R^2 block acting as a
+                # wall) — drop below the point and clear downwards instead.
+                dy = -6 - box.height * px_to_pt
+                txt.set_position((0, dy))
+                for _ in range(8):
+                    box = txt.get_window_extent()
+                    hits = [p for p in placed if box.overlaps(p)]
+                    if not hits:
+                        break
+                    dy -= (box.y1 - min(p.y0 for p in hits) + 2) * px_to_pt
+                    txt.set_position((0, dy))
+                break
         placed.append(txt.get_window_extent())
 
 
-def _resourcedness_acceptance_plot(data: pd.DataFrame, counts: pd.DataFrame, task: str, filename: str):
-    """Baseline acceptance rate vs. language resourcedness, both model families
-    on one axes (colour + marker shape per family). Resourcedness is the log10
-    FineWeb token count; languages counted as -1 (absent from FineWeb) are laid
-    out side by side in a separate region on the left, where the x-axis is
-    blank because no count is defined for them."""
-    d = _baseline_family_rows(data, task)
-    if d.empty:
-        logger.info(f"no baseline {task} runs; skipping {filename}")
+def _resourcedness_plot(
+    values: pd.Series,
+    counts: pd.DataFrame,
+    ylabel: str,
+    filename: str,
+    relation: str,
+    column: str = "words",
+    xlabel: str = "FineWeb Words (log$_{10}$)",
+):
+    """Any per-(language, family) metric against language resourcedness, both
+    model families on one axes (colour + marker shape per family). Resourcedness
+    is the log10 FineWeb token count; languages counted as -1 (absent from
+    FineWeb) are laid out side by side in a separate region on the left, where
+    the x-axis is blank because no count is defined for them."""
+    if column not in counts.columns:
+        logger.info(f"{filename}: no '{column}' column in the counts file; skipping")
         return
-
-    words = counts.set_index("language_code")["words"]
-    values = d.groupby(["language", "family"])["sentence_avg_acceptance_rate"].mean()
+    words = counts.set_index("language_code")[column]
     present = [lang for lang in langs if lang in set(values.index.get_level_values("language"))]
     missing = [lang for lang in present if lang not in words.index]
     if missing:
@@ -781,7 +860,7 @@ def _resourcedness_acceptance_plot(data: pd.DataFrame, counts: pd.DataFrame, tas
         fam: [(lang, x[lang], values[(lang, fam)]) for lang in present if (lang, fam) in values.index]
         for fam in families
     }
-    obstacles = _scatter_with_fits(ax, points, set(known), "log tokens", filename)
+    obstacles = _scatter_with_fits(ax, points, set(known), relation, filename)
     # One label per language: both families share an x here, so a per-point
     # label would just duplicate the code.
     _place_labels(
@@ -807,8 +886,8 @@ def _resourcedness_acceptance_plot(data: pd.DataFrame, counts: pd.DataFrame, tas
         ticks = np.round(np.linspace(lo, hi, 3), 1)
     ax.set_xticks(ticks)
 
-    ax.set_xlabel("FineWeb Tokens (log$_{10}$)")
-    ax.set_ylabel(f"Acceptance Rate ({TASK_TO_TITLE.get(task, task)})")
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
     ax.legend(
         frameon=False, fontsize=10, loc="lower center",
         bbox_to_anchor=(0.5, 1.0), ncol=len(families), borderaxespad=0.1,
@@ -817,92 +896,284 @@ def _resourcedness_acceptance_plot(data: pd.DataFrame, counts: pd.DataFrame, tas
     _finalize(fig, filename)
 
 
-METRIC_TO_TITLE = {
-    "kl": "KL Divergence (target || draft)",
-    "lk": "Total Variation Distance (target || draft)",
-}
-
-
-def load_divergences() -> pd.DataFrame:
-    """Read the viz/divergences_<P>_<Q> files into (language, family, kl, lk).
-
-    src/measure_divergence.py writes them headerless and keyed by full language
-    name, so map the names back onto the codes used everywhere else. The model
-    family comes from the filename, which carries both model keys."""
-    ref = pd.read_csv(Path(__file__).resolve().parent / "data" / "reference_table_bilingual.csv")
-    name_to_code = dict(zip(ref["Language"].str.strip(), ref["Code"].str.strip()))
-
-    records = []
-    for path in sorted(Path("viz").glob("divergences_*")):
-        if path.suffix not in {".csv", ".tsv"}:
-            continue
-        family = _detect_family(path.stem)
-        df = pd.read_csv(path, header=None, names=["language_name", "kl", "lk"], sep=None, engine="python")
-        for _, row in df.iterrows():
-            code = name_to_code.get(str(row["language_name"]).strip())
-            if code is None:
-                logger.warning(f"{path.name}: unrecognised language {row['language_name']!r}; skipping")
-                continue
-            records.append({"language": code, "family": family, "kl": row["kl"], "lk": row["lk"]})
-        logger.info(f"Loaded {len(df)} divergence rows from {path.name} as family={family}")
-    return pd.DataFrame.from_records(records)
-
-
-def _divergence_acceptance_plot(
-    data: pd.DataFrame,
-    divergences: pd.DataFrame,
-    metric: str,
-    filename: str,
-    task: str = "translation",
-):
-    """Baseline acceptance rate against the measured target/draft divergence,
-    laid out like the resourcedness scatters. Unlike those, x is per model pair
-    rather than per language, so each family's points sit at their own x and
-    every point carries its own label."""
+def _resourcedness_acceptance_plot(data: pd.DataFrame, counts: pd.DataFrame, task: str, filename: str):
+    """Baseline acceptance rate against language resourcedness."""
     d = _baseline_family_rows(data, task)
-    if d.empty or divergences.empty:
-        logger.info(f"no baseline {task} runs or no divergence files; skipping {filename}")
+    if d.empty:
+        logger.info(f"no baseline {task} runs; skipping {filename}")
         return
+    _resourcedness_plot(
+        d.groupby(["language", "family"])["sentence_avg_acceptance_rate"].mean(),
+        counts,
+        f"Acceptance Rate ({TASK_TO_TITLE.get(task, task)})",
+        filename,
+        "log tokens vs acceptance",
+    )
 
-    values = d.groupby(["language", "family"])["sentence_avg_acceptance_rate"].mean()
-    div = divergences.dropna(subset=[metric]).set_index(["language", "family"])[metric]
+
+def _resourcedness_divergence_plot(
+    divergences: pd.DataFrame, counts: pd.DataFrame, metric: str, filename: str,
+    column: str = "words", xlabel: str = "FineWeb Words (log$_{10}$)",
+):
+    """Measured target/draft divergence against language resourcedness, laid out
+    exactly like the acceptance version."""
+    if metric not in divergences.columns:
+        logger.info(f"divergence file lacks '{metric}'; skipping {filename}")
+        return
+    div = divergences.dropna(subset=[metric])
     dropped = len(divergences) - len(div)
     if dropped:
         logger.warning(f"{filename}: dropped {dropped} row(s) with no {metric} value")
+    if div.empty:
+        logger.info(f"no {metric} divergence values; skipping {filename}")
+        return
+    _resourcedness_plot(
+        div.set_index(["language", "family"])[metric],
+        counts,
+        METRIC_TO_TITLE.get(metric, metric),
+        filename,
+        f"log {column} vs {metric}",
+        column=column,
+        xlabel=xlabel,
+    )
 
+
+def load_fertility() -> pd.DataFrame:
+    """Per-(language, family) tokenizer fertility from src/compute_fertility.py."""
+    path = Path("viz") / "fertility.csv"
+    if not path.exists():
+        logger.warning(f"no {path}; skipping fertility plots. Generate it with src.compute_fertility")
+        return pd.DataFrame(columns=["language", "family", "fertility"])
+    # The file carries both language_code and a full-name `language` column;
+    # drop the latter first or the rename collides into a duplicate label.
+    df = (
+        pd.read_csv(path)
+        .drop(columns=["language"], errors="ignore")
+        .rename(columns={"language_code": "language"})
+    )
+    logger.info(f"Loaded {len(df)} fertility rows from {path}")
+    return df
+
+
+def _fertility_plot(
+    values: pd.Series,
+    fertility: pd.DataFrame,
+    ylabel: str,
+    filename: str,
+    relation: str,
+):
+    """Any per-(language, family) metric against tokenizer fertility.
+
+    Fertility is an inverse resourcedness proxy — tokens per character, so a
+    language whose script is missing from the vocabulary falls back to UTF-8
+    bytes and lands above 1.0. Unlike the FineWeb counts it is defined for every
+    language, so there is no unknown region, and it is tokenizer-specific, so
+    each family sits at its own x."""
+    if fertility.empty:
+        logger.info(f"no fertility data; skipping {filename}")
+        return
+    fert = fertility.set_index(["language", "family"])["fertility"]
     families = [f for f in FAMILY_STYLE if f in set(values.index.get_level_values("family"))]
     present = [lang for lang in langs if lang in set(values.index.get_level_values("language"))]
     points = {
         fam: [
-            (lang, float(div[(lang, fam)]), values[(lang, fam)])
+            (lang, float(fert[(lang, fam)]), values[(lang, fam)])
             for lang in present
-            if (lang, fam) in div.index and (lang, fam) in values.index
+            if (lang, fam) in fert.index and (lang, fam) in values.index
         ]
         for fam in families
     }
+    missing = [
+        lang for lang in present
+        if not any((lang, fam) in fert.index for fam in families)
+    ]
+    if missing:
+        logger.warning(f"{filename}: no fertility value for {missing}; dropping")
     if not any(points.values()):
-        logger.info(f"{filename}: no languages with both a {metric} value and a baseline run; skipping")
+        logger.info(f"{filename}: no languages with both a fertility value and a metric; skipping")
         return
 
-    fig, ax = plt.subplots(figsize=(4.5, 2.8))
-    obstacles = _scatter_with_fits(ax, points, set(present), metric, filename)
+    fig, ax = plt.subplots(figsize=(5.0, 3.0))
+    # Join each language's two family points before drawing them. Most languages
+    # tokenize almost identically under both vocabularies, so the pair sits on
+    # top of itself and one label serves both; where the connector is long (amh)
+    # it is showing a genuine difference in script coverage between tokenizers.
+    by_lang: dict[str, list[tuple[float, float]]] = {}
+    for pts in points.values():
+        for lang, px, py in pts:
+            by_lang.setdefault(lang, []).append((px, py))
+    for pair in by_lang.values():
+        if len(pair) == 2:
+            ax.plot(
+                [pair[0][0], pair[1][0]], [pair[0][1], pair[1][1]],
+                color="#999999", alpha=0.35, linewidth=0.6, zorder=1,
+            )
+
+    # Every language enters the fit — fertility has no undefined values.
+    obstacles = _scatter_with_fits(ax, points, set(present), relation, filename)
+    # One label per language, on its upper point, instead of one per marker.
     _place_labels(
         ax,
         sorted(
-            [(lang, px, py) for pts in points.values() for lang, px, py in pts],
+            [(lang, max(pair, key=lambda p: p[1])[0], max(p[1] for p in pair))
+             for lang, pair in by_lang.items()],
             key=lambda item: item[1],
         ),
         obstacles,
     )
 
-    ax.set_xlabel(METRIC_TO_TITLE.get(metric, metric))
-    ax.set_ylabel(f"Acceptance Rate ({TASK_TO_TITLE.get(task, task)})")
+    ax.set_xlabel("Tokenizer Fertility (tokens / char)")
+    ax.set_ylabel(ylabel)
     ax.legend(
         frameon=False, fontsize=10, loc="lower center",
         bbox_to_anchor=(0.5, 1.0), ncol=len(families), borderaxespad=0.1,
     )
     _style_spines(ax)
     _finalize(fig, filename)
+
+
+def _fertility_acceptance_plot(data: pd.DataFrame, fertility: pd.DataFrame, task: str, filename: str):
+    """Baseline acceptance rate against tokenizer fertility."""
+    d = _baseline_family_rows(data, task)
+    if d.empty:
+        logger.info(f"no baseline {task} runs; skipping {filename}")
+        return
+    _fertility_plot(
+        d.groupby(["language", "family"])["sentence_avg_acceptance_rate"].mean(),
+        fertility,
+        f"Acceptance Rate ({TASK_TO_TITLE.get(task, task)})",
+        filename,
+        "fertility vs acceptance",
+    )
+
+
+def _fertility_divergence_plot(divergences: pd.DataFrame, fertility: pd.DataFrame, metric: str, filename: str):
+    """Measured target/draft divergence against tokenizer fertility. Note both
+    axes derive from the same tokenization, so this is a diagnostic of that
+    confound rather than an independent relationship."""
+    div = divergences.dropna(subset=[metric])
+    if div.empty:
+        logger.info(f"no {metric} divergence values; skipping {filename}")
+        return
+    _fertility_plot(
+        div.set_index(["language", "family"])[metric],
+        fertility,
+        METRIC_TO_TITLE.get(metric, metric),
+        filename,
+        f"fertility vs {metric}",
+    )
+
+
+# Wrapped because these are y-axis labels on a short axes.
+METRIC_TO_TITLE = {
+    "kl": "KL Divergence / token\n(target || draft)",
+    "lk": "Total Variation Dist. / token\n(target || draft)",
+    "kl_per_char": "KL Divergence / char\n(target || draft)",
+    "tvd_per_char": "Total Variation Dist. / char\n(target || draft)",
+    "bits_per_char_target": "Target Bits / char",
+    "bits_per_char_draft": "Draft Bits / char",
+}
+
+
+def _bpc_divergence_plot(
+    divergences: pd.DataFrame,
+    metric: str,
+    filename: str,
+    bpc_column: str = "bits_per_char_target",
+):
+    """Per-character divergence against the target model's bits per character.
+
+    Both axes are per character, so neither is affected by how the tokenizer
+    splits the text — the confound that makes the per-token version track
+    script coverage. Bits per char stands in for resourcedness: how well the
+    target model actually models the language."""
+    needed = [metric, bpc_column]
+    if any(c not in divergences.columns for c in needed):
+        logger.info(f"divergence file lacks {needed}; skipping {filename}")
+        return
+    div = divergences.dropna(subset=needed)
+    if div.empty:
+        logger.info(f"no {metric}/{bpc_column} values (re-run src.measure_divergence); skipping {filename}")
+        return
+
+    families = [f for f in FAMILY_STYLE if f in set(div["family"])]
+    present = [lang for lang in langs if lang in set(div["language"])]
+    idx = div.set_index(["language", "family"])
+    points = {
+        fam: [
+            (lang, float(idx.loc[(lang, fam), bpc_column]), float(idx.loc[(lang, fam), metric]))
+            for lang in present
+            if (lang, fam) in idx.index
+        ]
+        for fam in families
+    }
+    if not any(points.values()):
+        logger.info(f"{filename}: no languages to plot; skipping")
+        return
+
+    fig, ax = plt.subplots(figsize=(5.0, 3.0))
+    obstacles = _scatter_with_fits(ax, points, set(present), f"bits/char vs {metric}", filename)
+    _place_labels(
+        ax,
+        sorted([(l, px, py) for pts in points.values() for l, px, py in pts], key=lambda i: i[1]),
+        obstacles,
+    )
+
+    ax.set_xlabel(METRIC_TO_TITLE.get(bpc_column, bpc_column).replace("\n", " "))
+    ax.set_ylabel(METRIC_TO_TITLE.get(metric, metric))
+    ax.legend(
+        frameon=False, fontsize=10, loc="lower center",
+        bbox_to_anchor=(0.5, 1.0), ncol=len(families), borderaxespad=0.1,
+    )
+    _style_spines(ax)
+    _finalize(fig, filename)
+
+
+DIVERGENCE_METRICS = [
+    "kl", "lk", "kl_per_char", "tvd_per_char",
+    "bits_per_char_target", "bits_per_char_draft",
+]
+
+
+def load_divergences() -> pd.DataFrame:
+    """Read the viz/divergences_<P>_<Q> files into (language, family, <metrics>).
+
+    Current files from src/measure_divergence.py carry a header and a
+    language_code column. Older ones were headerless with the full language
+    name, so fall back to mapping names onto codes for those. The model family
+    comes from the filename, which carries both model keys."""
+    records = []
+    for path in sorted(Path("viz").glob("divergences_*")):
+        if path.suffix not in {".csv", ".tsv"}:
+            continue
+        family = _detect_family(path.stem)
+        df = pd.read_csv(path, sep=None, engine="python")
+        if "language_code" in df.columns:
+            df = df.rename(columns={"language_code": "language"})
+            if "language" in df.columns and df.columns.tolist().count("language") > 1:
+                df = df.loc[:, ~df.columns.duplicated()]
+            df = df.drop(columns=[c for c in ["n_examples", "n_chars"] if c in df.columns])
+        else:
+            # Legacy headerless: language name, kl, lk.
+            ref = pd.read_csv(Path(__file__).resolve().parent / "data" / "reference_table_bilingual.csv")
+            name_to_code = dict(zip(ref["Language"].str.strip(), ref["Code"].str.strip()))
+            df = pd.read_csv(path, header=None, names=["language_name", "kl", "lk"], sep=None, engine="python")
+            df["language"] = df["language_name"].astype(str).str.strip().map(name_to_code)
+            unknown = df[df["language"].isna()]["language_name"].tolist()
+            if unknown:
+                logger.warning(f"{path.name}: unrecognised language(s) {unknown}; skipping")
+            df = df.dropna(subset=["language"]).drop(columns=["language_name"])
+            logger.info(f"{path.name}: legacy headerless format; per-character metrics unavailable")
+        df["family"] = family
+        records.append(df)
+        logger.info(f"Loaded {len(df)} divergence rows from {path.name} as family={family}")
+    if not records:
+        return pd.DataFrame(columns=["language", "family", *DIVERGENCE_METRICS])
+    out = pd.concat(records, ignore_index=True)
+    for m in DIVERGENCE_METRICS:
+        if m not in out.columns:
+            out[m] = np.nan
+    return out
 
 
 def _size_scaling_plot(data: pd.DataFrame, y: str, filename: str, family: str | None = None):
@@ -1142,6 +1413,20 @@ if __name__ == "__main__":
         for family in families:
             _ngram_vs_distilled_scatter(spec_data, task, f"ngram_vs_distilled_{name}", family)
 
+    fertility_data = load_fertility()
+    for task, name in [("translation", "translation"), ("story_gen", "story")]:
+        _fertility_acceptance_plot(spec_data, fertility_data, task, f"fertility_acceptance_{name}")
+
     divergence_data = load_divergences()
     for metric in ["kl", "lk"]:
-        _divergence_acceptance_plot(spec_data, divergence_data, metric, f"divergence_acceptance_{metric}")
+        _resourcedness_divergence_plot(divergence_data, fineweb_counts, metric, f"resourcedness_divergence_{metric}")
+        _fertility_divergence_plot(divergence_data, fertility_data, metric, f"fertility_divergence_{metric}")
+
+    # Per-character versions: neither axis depends on how the tokenizer splits
+    # the text, so the script-coverage confound in the per-token plots is gone.
+    for metric in ["kl_per_char", "tvd_per_char"]:
+        _bpc_divergence_plot(divergence_data, metric, f"bpc_divergence_{metric}")
+        _resourcedness_divergence_plot(
+            divergence_data, fineweb_counts, metric, f"bytes_divergence_{metric}",
+            column="bytes", xlabel="FineWeb Bytes (log$_{10}$)",
+        )
