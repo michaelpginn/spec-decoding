@@ -4,6 +4,9 @@ from typing import Literal
 WANDB_PROJECT = "speculative decoding v2"
 WANDB_ENTITY = "lecs-general"
 
+# Default dataset caps used in our experiments
+DEFAULT_MAX_BI = 6000
+DEFAULT_MAX_MONO = 20000
 
 @dataclass
 class ExperimentConfig:
@@ -28,8 +31,8 @@ class ExperimentConfig:
     use_hf_assisted: bool = False
     hf_schedule: Literal["heuristic", "constant"] | None = None
 
-    max_samples: int = 6000
-    max_samples_mono: int = 20000
+    max_samples: int = DEFAULT_MAX_BI
+    max_samples_mono: int = DEFAULT_MAX_MONO
     max_new_tokens: int = 128
     story_seed: int | None = 0
     device: str = "auto"
@@ -47,7 +50,7 @@ class ExperimentConfig:
 
         if isinstance(self.story_seed, str):
             self.story_seed = None if self.story_seed == "None" else int(self.story_seed)
-            
+
 @dataclass
 class DistillConfig:
     task: Literal['general', 'translation']

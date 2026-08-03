@@ -11,7 +11,8 @@ from pprint import pprint
 from transformers import AutoTokenizer
 
 #
-from src.data.dataset import assemble_dataset, get_language_name, LANGUAGES
+from src.config.config import DEFAULT_MAX_BI, DEFAULT_MAX_MONO
+from src.data.dataset import LANGUAGES, assemble_dataset, get_language_name
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,49 +20,44 @@ logging.basicConfig(
 )
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-MAX_MONO = 20000
-MAX_BI=6000
-
-
-
-# Cut: lkt,mus,oji
-
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3.5-9B")
 
+
 def add_token_counts(row):
-    return {'num_tokens': len(tokenizer.tokenize(row['text']))}
+    return {"num_tokens": len(tokenizer.tokenize(row["text"]))}
+
 
 lang_data = {}
 for language in LANGUAGES:
-    data: dict = {'code': language}
-    data['name'] = get_language_name(language)
-    print(data['name'])
-    mono_data = assemble_dataset(language, 'mono', tokenizer, MAX_MONO)
+    data: dict = {"code": language}
+    data["name"] = get_language_name(language)
+    print(data["name"])
+    mono_data = assemble_dataset(language, "mono", tokenizer, DEFAULT_MAX_MONO)
     mono_data = mono_data.map(add_token_counts)
-    data['mono'] = {
-        'train': {
-            'num_examples': len(mono_data['train']),
-            'num_tokens': sum(mono_data['train']['num_tokens']),
-            'sources': Counter(mono_data['train']['origin']),
-            'first_example': mono_data['train'][0]
+    data["mono"] = {
+        "train": {
+            "num_examples": len(mono_data["train"]),
+            "num_tokens": sum(mono_data["train"]["num_tokens"]),
+            "sources": Counter(mono_data["train"]["origin"]),
+            "first_example": mono_data["train"][0],
         },
-        'test': {
-            'num_examples': len(mono_data['test']),
-            'num_tokens': sum(mono_data['test']['num_tokens']),
-            'sources': Counter(mono_data['test']['origin'])
-        }
+        "test": {
+            "num_examples": len(mono_data["test"]),
+            "num_tokens": sum(mono_data["test"]["num_tokens"]),
+            "sources": Counter(mono_data["test"]["origin"]),
+        },
     }
-    bi_data = assemble_dataset(language, 'bi', tokenizer, MAX_BI)
-    data['bi'] = {
-        'train': {
-            'num_examples': len(bi_data['train']),
-            'sources': Counter(bi_data['train']['origin']),
-            'first_example': bi_data['train'][0]
+    bi_data = assemble_dataset(language, "bi", tokenizer, DEFAULT_MAX_BI)
+    data["bi"] = {
+        "train": {
+            "num_examples": len(bi_data["train"]),
+            "sources": Counter(bi_data["train"]["origin"]),
+            "first_example": bi_data["train"][0],
         },
-        'test': {
-            'num_examples': len(bi_data['test']),
-            'sources': Counter(bi_data['test']['origin'])
-        }
+        "test": {
+            "num_examples": len(bi_data["test"]),
+            "sources": Counter(bi_data["test"]["origin"]),
+        },
     }
     lang_data[language] = data
 
@@ -79,15 +75,18 @@ mono_table = """\\begin{table}[h!]
             \\midrule
 """
 
+
 def short(n):
-    for div, suf in [(1e9,'B'), (1e6,'M'), (1e3,'k')]:
-        if abs(n) >= div: return f"{n/div:.1f}{suf}"
+    for div, suf in [(1e9, "B"), (1e6, "M"), (1e3, "k")]:
+        if abs(n) >= div:
+            return f"{n / div:.1f}{suf}"
     return str(n)
+
 
 for lang in sorted(LANGUAGES):
     d = lang_data[lang]
-    num_tokens_train = short(d['mono']['train']['num_tokens'])
-    num_tokens_test = short(d['mono']['test']['num_tokens'])
+    num_tokens_train = short(d["mono"]["train"]["num_tokens"])
+    num_tokens_test = short(d["mono"]["test"]["num_tokens"])
     mono_table += f"            {d['name']} [{lang}] & {num_tokens_train} & {num_tokens_test} \\\\ \n"
 
 mono_table += """            \\bottomrule
@@ -95,7 +94,7 @@ mono_table += """            \\bottomrule
     \\caption{Monolingual corpora for each language, with token counts under the Qwen tokenizer. Sources are described in \\autoref{tab:mono_source_counts}.}
     \\label{tab:monolingual}
 \\end{table}"""
-with open("./viz/monolingual.tex", 'w') as f:
+with open("./viz/monolingual.tex", "w") as f:
     f.write(mono_table)
 
 parallel_table = """\\begin{table}[h!]
@@ -116,7 +115,7 @@ parallel_table += """            \\bottomrule
     \\caption{Number of parallel sentences for each language. Sources are described in \\autoref{tab:par_source_counts}. Our main evaluation uses the test split.}
     \\label{tab:bilingual}
 \\end{table}"""
-with open("./viz/bilingual.tex", 'w') as f:
+with open("./viz/bilingual.tex", "w") as f:
     f.write(parallel_table)
 
 # Source Count
@@ -130,11 +129,15 @@ mono_source_table = """\\begin{table}[h!]
 """
 for lang in sorted(LANGUAGES):
     d = lang_data[lang]
-    total_tokens = short(d['mono']['train']['num_tokens'] + d['mono']['test']['num_tokens'])
+    total_tokens = short(
+        d["mono"]["train"]["num_tokens"] + d["mono"]["test"]["num_tokens"]
+    )
 
-    sources_list = ", ".join(d['mono']['train']['sources'].keys())
+    sources_list = ", ".join(d["mono"]["train"]["sources"].keys())
 
-    mono_source_table += f"            {d['name']} [{lang}] & {total_tokens} & {sources_list} \\\\ \n"
+    mono_source_table += (
+        f"            {d['name']} [{lang}] & {total_tokens} & {sources_list} \\\\ \n"
+    )
 
 mono_source_table += """            \\bottomrule
         \\end{tabular}
@@ -142,7 +145,7 @@ mono_source_table += """            \\bottomrule
     \\label{tab:mono_source_counts}
 \\end{table}"""
 
-with open("./viz/monolingual_source.tex", 'w') as f:
+with open("./viz/monolingual_source.tex", "w") as f:
     f.write(mono_source_table)
 
 
@@ -157,9 +160,9 @@ bi_source_table = """\\begin{table}[h!]
 
 for lang in sorted(LANGUAGES):
     d = lang_data[lang]
-    total_tokens = d['bi']['train']['num_examples'] + d['bi']['test']['num_examples']
+    total_tokens = d["bi"]["train"]["num_examples"] + d["bi"]["test"]["num_examples"]
     temp = ""
-    for item in d['bi']['train']['sources'].keys():
+    for item in d["bi"]["train"]["sources"].keys():
         if item.lower() == "tateoba":
             temp += ", Tat"
         elif item.lower() == "https://cherokeedictionary.net":
@@ -174,7 +177,9 @@ for lang in sorted(LANGUAGES):
             temp += f", {item}"
     sources_list = temp
 
-    bi_source_table += f"            {d['name']} [{lang}] & {total_tokens} & {sources_list} \\\\ \n"
+    bi_source_table += (
+        f"            {d['name']} [{lang}] & {total_tokens} & {sources_list} \\\\ \n"
+    )
 
 bi_source_table += """            \\bottomrule
         \\end{tabular}
@@ -182,5 +187,5 @@ bi_source_table += """            \\bottomrule
     \\label{tab:bi_source_counts}
 \\end{table}"""
 
-with open("./viz/bilingual_source.tex", 'w') as f:
+with open("./viz/bilingual_source.tex", "w") as f:
     f.write(bi_source_table)
