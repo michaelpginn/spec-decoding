@@ -10,9 +10,9 @@ from src.tasks.translation import compute_eval_metrics, load_data
 from src.utils import load_model
 langs = ["amh","ber","chr","grn","haw","ibo","npi","oci","que","yor","zgh"]
 
-
-base_model, tokenizer = load_model("meta-llama/Llama-3.2-1B-Instruct")
-device = next(base_model.parameters()).device
+base_verifier_model, tokenizer = load_model("meta-llama/Llama-3.2-3B-Instruct")
+base_draft_model, _ = load_model("meta-llama/Llama-3.2-1B-Instruct")
+device = next(base_draft_model.parameters()).device
 metrics = dict()
 for lang in langs:
     distilled_model, _ = load_model(f"lecslab/{lang}-translation-meta-llama/Llama-3.2-3B-Instruct-meta-llama/Llama-3.2-1B-Instruct")
@@ -27,7 +27,8 @@ for lang in langs:
     dataset, _ = load_data(config, tokenizer)
     dataset = dataset['test']
 
-    base_preds = []
+    verifier_preds = []
+    draft_preds = []
     distilled_preds = []
     for row in tqdm(dataset, desc="Decoding"):
         assert isinstance(row, Mapping)
@@ -35,8 +36,8 @@ for lang in langs:
         inputs = create_inputs(prompt, tokenizer, device)
         prompt_len = inputs["input_ids"].shape[1]
 
-        # Base
-        out = base_model.generate(
+        # Draft
+        out = base_verifier_model.generate(
             **inputs,
             max_new_tokens=config.max_new_tokens,
             do_sample=True,
@@ -46,7 +47,20 @@ for lang in langs:
         )
         generated_token_count = out.shape[1] - prompt_len
         decoded = tokenizer.decode(out[0][prompt_len:], skip_special_tokens=True)
-        base_preds.append(decoded)
+        verifier_preds.append(decoded)
+
+        # Draft
+        out = base_draft_model.generate(
+            **inputs,
+            max_new_tokens=config.max_new_tokens,
+            do_sample=True,
+            pad_token_id=tokenizer.eos_token_id,
+            top_p=0.9,
+            top_k=50,
+        )
+        generated_token_count = out.shape[1] - prompt_len
+        decoded = tokenizer.decode(out[0][prompt_len:], skip_special_tokens=True)
+        draft_preds.append(decoded)
 
         # Distilled
         out = distilled_model.generate(
@@ -63,8 +77,9 @@ for lang in langs:
     # Metrics
     references = dataset['target']
     metrics[lang] = {
-        "base": compute_eval_metrics(references, base_preds),
-        "distilled": compute_eval_metrics(references, distilled_preds)
+        "verifier": compute_eval_metrics(references, verifier_preds),
+        "draft": compute_eval_metrics(references, draft_preds),
+        "draft_distilled": compute_eval_metrics(references, distilled_preds)
     }
     print(lang)
     pprint(metrics[lang])
