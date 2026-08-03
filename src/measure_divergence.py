@@ -54,8 +54,8 @@ p_model, p_tokenizer = load_model(args.p)
 q_model, q_tokenizer = load_model(args.q)
 if not p_tokenizer.pad_token:
     p_tokenizer.pad_token = p_tokenizer.eos_token
-# P's token ids are fed to both models, so a mismatched pair would be scored
-# against the wrong vocabulary — silently, since the shapes still line up.
+
+# Verify matching tokenizers
 if p_tokenizer.get_vocab() != q_tokenizer.get_vocab():
     raise ValueError(
         f"{args.p} and {args.q} do not share a tokenizer; this script feeds P's "
@@ -122,11 +122,7 @@ for language_code in LANGUAGES:
                 device=device,
             )
 
-            # Per-example mean over scored positions. A single-token example has
-            # no scored position at all; dividing by zero there turns the whole
-            # language's mean into NaN, so drop it from the sums and the count.
-            # Aya rows bypass the length filter in assemble_dataset, so this does
-            # happen (it is what produced the NaN for Yoruba).
+            # Drop single-token examples
             scored = label_mask.sum(dim=-1)
             keep = scored > 0
             total_kl += (kl.sum(dim=-1)[keep] / scored[keep]).sum().item()
