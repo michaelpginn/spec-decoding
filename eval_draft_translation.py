@@ -8,14 +8,14 @@ from src.config.config import ExperimentConfig
 from src.data.create_inputs import create_inputs, create_prompt
 from src.tasks.translation import compute_eval_metrics, load_data
 from src.utils import load_model
-langs = ["amh","ber","chr","grn","haw","ibo","npi","oci","que","yor","zgh","zh"]
+langs = ["amh","ber","chr","grn","haw","ibo","npi","oci","que","yor","zgh"]
 
 
-base_model, tokenizer = load_model("Qwen/Qwen3.5-0.8B")
+base_model, tokenizer = load_model("meta-llama/Llama-3.2-1B-Instruct")
 device = next(base_model.parameters()).device
 metrics = dict()
 for lang in langs:
-    distilled_model, _ = load_model(f"lecslab/{lang}-translation-Qwen3.5-9B-Qwen3.5-0.8B")
+    distilled_model, _ = load_model(f"lecslab/{lang}-translation-meta-llama/Llama-3.2-3B-Instruct-meta-llama/Llama-3.2-1B-Instruct")
     config = ExperimentConfig(
         task="translation",
         language_code=lang,
