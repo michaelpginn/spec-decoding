@@ -36,7 +36,7 @@ MAX_MONO = 20000
 
 FIELDNAMES = [
     "language_code", "language",
-    "kl", "lk",
+    "kl_per_token", "tvd_per_token",
     "kl_per_char", "tvd_per_char",
     "bits_per_char_target", "bits_per_char_draft",
     "n_examples", "n_chars",
@@ -45,7 +45,6 @@ FIELDNAMES = [
 parser = argparse.ArgumentParser()
 parser.add_argument("--p", help="HF model key to use for P distribution (target)")
 parser.add_argument("--q", help="HF model key to use for Q distribution (draft)")
-parser.add_argument("--languages", nargs="+", default=LANGUAGES)
 parser.add_argument("--batch-size", type=int, default=16)
 parser.add_argument("--max-length", type=int, default=128)
 parser.add_argument("--output", default=None, help="defaults to viz/divergences_<P>_<Q>.csv")
@@ -66,7 +65,7 @@ device = next(p_model.parameters()).device
 
 divergences = []
 
-for language_code in args.languages:
+for language_code in LANGUAGES:
     language = get_language_name(language_code)
     logger.info(f"Running on {language}")
     dataset = assemble_dataset(language_code, 'mono', p_tokenizer, MAX_MONO)['test']
@@ -153,8 +152,8 @@ for language_code in args.languages:
     row = {
         "language_code": language_code,
         "language": language,
-        "kl": total_kl / n_scored,
-        "lk": total_lk / n_scored,
+        "kl_per_token": total_kl / n_scored,
+        "tvd_per_token": total_lk / n_scored,
         "kl_per_char": sum_kl / sum_chars,
         "tvd_per_char": sum_tvd / sum_chars,
         "bits_per_char_target": sum_bits_p / sum_chars,
@@ -163,7 +162,7 @@ for language_code in args.languages:
         "n_chars": sum_chars,
     }
     logger.info(
-        f"  KL/token={row['kl']:.4f}  TVD/token={row['lk']:.4f}  "
+        f"  KL/token={row['kl_per_token']:.4f}  TVD/token={row['tvd_per_token']:.4f}  "
         f"KL/char={row['kl_per_char']:.4f}  TVD/char={row['tvd_per_char']:.4f}  "
         f"BPC(target)={row['bits_per_char_target']:.4f}  BPC(draft)={row['bits_per_char_draft']:.4f}"
     )

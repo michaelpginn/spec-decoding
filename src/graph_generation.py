@@ -1066,8 +1066,8 @@ def _fertility_divergence_plot(divergences: pd.DataFrame, fertility: pd.DataFram
 
 # Wrapped because these are y-axis labels on a short axes.
 METRIC_TO_TITLE = {
-    "kl": "KL Divergence / token\n(target || draft)",
-    "lk": "Total Variation Dist. / token\n(target || draft)",
+    "kl_per_token": "KL Divergence / token\n(target || draft)",
+    "tvd_per_token": "Total Variation Dist. / token\n(target || draft)",
     "kl_per_char": "KL Divergence / char\n(target || draft)",
     "tvd_per_char": "Total Variation Dist. / char\n(target || draft)",
     "bits_per_char_target": "Target Bits / char",
@@ -1130,7 +1130,7 @@ def _bpc_divergence_plot(
 
 
 DIVERGENCE_METRICS = [
-    "kl", "lk", "kl_per_char", "tvd_per_char",
+    "kl_per_token", "tvd_per_token", "kl_per_char", "tvd_per_char",
     "bits_per_char_target", "bits_per_char_draft",
 ]
 
@@ -1138,35 +1138,35 @@ DIVERGENCE_METRICS = [
 def load_divergences() -> pd.DataFrame:
     """Read the viz/divergences_<P>_<Q> files into (language, family, <metrics>).
 
-    Current files from src/measure_divergence.py carry a header and a
-    language_code column. Older ones were headerless with the full language
-    name, so fall back to mapping names onto codes for those. The model family
+    Expects the header written by src/measure_divergence.py. The model family
     comes from the filename, which carries both model keys."""
     records = []
     for path in sorted(Path("viz").glob("divergences_*")):
         if path.suffix not in {".csv", ".tsv"}:
             continue
-        family = _detect_family(path.stem)
         df = pd.read_csv(path, sep=None, engine="python")
-        if "language_code" in df.columns:
-            df = df.rename(columns={"language_code": "language"})
-            if "language" in df.columns and df.columns.tolist().count("language") > 1:
-                df = df.loc[:, ~df.columns.duplicated()]
-            df = df.drop(columns=[c for c in ["n_examples", "n_chars"] if c in df.columns])
-        else:
-            # Legacy headerless: language name, kl, lk.
-            ref = pd.read_csv(Path(__file__).resolve().parent / "data" / "reference_table_bilingual.csv")
-            name_to_code = dict(zip(ref["Language"].str.strip(), ref["Code"].str.strip()))
-            df = pd.read_csv(path, header=None, names=["language_name", "kl", "lk"], sep=None, engine="python")
-            df["language"] = df["language_name"].astype(str).str.strip().map(name_to_code)
-            unknown = df[df["language"].isna()]["language_name"].tolist()
-            if unknown:
-                logger.warning(f"{path.name}: unrecognised language(s) {unknown}; skipping")
-            df = df.dropna(subset=["language"]).drop(columns=["language_name"])
-            logger.info(f"{path.name}: legacy headerless format; per-character metrics unavailable")
-        df["family"] = family
+        if "language_code" not in df.columns:
+            logger.warning(
+                f"{path.name}: not in the current format (no language_code column); "
+                f"skipping. Re-run src.measure_divergence to regenerate it."
+            )
+            continue
+        # The file carries a full-name `language` column too; drop it or the
+        # rename below collides into a duplicate label.
+        df = (
+            df.drop(columns=["language"], errors="ignore")
+            .rename(columns={"language_code": "language"})
+            .drop(columns=[c for c in ["n_examples", "n_chars"] if c in df.columns])
+        )
+        missing = [m for m in DIVERGENCE_METRICS if m not in df.columns]
+        if missing:
+            logger.warning(
+                f"{path.name}: missing {missing}; plots using those will be skipped. "
+                f"Re-run src.measure_divergence to regenerate it."
+            )
+        df["family"] = _detect_family(path.stem)
         records.append(df)
-        logger.info(f"Loaded {len(df)} divergence rows from {path.name} as family={family}")
+        logger.info(f"Loaded {len(df)} divergence rows from {path.name} as family={df['family'].iloc[0]}")
     if not records:
         return pd.DataFrame(columns=["language", "family", *DIVERGENCE_METRICS])
     out = pd.concat(records, ignore_index=True)
@@ -1406,27 +1406,36 @@ if __name__ == "__main__":
             _pinsker_plot(kl_data, spec_data[spec_data["family"] == family], family)
     create_graphs(spec_data)
 
+    # Figures relating a per-language measure (y) to a resourcedness measure (x)
+    # are named <y>_vs_<x>, with y carrying its normalization, because per-token
+    # and per-char divergence behave very differently.
     fineweb_counts = pd.read_csv("viz/fineweb_counts.csv")
+    fertility_data = load_fertility()
     for task, name in [("translation", "translation"), ("story_gen", "story")]:
-        _resourcedness_acceptance_plot(spec_data, fineweb_counts, task, f"resourcedness_acceptance_{name}")
+        _resourcedness_acceptance_plot(
+            spec_data, fineweb_counts, task, f"acceptance_{name}_vs_finewebwords"
+        )
+        _fertility_acceptance_plot(
+            spec_data, fertility_data, task, f"acceptance_{name}_vs_fertility"
+        )
         _baseline_speedup_bars(spec_data, fineweb_counts, task, f"baseline_speedup_{name}")
         for family in families:
             _ngram_vs_distilled_scatter(spec_data, task, f"ngram_vs_distilled_{name}", family)
 
-    fertility_data = load_fertility()
-    for task, name in [("translation", "translation"), ("story_gen", "story")]:
-        _fertility_acceptance_plot(spec_data, fertility_data, task, f"fertility_acceptance_{name}")
-
     divergence_data = load_divergences()
-    for metric in ["kl", "lk"]:
-        _resourcedness_divergence_plot(divergence_data, fineweb_counts, metric, f"resourcedness_divergence_{metric}")
-        _fertility_divergence_plot(divergence_data, fertility_data, metric, f"fertility_divergence_{metric}")
-
-    # Per-character versions: neither axis depends on how the tokenizer splits
-    # the text, so the script-coverage confound in the per-token plots is gone.
-    for metric in ["kl_per_char", "tvd_per_char"]:
-        _bpc_divergence_plot(divergence_data, metric, f"bpc_divergence_{metric}")
+    # Per token: the unit acceptance rate lives in, but diluted by byte-fallback
+    # positions, so these track tokenizer script coverage as much as anything.
+    for metric, short in [("kl_per_token", "kl_pertoken"), ("tvd_per_token", "tvd_pertoken")]:
         _resourcedness_divergence_plot(
-            divergence_data, fineweb_counts, metric, f"bytes_divergence_{metric}",
+            divergence_data, fineweb_counts, metric, f"{short}_vs_finewebwords"
+        )
+        _fertility_divergence_plot(divergence_data, fertility_data, metric, f"{short}_vs_fertility")
+
+    # Per character: neither axis depends on how the tokenizer splits the text,
+    # so the script-coverage confound in the per-token versions is gone.
+    for metric, short in [("kl_per_char", "kl_perchar"), ("tvd_per_char", "tvd_perchar")]:
+        _bpc_divergence_plot(divergence_data, metric, f"{short}_vs_bpc")
+        _resourcedness_divergence_plot(
+            divergence_data, fineweb_counts, metric, f"{short}_vs_finewebbytes",
             column="bytes", xlabel="FineWeb Bytes (log$_{10}$)",
         )
