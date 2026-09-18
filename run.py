@@ -1,3 +1,7 @@
+'''
+File to run experiment
+'''
+
 import argparse
 import json
 import logging
@@ -10,12 +14,26 @@ from typing import Mapping
 import wandb
 from tqdm import tqdm
 
-from src.config.config import WANDB_ENTITY, ExperimentConfig
-from src.config.config_to_dataclass import config_to_dataclass
-from src.data.create_inputs import create_inputs, create_prompt
-from src.data.dataset import assemble_dataset
-from src.generation import generate_output
-from src.n_gram import NGramModel
+'''
+Imports from within src folder
+'''
+from src.config.config import (  # config functions and key
+    WANDB_ENTITY,
+    ExperimentConfig,
+    MadusaConfig,
+)
+from src.config.config_to_dataclass import (
+    config_to_dataclass,  #to dataclass config file
+)
+from src.data.create_inputs import (  # functions to create the prompts and inputs for draft models
+    create_inputs,
+    create_prompt,
+)
+from src.data.dataset import (
+    assemble_dataset,  #function to get all the datasets inplace and into one set
+)
+from src.generation import generate_output  # getting function that generates outputs
+from src.n_gram import NGramModel  #NGram model load
 from src.spec_dec_metrics import log_token_flow, summarize_metrics
 from src.utils import load_model
 
@@ -27,7 +45,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
-def run(config: ExperimentConfig):
+def run(config: ExperimentConfig|MadusaConfig):
     """Run experiment: load config, init wandb, dispatch to task (e.g. translation)."""
     if config.task == "translation":
         from src.tasks.translation import compute_eval_metrics, load_data
@@ -68,6 +86,15 @@ def run(config: ExperimentConfig):
         else:
             draft_model = target_model
             draft_tokenizer = target_tokenizer
+    elif config.draft_model_type == "medusa":
+        if config.draft_model is None:
+            raise ValueError(
+                "draft_model must be set when draft_model_type='neural'"
+            )
+        logger.info(f"Loading draft model: {config.draft_model}...")
+        draft_model, draft_tokenizer = load_model(
+            config.draft_model, device=config.device
+        )
     elif config.draft_model_type == "ngram":
         draft_tokenizer = target_tokenizer
         draft_model = NGramModel(n=config.ngram_n, tokenizer=draft_tokenizer, vocab_size=target_model.config.vocab_size)
@@ -129,6 +156,7 @@ def run(config: ExperimentConfig):
 def setup_wandb(config: ExperimentConfig):
     target_short = config.target_model.split("/")[-1]
     is_spec = config.draft_model_type != "none"
+    is_medusa = config.draft_model_type != "none" and config.draft_model_type != is_spec
     if config.draft_model_type == 'ngram':
         draft_short = "ngram"
     elif config.draft_model_type == 'neural':
@@ -143,6 +171,8 @@ def setup_wandb(config: ExperimentConfig):
     group = f"{target_short}__{config.language_code}"
     if is_spec:
         name = f"{config.language_code}_{draft_short}_g{config.gamma}"
+    elif is_medusa:
+        name = f"{config.language_code}_{draft_short}_h{config.num_heads}"
     else:
         name = f"{config.language_code}_baseline"
 
