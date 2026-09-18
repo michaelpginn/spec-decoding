@@ -2,7 +2,7 @@
 ## Setup
 Clone with submodules:
 ```bash
-git clone --recursive git@github.com:michaelpginn/spec-decoding-capstone.git
+git clone --recursive git@github.com:michaelpginn/spec-decoding.git
 ```
 
 Then, install [uv](https://docs.astral.sh/uv/getting-started/installation/) if it isn't already.

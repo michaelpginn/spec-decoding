@@ -5,10 +5,8 @@ import torch
 from transformers import PreTrainedModel, PreTrainedTokenizer
 
 from src.config.config import ExperimentConfig
-from src.models.madusa import madusa
 from src.n_gram import NGramModel
 from src.spec_decode import speculative_decode
-from src.spec_decode_madusa import speculative_decode as madusa_spec
 
 
 def generate_output(
@@ -25,7 +23,7 @@ def generate_output(
     )
     is_cuda = inputs["input_ids"].device.type == "cuda"
     prompt_len = inputs["input_ids"].shape[1]
-
+    
     def get_time():
         if is_cuda:
             torch.cuda.synchronize()
@@ -53,18 +51,7 @@ def generate_output(
         decoded = tokenizer.decode(output_ids[0][prompt_len:], skip_special_tokens=True)
         decoded = cast(str, decoded).strip()
         return decoded, metrics
-    if isinstance(draft_model, madusa) or config.draft_model_type == "medusa":
-        output_ids, metrics = madusa_spec(
-            target_model=model,
-            madusa=madusa(config.draft_model),
-            tokenizer=tokenizer,
-            input_ids=inputs["input_ids"],
-            mode=config.decoding_mode,
-            max_new_tokens=config.max_new_tokens,
-            device=inputs["input_ids"].device,
-        )
-        decoded = tokenizer.decode(output_ids[0][prompt_len:], skip_special_tokens=True)
-        return cast(str, decoded).strip(), metrics
+
     if isinstance(draft_model, NGramModel):
         raise ValueError(
             "NGramModel can only be used with bespoke decoding implementation!"
