@@ -243,7 +243,7 @@ def _bar_plot(data: pd.DataFrame, y: str, y_std: str, filename: str, family: str
 def _violin_plot(data, x: str, y: str, y_std: str, family: str):
     _log_stats(data, x, y, y)
     order = [m for m in FAMILIES[family]["forward_pass_models"] if m in set(data['model_size'])]
-    fig, ax = plt.subplots(figsize=(4, 1.5))
+    fig, ax = plt.subplots(figsize=(4, 1))
 
     sns.violinplot(
         data=data,
@@ -1269,7 +1269,7 @@ def _pinsker_plot(kl_df: pd.DataFrame, spec_df: pd.DataFrame, family: str | None
     pinsker_bound = np.maximum(0.0, 1.0 - np.sqrt(kl_range / 2))
 
     type_to_color  = {"translation": PALETTE[1], "general": PALETTE[4]}
-    type_to_label  = {"translation": "Distilled (translation)", "general": "Distilled (general)"}
+    type_to_label  = {"translation": "Distilled (task)", "general": "Distilled (general)"}
     type_to_marker = {"translation": "o", "general": "s"}
 
     fig, ax = plt.subplots(figsize=(4, 3))
