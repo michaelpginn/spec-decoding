@@ -35,3 +35,7 @@ Tamazight,zgh,tatoeba,20665,data/monolingual/zgh/tatoeba.tsv,lecslab/monoling_zg
 Tamazight,zgh,hugging face,55,data/monolingual/zgh/hugging_face.py,Tamazight-NLP/IRCAM-CORPUS
 Chinese,zh,hugging face,958000000,,opencsg/Fineweb-Edu-Chinese-V2.1
 Guarani,grn,https://wortschatz-leipzig.de/en/download/grn#grn_wikipedia_2021,10000,,lecslab/monoling_grn
+English,eng,FineWeb (sample-10BT),,,HuggingFaceFW/fineweb:sample-10BT:train
+German,deu,FineWeb-2,,,HuggingFaceFW/fineweb-2:deu_Latn:train
+Spanish,spa,FineWeb-2,,,HuggingFaceFW/fineweb-2:spa_Latn:train
+Hindi,hin,FineWeb-2,,,HuggingFaceFW/fineweb-2:hin_Deva:train
