@@ -34,6 +34,9 @@ LANGUAGES = [
     "amh", "ber", "chr", "grn", "haw", "ibo", "npi", "oci","que", "yor", "zgh"
 ]
 
+# High/mid-resource comparison languages. English has no bilingual data
+HIGH_RESOURCE_LANGUAGES = ["eng", "deu", "spa", "hin", "zh"]
+
 def get_language_name(lang_code: str) -> str:
     """
     Get full language name from language code using reference_table_bilingual.csv.
@@ -166,7 +169,8 @@ def assemble_dataset(lang_code: str, type: Literal["mono", "bi"], tokenizer, max
             else:
                 raise ValueError(f"No split matching {[split_to_load, 'full', lang_code]} in {repo}")
             if repo == 'Helsinki-NLP/opus-100':
-                ds = ds.map(lambda r: {"English": r['translation']['en'], language: r['translation'][lang_code]})
+                # Pair configs are keyed by 2-letter codes (e.g. 'de', 'hi'), so take whichever side isn't English
+                ds = ds.map(lambda r: {"English": r['translation']['en'], language: next(v for k, v in r['translation'].items() if k != 'en')})
 
         if type == 'mono':
             ds = standardize_columns_mono(ds, language, lang_code, path)
