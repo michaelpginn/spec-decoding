@@ -42,7 +42,7 @@ GAMMAS="2 3 4"
             uv run python run.py "$1" \
                 -o language_code=$lang \
                 gamma=$gamma \
-                wandb_tag=final \
+                wandb_tag=v3 \
 		draft_model="lecslab/$lang-translation-Qwen3.5-9B-Qwen3.5-0.8B"
         done
     done
