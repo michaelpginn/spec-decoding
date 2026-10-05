@@ -27,7 +27,7 @@ import torch
 from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
 
-from src.data.dataset import assemble_dataset, get_language_name, LANGUAGES
+from src.data.dataset import HIGH_RESOURCE_LANGUAGES, LANGUAGES, assemble_dataset, get_language_name
 from src.utils import load_model
 
 logger = getLogger(__name__)
@@ -65,7 +65,7 @@ device = next(p_model.parameters()).device
 
 divergences = []
 
-for language_code in LANGUAGES:
+for language_code in LANGUAGES + HIGH_RESOURCE_LANGUAGES:
     language = get_language_name(language_code)
     logger.info(f"Running on {language}")
     dataset = assemble_dataset(language_code, 'mono', p_tokenizer, MAX_MONO)['test']

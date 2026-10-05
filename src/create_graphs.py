@@ -42,7 +42,7 @@ plt.rcParams.update({
     "axes.axisbelow": True,
 })
 
-langs = ["amh","ber","chr","grn","haw","ibo","npi","oci","que","yor","zgh"]
+langs = ["amh","ber","chr","grn","haw","ibo","npi","oci","que","yor","zgh","zh","deu","spa","hin","eng"]
 
 PALETTE = ['#0072B2', '#D55E00', '#009E73', '#F0E442', '#CC79A7']
 
