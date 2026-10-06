@@ -42,7 +42,7 @@ GAMMAS="2 3 4"
             uv run python run.py "$1" \
                 -o language_code=$lang \
                 gamma=$gamma \
-                wandb_tag=final \
+                wandb_tag=v3 \
                 target_model="meta-llama/Llama-3.2-3B-Instruct" \
                 draft_model="lecslab/$lang-general-Llama-3.2-3B-Instruct-Llama-3.2-1B-Instruct"
         done

@@ -44,7 +44,7 @@ GAMMAS="2 3 4"
             uv run python run.py "$1" \
                 -o language_code=$lang \
                 gamma=$gamma \
-                wandb_tag=final
+                wandb_tag=v3
         done
     done
 # done
