@@ -8,6 +8,10 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 logger = logging.getLogger(__name__)
 
+# Prebuilt FlashAttention-2 from the HF Hub, loaded via the `kernels` package (CUDA only).
+# Pinned to the v1 branch, which has builds for our torch/CUDA version.
+FLASH_ATTN_KERNEL = "kernels-community/flash-attn2@v1"
+
 
 def _resolve_device(device: str) -> torch.device:
     if device == "auto":
@@ -43,6 +47,7 @@ def load_model(model_name: str, device: str = "auto"):
             model_name,
             dtype=torch.bfloat16,
             device_map="auto",
+            attn_implementation=FLASH_ATTN_KERNEL,
             trust_remote_code=True,
         )
     else:

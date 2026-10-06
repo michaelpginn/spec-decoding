@@ -24,6 +24,10 @@ dependencies = [
     "seaborn>=0.13.0",
     # Fast kernels for Qwen3.5 linear-attention layers (GPU cluster only)
     "flash-linear-attention; sys_platform == 'linux'",
+    # Prebuilt FlashAttention-2 kernels from the HF Hub (GPU cluster only). Pinned because
+    # kernels>=0.15 requires a kernel version, which transformers 5.7 doesn't pass.
+    "kernels==0.14.1; sys_platform == 'linux'",
+    "kernels-data==0.14.1; sys_platform == 'linux'",
 ]
 
 [build-system]
