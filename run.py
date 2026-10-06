@@ -70,7 +70,12 @@ def run(config: ExperimentConfig):
             draft_tokenizer = target_tokenizer
     elif config.draft_model_type == "ngram":
         draft_tokenizer = target_tokenizer
-        draft_model = NGramModel(n=config.ngram_n, tokenizer=draft_tokenizer, vocab_size=target_model.config.vocab_size)
+        draft_model = NGramModel(
+            n=config.ngram_n,
+            tokenizer=draft_tokenizer,
+            vocab_size=target_model.config.vocab_size,
+            sparse_drafting=config.ngram_sparse_drafting,
+        )
         draft_model.train(assemble_dataset(config.language_code, 'mono', target_tokenizer, config.max_samples_mono)['train'])
         logger.info(f"N-gram model vocabulary size: {draft_model.vocab_size}")
     else:

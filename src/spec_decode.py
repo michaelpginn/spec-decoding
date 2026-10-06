@@ -210,6 +210,11 @@ def speculative_decode(
     )
     input_ids = input_ids.to(device)
 
+    # N-gram drafters draft on the CPU over their few candidate tokens (NGramModel.draft_round)
+    # instead of running the full-vocab pipeline below; they sample from the same q.
+    sparse_draft = getattr(draft_model, "sparse_drafting", False)
+    stop_token_id_set = set(stop_token_ids.tolist())
+
     # This is okay because if we've gotten this far, we know the actual tokenizers are the same length.
     # Just be aware that logits may have a slightly shorter dimension
     d_vocab = max(draft_model.config.vocab_size, target_model.config.vocab_size)
@@ -247,7 +252,8 @@ def speculative_decode(
         # Preload kv cache for prompts
         target_out = target_model(input_ids, use_cache=True)
         target_kv_cache = target_out.past_key_values
-        draft_kv_cache = draft_model(input_ids, use_cache=True).past_key_values
+        # A sparse drafter reads its context from generated_cpu and keeps no cache
+        draft_kv_cache = None if sparse_draft else draft_model(input_ids, use_cache=True).past_key_values
 
         # Add the first new token.
         # Penalty context: the last W tokens of the prompt (no generated tokens yet).
@@ -257,6 +263,8 @@ def speculative_decode(
         )
         generated_tokens[:, cur_gen_idx] = last_target_token
         cur_gen_idx += 1
+        # CPU copy of generated_tokens[0, :cur_gen_idx] for the sparse drafter
+        generated_cpu: list[int] = generated_tokens[0, :cur_gen_idx].tolist() if sparse_draft else []
 
         # Metrics
         total_draft_tokens = 0
@@ -294,9 +302,27 @@ def speculative_decode(
             else:
                 draft_input_ids = generated_tokens[:, cur_gen_idx - 1 : cur_gen_idx]
 
+            # Drain queued GPU work first, so the draft timer starts when drafting does and
+            # also counts CPU-side drafting (during which the GPU is idle)
+            if draft_start:
+                torch.cuda.synchronize()
             _ = draft_start and draft_start.record()
             draft_snapshot = snapshot_linear_states(draft_kv_cache)
-            for idx in range(new_draft_tokens.size(-1)):
+            if sparse_draft:
+                drafts, draft_rows = draft_model.draft_round(
+                    history=generated_cpu,
+                    max_tokens=max_draft_tokens,
+                    repetition_penalty=repetition_penalty,
+                    repetition_penalty_window=repetition_penalty_window,
+                    top_k=top_k,
+                    top_p=top_p,
+                    mode=mode,
+                    stop_token_ids=stop_token_id_set,
+                )
+                new_draft_tokens = torch.tensor([drafts], device=device, dtype=torch.int64)
+                new_draft_token_logprobs = new_draft_token_logprobs[:, : len(drafts), :]
+                draft_model.fill_dense_rows(new_draft_token_logprobs[0], draft_rows)
+            for idx in range(0 if sparse_draft else new_draft_tokens.size(-1)):
                 draft_out = draft_model(
                     input_ids=draft_input_ids,
                     past_key_values=draft_kv_cache,
@@ -477,6 +503,8 @@ def speculative_decode(
             new_gen_idx = cur_gen_idx + tokens_to_add.size(-1)
             generated_tokens[:, cur_gen_idx:new_gen_idx] = tokens_to_add
             cur_gen_idx = new_gen_idx
+            if sparse_draft:
+                generated_cpu.extend(tokens_to_add[0].tolist())
 
             # Update kv caches
             # Either cache should not include the last generated tok (either correction or bonus token)
@@ -583,7 +611,8 @@ def sample(logprobs: torch.Tensor, mode: Literal["greedy", "sample"]):
     """Sample a token index from (already filtered) log-probs."""
     if mode == "greedy":
         return logprobs.argmax(dim=-1)
-    return torch.distributions.Categorical(logits=logprobs).sample()
+    # validate_args=False skips an argument check that syncs the GPU; sampling is unchanged
+    return torch.distributions.Categorical(logits=logprobs, validate_args=False).sample()
 
 
 def speculative_decode_different_tokenizers():
@@ -618,7 +647,9 @@ def apply_top_p(logits: torch.Tensor, p: float) -> torch.Tensor:
     if p >= 1.0:
         return logits
 
-    sorted_logits, sorted_indices = torch.sort(logits, descending=True, dim=-1)
+    # stable: ties keep ascending token-id order, so the cutoff is deterministic (and matches
+    # NGramModel.sparse_distribution)
+    sorted_logits, sorted_indices = torch.sort(logits, descending=True, dim=-1, stable=True)
     cumulative_probs = torch.cumsum(torch.softmax(sorted_logits, dim=-1), dim=-1)
     sorted_indices_to_remove = cumulative_probs > p
 
@@ -645,17 +676,16 @@ def apply_repetition_penalty(
         return logits
 
     for b in range(logits.size(0)):
-        # window_counts = torch.nn.functional.one_hot(context_ids[b]).sum(dim=-2)
-        max_vocab_index = torch.max(context_ids[b]).item() + 1
-        max_vocab_index = cast(int, max_vocab_index)
-        window_counts = torch.zeros(max_vocab_index, dtype=torch.long, device=context_ids[b].device)
+        # Count over the whole vocab rather than up to max(context_ids), which would need a
+        # GPU->CPU sync (.item()); tokens with count 0 get a penalty of exactly 1.
+        window_counts = torch.zeros(logits.size(-1), dtype=torch.long, device=context_ids[b].device)
         window_counts.scatter_add_(dim=0, index=context_ids[b], src=torch.ones_like(context_ids[b]))
 
         per_token_penalty = penalty ** window_counts
-        logits[b,:max_vocab_index] = torch.where(
-            logits[b,:max_vocab_index] > 0,
-            logits[b,:max_vocab_index] / per_token_penalty,
-            logits[b,:max_vocab_index] * per_token_penalty,
+        logits[b] = torch.where(
+            logits[b] > 0,
+            logits[b] / per_token_penalty,
+            logits[b] * per_token_penalty,
         )
     return logits
 

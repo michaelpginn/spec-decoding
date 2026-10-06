@@ -27,6 +27,7 @@ class ExperimentConfig:
     track_iterations: bool = False # If true, will log per-iteration of SD
 
     ngram_n: int = 2
+    ngram_sparse_drafting: bool = True # False = old dense full-vocab drafting path (for A/B checks)
 
     use_hf_assisted: bool = False
     hf_schedule: Literal["heuristic", "constant"] | None = None
