@@ -138,6 +138,7 @@ def speculative_decode(
     eos_token_id: int | None = None,
     device=None,
     track_iterations: bool = False,
+    linear_cache_rewind: bool = True,
 ):
     """
     Speculative Decoding with KV Caching.
@@ -155,6 +156,8 @@ def speculative_decode(
         top_p: If > 0 and < 1, keep the smallest set of tokens whose cumulative prob >= p
         eos_token_id: End of sequence token ID
         device: Device to run on
+        linear_cache_rewind: Restore linear-attention states on rejection. False reproduces
+            the old crop-only rollback, which leaves them stale (for A/B checks only)
 
     Returns:
         output_ids: Generated token IDs
@@ -307,7 +310,7 @@ def speculative_decode(
             if draft_start:
                 torch.cuda.synchronize()
             _ = draft_start and draft_start.record()
-            draft_snapshot = snapshot_linear_states(draft_kv_cache)
+            draft_snapshot = snapshot_linear_states(draft_kv_cache) if linear_cache_rewind else None
             if sparse_draft:
                 drafts, draft_rows = draft_model.draft_round(
                     history=generated_cpu,
@@ -373,7 +376,7 @@ def speculative_decode(
                 dim=-1,
             )
             _ = verifier_start and verifier_start.record()
-            target_snapshot = snapshot_linear_states(target_kv_cache)
+            target_snapshot = snapshot_linear_states(target_kv_cache) if linear_cache_rewind else None
             target_out = target_model(
                 input_ids=target_input_ids,
                 past_key_values=target_kv_cache,

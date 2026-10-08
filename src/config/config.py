@@ -28,6 +28,8 @@ class ExperimentConfig:
 
     ngram_n: int = 2
     ngram_sparse_drafting: bool = True # False = old dense full-vocab drafting path (for A/B checks)
+    linear_cache_rewind: bool = True # False = old crop-only rollback, which leaves linear-attention states stale (for A/B checks)
+    seed: int | None = None # If set, torch is seeded with seed + sentence index before each sentence
 
     use_hf_assisted: bool = False
     hf_schedule: Literal["heuristic", "constant"] | None = None
@@ -51,6 +53,8 @@ class ExperimentConfig:
 
         if isinstance(self.story_seed, str):
             self.story_seed = None if self.story_seed == "None" else int(self.story_seed)
+        if isinstance(self.seed, str):
+            self.seed = None if self.seed == "None" else int(self.seed)
 
 @dataclass
 class DistillConfig:

@@ -47,6 +47,7 @@ def generate_output(
             repetition_penalty_window=config.repetition_penalty_window,
             device=inputs["input_ids"].device,
             track_iterations=config.track_iterations,
+            linear_cache_rewind=config.linear_cache_rewind,
         )
         decoded = tokenizer.decode(output_ids[0][prompt_len:], skip_special_tokens=True)
         decoded = cast(str, decoded).strip()

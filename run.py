@@ -7,6 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Mapping
 
+import torch
 import wandb
 from tqdm import tqdm
 
@@ -86,6 +87,9 @@ def run(config: ExperimentConfig):
     all_metrics: list[dict] = []
     for row_idx, row in enumerate(tqdm(dataset, desc="Decoding")):
         assert isinstance(row, Mapping)
+        if config.seed is not None:
+            # Per sentence, so runs that differ only in config start each sentence from the same RNG state
+            torch.manual_seed(config.seed + row_idx)
         prompt = create_prompt(config.task, language, row['source'])
         inputs = create_inputs(prompt, target_tokenizer, device)
         predicted, metrics = generate_output(
