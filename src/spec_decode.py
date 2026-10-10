@@ -92,6 +92,13 @@ def snapshot_linear_states(past_key_values):
     return snapshot or None
 
 
+def restore_linear_states(past_key_values, snapshot):
+    """Copy a snapshot from `snapshot_linear_states` back into the cache (in place)."""
+    for idx, (conv_states, recurrent_states) in snapshot.items():
+        past_key_values.layers[idx].conv_states.copy_(conv_states)
+        past_key_values.layers[idx].recurrent_states.copy_(recurrent_states)
+
+
 def rewind_kv_cache(past_key_values, snapshot, snapshot_len: int, keep_len: int):
     """Drop rejected tokens from a cache.
 
@@ -102,9 +109,7 @@ def rewind_kv_cache(past_key_values, snapshot, snapshot_len: int, keep_len: int)
     """
     if snapshot is None:
         return crop_kv_cache(past_key_values, keep_len)
-    for idx, (conv_states, recurrent_states) in snapshot.items():
-        past_key_values.layers[idx].conv_states.copy_(conv_states)
-        past_key_values.layers[idx].recurrent_states.copy_(recurrent_states)
+    restore_linear_states(past_key_values, snapshot)
     return crop_kv_cache(past_key_values, snapshot_len)
 
 
@@ -248,6 +253,7 @@ def speculative_decode(
         target_out = target_model(input_ids, use_cache=True)
         target_kv_cache = target_out.past_key_values
         draft_kv_cache = draft_model(input_ids, use_cache=True).past_key_values
+        draft_is_hybrid = snapshot_linear_states(draft_kv_cache) is not None
 
         # Add the first new token.
         # Penalty context: the last W tokens of the prompt (no generated tokens yet).
@@ -295,8 +301,25 @@ def speculative_decode(
                 draft_input_ids = generated_tokens[:, cur_gen_idx - 1 : cur_gen_idx]
 
             _ = draft_start and draft_start.record()
-            draft_snapshot = snapshot_linear_states(draft_kv_cache)
+            if draft_is_hybrid:
+                # After a fully accepted round the drafter is missing [d_gamma, bonus]. Feed
+                # them one at a time: without fused kernels a multi-token linear-attention
+                # forward takes the chunked path, which costs ~3x a single-token step.
+                for j in range(draft_input_ids.size(-1) - 1):
+                    draft_kv_cache = draft_model(
+                        input_ids=draft_input_ids[:, j : j + 1],
+                        past_key_values=draft_kv_cache,
+                        use_cache=True,
+                    ).past_key_values
+                draft_input_ids = draft_input_ids[:, -1:]
+            # draft_step_snapshots[j] holds the linear-attention states after draft step j,
+            # when the cache ends at d_j (length cur_gen_idx + j). A rejection at position k
+            # restores step k, so the drafter never re-feeds accepted tokens. The state after
+            # the last step is the live cache, so it isn't cloned.
+            draft_step_snapshots = []
             for idx in range(new_draft_tokens.size(-1)):
+                if idx > 0:
+                    draft_step_snapshots.append(snapshot_linear_states(draft_kv_cache))
                 draft_out = draft_model(
                     input_ids=draft_input_ids,
                     past_key_values=draft_kv_cache,
@@ -484,9 +507,11 @@ def speculative_decode(
                 target_kv_cache = rewind_kv_cache(
                     target_kv_cache, target_snapshot, target_cache_len, new_gen_idx - 1
                 )
-                draft_kv_cache = rewind_kv_cache(
-                    draft_kv_cache, draft_snapshot, cache_len, new_gen_idx - 1
-                )
+                if first_collision_idx < len(draft_step_snapshots):
+                    step_snapshot = draft_step_snapshots[first_collision_idx]
+                    if step_snapshot is not None:
+                        restore_linear_states(draft_kv_cache, step_snapshot)
+                draft_kv_cache = crop_kv_cache(draft_kv_cache, new_gen_idx - 1)
             else:
                 target_kv_cache = crop_kv_cache(target_kv_cache, new_gen_idx - 1)
                 draft_kv_cache = crop_kv_cache(draft_kv_cache, new_gen_idx - 1)
