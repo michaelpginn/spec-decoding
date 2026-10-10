@@ -74,6 +74,45 @@ def crop_kv_cache(past_key_values, new_length):
         return tuple(new_past)
 
 
+def snapshot_linear_states(past_key_values):
+    """Copy the conv/recurrent states of every linear-attention layer.
+
+    Linear-attention layers (e.g. Gated DeltaNet in Qwen3.5) keep a fixed-size running
+    state instead of per-token keys/values, so they can't be cropped. Returns None for
+    caches without such layers (pure attention models, the n-gram tuple cache), where
+    cropping is exact and no snapshot is needed.
+    """
+    if not hasattr(past_key_values, "layers"):
+        return None
+    snapshot = {
+        idx: (layer.conv_states.clone(), layer.recurrent_states.clone())
+        for idx, layer in enumerate(past_key_values.layers)
+        if getattr(layer, "recurrent_states", None) is not None
+    }
+    return snapshot or None
+
+
+def restore_linear_states(past_key_values, snapshot):
+    """Copy a snapshot from `snapshot_linear_states` back into the cache (in place)."""
+    for idx, (conv_states, recurrent_states) in snapshot.items():
+        past_key_values.layers[idx].conv_states.copy_(conv_states)
+        past_key_values.layers[idx].recurrent_states.copy_(recurrent_states)
+
+
+def rewind_kv_cache(past_key_values, snapshot, snapshot_len: int, keep_len: int):
+    """Drop rejected tokens from a cache.
+
+    Attention-only caches are cropped to `keep_len`. Caches with linear-attention layers
+    are restored to `snapshot` (taken when the cache held `snapshot_len` tokens) and
+    cropped to `snapshot_len`; the accepted tokens after that are re-fed on the next
+    forward pass.
+    """
+    if snapshot is None:
+        return crop_kv_cache(past_key_values, keep_len)
+    restore_linear_states(past_key_values, snapshot)
+    return crop_kv_cache(past_key_values, snapshot_len)
+
+
 def get_kv_cache_length(past_key_values) -> int:
     """Helper to get the current sequence length of a KV cache."""
     if past_key_values is None:
@@ -214,6 +253,7 @@ def speculative_decode(
         target_out = target_model(input_ids, use_cache=True)
         target_kv_cache = target_out.past_key_values
         draft_kv_cache = draft_model(input_ids, use_cache=True).past_key_values
+        draft_is_hybrid = snapshot_linear_states(draft_kv_cache) is not None
 
         # Add the first new token.
         # Penalty context: the last W tokens of the prompt (no generated tokens yet).
@@ -261,7 +301,25 @@ def speculative_decode(
                 draft_input_ids = generated_tokens[:, cur_gen_idx - 1 : cur_gen_idx]
 
             _ = draft_start and draft_start.record()
+            if draft_is_hybrid:
+                # After a fully accepted round the drafter is missing [d_gamma, bonus]. Feed
+                # them one at a time: without fused kernels a multi-token linear-attention
+                # forward takes the chunked path, which costs ~3x a single-token step.
+                for j in range(draft_input_ids.size(-1) - 1):
+                    draft_kv_cache = draft_model(
+                        input_ids=draft_input_ids[:, j : j + 1],
+                        past_key_values=draft_kv_cache,
+                        use_cache=True,
+                    ).past_key_values
+                draft_input_ids = draft_input_ids[:, -1:]
+            # draft_step_snapshots[j] holds the linear-attention states after draft step j,
+            # when the cache ends at d_j (length cur_gen_idx + j). A rejection at position k
+            # restores step k, so the drafter never re-feeds accepted tokens. The state after
+            # the last step is the live cache, so it isn't cloned.
+            draft_step_snapshots = []
             for idx in range(new_draft_tokens.size(-1)):
+                if idx > 0:
+                    draft_step_snapshots.append(snapshot_linear_states(draft_kv_cache))
                 draft_out = draft_model(
                     input_ids=draft_input_ids,
                     past_key_values=draft_kv_cache,
@@ -304,11 +362,15 @@ def speculative_decode(
 
 
             #  Step 2: Target model verifies
+            # Usually just the last confirmed token, but after a linear-attention rewind
+            # it also includes the tokens accepted in the previous round.
+            target_cache_len = get_kv_cache_length(target_kv_cache)
             target_input_ids = torch.concat(
-                [generated_tokens[:, cur_gen_idx - 1 : cur_gen_idx], new_draft_tokens],
+                [generated_tokens[:, target_cache_len:cur_gen_idx], new_draft_tokens],
                 dim=-1,
             )
             _ = verifier_start and verifier_start.record()
+            target_snapshot = snapshot_linear_states(target_kv_cache)
             target_out = target_model(
                 input_ids=target_input_ids,
                 past_key_values=target_kv_cache,
@@ -345,7 +407,7 @@ def speculative_decode(
             #
             # We must use the raw logits here, not the post-softmax values, because
             # apply_repetition_penalty relies on logit sign to decide divide vs multiply.
-            target_raw_logits = target_out.logits  # (bs, n_draft+1, d_vocab)
+            target_raw_logits = target_out.logits[:, -(new_draft_tokens.size(-1) + 1):, :]  # (bs, n_draft+1, d_vocab)
             penalized_target_logits = apply_repetition_penalty_batched(
                 logits=target_raw_logits,
                 generated_tokens=torch.cat(
@@ -441,8 +503,18 @@ def speculative_decode(
 
             # Update kv caches
             # Either cache should not include the last generated tok (either correction or bonus token)
-            target_kv_cache = crop_kv_cache(target_kv_cache, new_gen_idx - 1)
-            draft_kv_cache = crop_kv_cache(draft_kv_cache, new_gen_idx - 1)
+            if rejected.any():
+                target_kv_cache = rewind_kv_cache(
+                    target_kv_cache, target_snapshot, target_cache_len, new_gen_idx - 1
+                )
+                if first_collision_idx < len(draft_step_snapshots):
+                    step_snapshot = draft_step_snapshots[first_collision_idx]
+                    if step_snapshot is not None:
+                        restore_linear_states(draft_kv_cache, step_snapshot)
+                draft_kv_cache = crop_kv_cache(draft_kv_cache, new_gen_idx - 1)
+            else:
+                target_kv_cache = crop_kv_cache(target_kv_cache, new_gen_idx - 1)
+                draft_kv_cache = crop_kv_cache(draft_kv_cache, new_gen_idx - 1)
 
             if track_iterations:
                 # FIXME: If we ever do batching this is wrong

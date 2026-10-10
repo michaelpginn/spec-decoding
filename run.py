@@ -77,6 +77,21 @@ def run(config: ExperimentConfig):
         raise ValueError()
 
     # 4. Decoding loop
+    # Warm up on the first couple of prompts (outputs discarded) so one-off CUDA
+    # initialisation doesn't inflate the timings of the first logged sentences.
+    if device.type == "cuda":
+        for row in dataset.select(range(min(2, len(dataset)))):
+            assert isinstance(row, Mapping)
+            prompt = create_prompt(config.task, language, row['source'])
+            generate_output(
+                create_inputs(prompt, target_tokenizer, device),
+                target_model,
+                target_tokenizer,
+                draft_model,
+                draft_tokenizer,
+                config,
+            )
+
     predictions = []
     all_metrics: list[dict] = []
     for row_idx, row in enumerate(tqdm(dataset, desc="Decoding")):
