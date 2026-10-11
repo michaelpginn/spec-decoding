@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from scipy import stats
 from matplotlib.ticker import AutoMinorLocator, MaxNLocator
 from matplotlib.transforms import Bbox
 from tqdm import tqdm
@@ -44,9 +45,15 @@ plt.rcParams.update({
     "axes.axisbelow": True,
 })
 
-langs = ["amh","ber","chr","grn","haw","ibo","npi","oci","que","yor","zgh","zh","deu","spa","hin","eng"]
-# Comparison languages: only baseline spec-dec runs, no distillation
-high_resource_langs = ["zh", "deu", "spa", "hin", "eng"]
+langs = ["amh","ber","chr","grn","haw","ibo","npi","oci","que","yor","zgh"]
+
+# Chinese is a high-resource anchor rather than one of the languages under
+# study: it is in the cross-language comparisons (the baseline speed-up bars and
+# the resourcedness / bits-per-char scatters), where the point is how the metric
+# moves across the resourcedness range, but not in the per-language setting
+# comparisons, which are about the low-resource set only.
+HIGH_RESOURCE_LANGS = ["zh", "deu", "spa", "hin", "eng"]
+comparison_langs = langs + HIGH_RESOURCE_LANGS
 
 PALETTE = ['#0072B2', '#D55E00', '#009E73', '#F0E442', '#CC79A7']
 
@@ -93,6 +100,18 @@ SETTING_COLOR = {
     "Distilled (general)": PALETTE[4],
     "N-Gram": "black",
 }
+
+
+def _pearson(x, y) -> tuple[float, float]:
+    """Pearson r and its two-sided p-value (H0: no linear relationship)."""
+    result = stats.pearsonr(np.asarray(x, dtype=float), np.asarray(y, dtype=float))
+    return float(result.statistic), float(result.pvalue)
+
+
+def _fmt_p(p: float) -> str:
+    """p-value for a figure: no leading zero, and a bound rather than a string
+    of zeros once it drops below the precision we report."""
+    return "p < .001" if p < 0.001 else f"p = {f'{p:.3f}'.lstrip('0')}"
 
 
 def _family_color(family: str | None) -> str:
@@ -317,8 +336,11 @@ def _chrf_acceptance_plot(data: pd.DataFrame, family: str | None = None):
     for x in baseline_chrfs['chrf2']:
         ax.axvline(x, linestyle='--', color='#BFBFBF', linewidth=0.6, alpha=0.7, zorder=0)
 
-    r = baseline_chrfs['chrf2'].corr(baseline_chrfs['sentence_avg_acceptance_rate'])
-    logger.info(f"Pearson r (chrF++ vs acceptance rate) for Baseline: r={r:.4f} (n={len(baseline_chrfs)})")
+    r, p = _pearson(baseline_chrfs['chrf2'], baseline_chrfs['sentence_avg_acceptance_rate'])
+    logger.info(
+        f"Pearson r (chrF++ vs acceptance rate) for Baseline: r={r:.4f}, "
+        f"p={p:.4g} (n={len(baseline_chrfs)})"
+    )
 
     ax.scatter(
         baseline_chrfs['chrf2'], baseline_chrfs['sentence_avg_acceptance_rate'],
@@ -332,7 +354,7 @@ def _chrf_acceptance_plot(data: pd.DataFrame, family: str | None = None):
     x_fit = np.array([baseline_chrfs['chrf2'].min(), baseline_chrfs['chrf2'].max()])
     ax.plot(x_fit, slope * x_fit + intercept, color="#8C8C8C", linewidth=1.5, linestyle='--')
     ax.text(
-        0.98, 0.02, f"r = {r:.3f}",
+        0.98, 0.02, f"r = {r:.3f}, {_fmt_p(p)}",
         transform=ax.transAxes,
         ha='right', va='bottom',
         fontsize=10, fontweight='bold',
@@ -626,7 +648,7 @@ def _baseline_speedup_bars(data: pd.DataFrame, counts: pd.DataFrame, task: str, 
     values = d.groupby(["language", "family"])["speedup_factor"].mean()
     stds = d.groupby(["language", "family"])["speedup_factor_std"].mean()
     present = _resourcedness_order(
-        [lang for lang in langs if lang in set(values.index.get_level_values("language"))],
+        [lang for lang in comparison_langs if lang in set(values.index.get_level_values("language"))],
         counts,
     )
     families = [f for f in FAMILY_STYLE if f in set(values.index.get_level_values("family"))]
@@ -702,15 +724,15 @@ def _scatter_with_fits(
         if len(fit_pts) > 2:
             fx = np.array([p[1] for p in fit_pts])
             fy = np.array([p[2] for p in fit_pts])
-            r = np.corrcoef(fx, fy)[0, 1]
+            r, p = _pearson(fx, fy)
             slope, intercept = np.polyfit(fx, fy, 1)
             logger.info(
-                f"{filename}: {relation} ({fam}): r={r:.4f}, "
+                f"{filename}: {relation} ({fam}): r={r:.4f}, p={p:.4g}, "
                 f"slope={slope:.4f}, n={len(fit_pts)}"
             )
             x_fit = np.array([fx.min(), fx.max()])
             ax.plot(x_fit, slope * x_fit + intercept, color=style["color"], linewidth=1.2, zorder=2)
-            fits.append((fam, r, slope, len(fit_pts)))
+            fits.append((fam, r, p, slope, len(fit_pts)))
 
     # Reserve headroom for the language labels the caller stacks above each
     # point, so they stay inside the axes instead of running into the legend.
@@ -726,20 +748,21 @@ def _scatter_with_fits(
 
     # Pearson r, not r^2: several of these relationships are negative and the
     # sign is the point. n is included because these fits are small enough that
-    # a single language can move r substantially.
+    # a single language can move r substantially, which is also why the
+    # two-sided p-value is worth printing next to it.
     r2_texts = [
         ax.text(
-            0, 0, f"{FAMILY_STYLE[fam]['label']} r = {r:.2f} (n={n})",
+            0, 0, f"{FAMILY_STYLE[fam]['label']} r = {r:.2f}, {_fmt_p(p)} (n={n})",
             transform=ax.transAxes, fontsize=8,
             color=FAMILY_STYLE[fam]["color"], zorder=4,
         )
-        for fam, r, _, n in fits
+        for fam, r, p, _, n in fits
     ]
     if r2_texts:
         # A rising trend tends to leave the lower right and upper left empty, and
         # vice versa, but points still land there — so try every corner in that
         # order of preference and take the first that no marker overlaps.
-        falling = np.mean([f[2] for f in fits]) < 0
+        falling = np.mean([f[3] for f in fits]) < 0
         corners = [
             (0.02, "left", "bottom"), (0.98, "right", "top"),
             (0.02, "left", "top"), (0.98, "right", "bottom"),
@@ -845,7 +868,7 @@ def _resourcedness_plot(
         logger.info(f"{filename}: no '{column}' column in the counts file; skipping")
         return
     words = counts.set_index("language_code")[column]
-    present = [lang for lang in langs if lang in set(values.index.get_level_values("language"))]
+    present = [lang for lang in comparison_langs if lang in set(values.index.get_level_values("language"))]
     missing = [lang for lang in present if lang not in words.index]
     if missing:
         logger.warning(f"{filename}: no FineWeb count for {missing}; dropping")
@@ -991,7 +1014,7 @@ def _vs_bpc_plot(
         return
 
     families = [f for f in FAMILY_STYLE if f in set(values.index.get_level_values("family"))]
-    present = [lang for lang in langs if lang in set(values.index.get_level_values("language"))]
+    present = [lang for lang in comparison_langs if lang in set(values.index.get_level_values("language"))]
     points = {
         fam: [
             (lang, float(bpc[(lang, fam)]), float(values[(lang, fam)]))
@@ -1177,9 +1200,7 @@ def _create_family_graphs(data: pd.DataFrame, family: str):
 
     # Task-acceptance scatter needs both translation and story runs.
     if not translation_data.empty and not story_data.empty:
-        scatter_data = data[
-            data['model_size'].isin(comparison_sizes) & ~data['language'].isin(high_resource_langs)
-        ]
+        scatter_data = data[data['model_size'].isin(comparison_sizes)]
         _task_acceptance_scatter(scatter_data, family)
         _task_acceptance_scatter(
             scatter_data,
@@ -1328,12 +1349,15 @@ def _pinsker_plot(kl_df: pd.DataFrame, spec_df: pd.DataFrame, family: str | None
 
 if __name__ == "__main__":
     spec_data = load_real_data()
-    families = sorted(spec_data["family"].unique())
+    # Per-language and per-setting figures cover the low-resource set; the
+    # cross-language figures below also get zh as a high-resource anchor.
+    core_data = spec_data[spec_data["language"].isin(langs)]
+    families = sorted(core_data["family"].unique())
     for family in families:
         kl_data = _load_kl_results(family)
         if kl_data is not None:
-            _pinsker_plot(kl_data, spec_data[spec_data["family"] == family], family)
-    create_graphs(spec_data)
+            _pinsker_plot(kl_data, core_data[core_data["family"] == family], family)
+    create_graphs(core_data)
 
     # Figures relating a per-language measure (y) to a resourcedness measure (x)
     # are named <y>_vs_<x>, with y carrying its normalization, because per-token
@@ -1351,7 +1375,7 @@ if __name__ == "__main__":
         _bpc_acceptance_plot(spec_data, divergence_data, task, f"acceptance_{name}_vs_bpc")
         _baseline_speedup_bars(spec_data, fineweb_counts, task, f"baseline_speedup_{name}")
         for family in families:
-            _ngram_vs_distilled_scatter(spec_data, task, f"ngram_vs_distilled_{name}", family)
+            _ngram_vs_distilled_scatter(core_data, task, f"ngram_vs_distilled_{name}", family)
 
     # Per token: the unit acceptance rate lives in, but diluted by byte-fallback
     # positions, so these track tokenizer script coverage as much as anything.
