@@ -14,6 +14,8 @@ from tqdm import tqdm
 
 import wandb
 
+from src.config.config import WANDB_ENTITY, WANDB_PROJECT
+
 logging.basicConfig(
     level=logging.INFO,
     format="\033[90m%(asctime)s \033[36m[%(levelname)s] \033[1;33m%(module)s\033[0m: %(message)s",
@@ -43,6 +45,8 @@ plt.rcParams.update({
 })
 
 langs = ["amh","ber","chr","grn","haw","ibo","npi","oci","que","yor","zgh","zh","deu","spa","hin","eng"]
+# Comparison languages: only baseline spec-dec runs, no distillation
+high_resource_langs = ["zh", "deu", "spa", "hin", "eng"]
 
 PALETTE = ['#0072B2', '#D55E00', '#009E73', '#F0E442', '#CC79A7']
 
@@ -110,20 +114,10 @@ def _detect_family(target_model: str) -> str:
     return "qwen"
 
 
-def load_real_data(tags: tuple[str, ...] = ("final", "v3")) -> pd.DataFrame:
-    """Load finished runs carrying any of `tags`.
-
-    Where several runs share a cell (family, language, draft model, task, gamma), e.g. a
-    resubmitted job or a v3 rerun of a `final` run, only the most recent one is kept.
-    """
+def load_real_data() -> pd.DataFrame:
     records = []
-    logger.info(f"Loading runs tagged {tags}")
-    runs = wandb.Api().runs(
-        path="lecs-general/speculative decoding v2",
-        lazy=False,
-        filters={"state": "finished", "tags": {"$in": list(tags)}},
-    )
-    for run in tqdm(runs):
+    logger.info("Loading runs")
+    for run in tqdm(wandb.Api().runs(path=f"{WANDB_ENTITY}/{WANDB_PROJECT}", lazy=False, filters={"state": "finished", "tags": {"$in": ["final"]}})):
         family = _detect_family(run.config["target_model"])
         draft_model = run.config["draft_model"]
         # N-Gram runs are flagged by draft_model_type. Qwen leaves draft_model
@@ -152,20 +146,13 @@ def load_real_data(tags: tuple[str, ...] = ("final", "v3")) -> pd.DataFrame:
             "task": run.config["task"],
             **run.summary,
             "created_at": run.created_at,
-            "tag": next(t for t in run.tags if t in tags),
         })
     df = pd.DataFrame.from_records(records)
     del records
     df = df[df["sentence_avg_acceptance_rate"].notna()]
-    df = (
-        df.sort_values("created_at")
-        .drop_duplicates(["family", "language", "draft_model", "task", "gamma"], keep="last")
-    )
-    # Qwen runs from before the linear-attention cache fix (tag `final`) are biased
-    stale = df[(df["family"] == "qwen") & (df["tag"] == "final")]
-    if len(stale):
-        cells = sorted(set(zip(stale["language"], stale["task"], stale["setting"])))
-        logger.warning(f"{len(cells)} Qwen cells still come from pre-fix `final` runs: {cells}")
+    # A preempted job restarts from its first gamma, so a cell can have several
+    # finished runs; keep the most recent
+    df = df.sort_values("created_at").drop_duplicates(["family", "language", "draft_model", "task", "gamma"], keep="last")
     # Include family because the "ngram" draft label is shared across families
     # and would otherwise collide.
     best_gamma = df.groupby(["family", "language", "draft_model", "task"])["sentence_avg_acceptance_rate"].idxmax()
@@ -1190,7 +1177,9 @@ def _create_family_graphs(data: pd.DataFrame, family: str):
 
     # Task-acceptance scatter needs both translation and story runs.
     if not translation_data.empty and not story_data.empty:
-        scatter_data = data[data['model_size'].isin(comparison_sizes)]
+        scatter_data = data[
+            data['model_size'].isin(comparison_sizes) & ~data['language'].isin(high_resource_langs)
+        ]
         _task_acceptance_scatter(scatter_data, family)
         _task_acceptance_scatter(
             scatter_data,

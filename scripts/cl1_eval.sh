@@ -31,12 +31,10 @@ if torch.cuda.is_available():
     print("GPU 0:", torch.cuda.get_device_name(0))
 PY
 
-# High-resource languages by default; for the low-resource ones pass e.g.
-#   sbatch --export=ALL,LANGS="amh ber chr grn haw ibo npi oci que yor zgh" scripts/<this>.sh <cfg>
-LANGS="${LANGS:-zh deu spa hin eng}"
+LANGS="${LANGS:-amh ber chr grn haw ibo npi oci que yor zgh zh deu spa hin eng}"
 # English has no parallel data, so it only runs for story generation
 if grep -Eq "^task *= *translation" "$1"; then
-    LANGS="${LANGS/ eng/}"
+    LANGS=$(echo " $LANGS " | sed 's/ eng / /g')
 fi
 GAMMAS="2 3 4"
 # DRAFT="Qwen/Qwen3.5-0.8B Qwen/Qwen3.5-2B Qwen/Qwen3.5-4B"
@@ -50,7 +48,7 @@ GAMMAS="2 3 4"
             uv run python run.py "$1" \
                 -o language_code=$lang \
                 gamma=$gamma \
-                wandb_tag=v3
+                wandb_tag=final
         done
     done
 # done

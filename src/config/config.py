@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Literal
 
-WANDB_PROJECT = "speculative decoding v2"
+WANDB_PROJECT = "speculative decoding v3"
 WANDB_ENTITY = "lecs-general"
 
 # Default dataset caps used in our experiments
