@@ -31,12 +31,16 @@ if torch.cuda.is_available():
     print("GPU 0:", torch.cuda.get_device_name(0))
 PY
 
-LANGS="amh ber chr grn haw ibo npi oci que yor zgh zh"
+LANGS="${LANGS:-amh chr grn haw ibo npi oci que yor zgh zh deu spa hin eng}"
+# English has no parallel data, so it only runs for story generation
+if grep -Eq "^task *= *translation" "$1"; then
+    LANGS=$(echo " $LANGS " | sed 's/ eng / /g')
+fi
 GAMMAS="2 3 4"
-# DRAFT="Qwen/Qwen3.5-0.8B Qwen/Qwen3.5-2B Qwen/Qwen3.5-4B"
+DRAFT="Qwen/Qwen3.5-0.8B Qwen/Qwen3.5-2B Qwen/Qwen3.5-4B"
 
-# for draft in $DRAFT
-# do
+for draft in $DRAFT
+do
     for lang in $LANGS
     do
         for gamma in $GAMMAS
@@ -47,4 +51,4 @@ GAMMAS="2 3 4"
                 wandb_tag=final
         done
     done
-# done
+done
