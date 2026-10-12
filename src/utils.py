@@ -44,7 +44,6 @@ def load_model(model_name: str, device: str = "auto"):
             dtype=torch.bfloat16,
             device_map="auto",
             trust_remote_code=True,
-            attn_implementation="kernels-community/flash-attn"
         )
     else:
         model = AutoModelForCausalLM.from_pretrained(
