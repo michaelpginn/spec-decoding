@@ -234,10 +234,10 @@ def speculative_decode(
 
     # Track average time for draft and verifier forward pass for speedup factor
     # Each accumulator: (sum_of_times, sum_of_squared_times, count)
-    draft_start, draft_end, verifier_start, verifier_end = None, None, None, None
-    draft_times_acc = (0.0, 0.0, 0)
-    verifier_times_acc = (0.0, 0.0, 0)
-    if device.type == "cuda":
+    draft_start,draft_end,verifier_start, verifier_end   = None, None, None, None
+    draft_times_acc = (0., 0., 0)
+    verifier_times_acc = (0., 0., 0)
+    if device.type == 'cuda':
         draft_start = torch.cuda.Event(enable_timing=True)
         draft_end = torch.cuda.Event(enable_timing=True)
         verifier_start = torch.cuda.Event(enable_timing=True)
@@ -257,9 +257,7 @@ def speculative_decode(
 
         # Add the first new token.
         # Penalty context: the last W tokens of the prompt (no generated tokens yet).
-        first_logits = penalize_logits(
-            target_out.logits[:, -1, :], confirmed_len=cur_gen_idx
-        )
+        first_logits = penalize_logits(target_out.logits[:, -1, :], confirmed_len=cur_gen_idx)
         last_target_token = select_index(
             apply_filters(torch.log_softmax(first_logits, dim=-1))
         )
@@ -364,6 +362,7 @@ def speculative_decode(
                 < cur_gen_idx + new_draft_tokens.size(-1) - prompt_len
             ]
 
+
             #  Step 2: Target model verifies
             # Usually just the last confirmed token, but after a linear-attention rewind
             # it also includes the tokens accepted in the previous round.
@@ -391,8 +390,7 @@ def speculative_decode(
                 n_drafted = new_draft_tokens.size(-1)
                 draft_times_acc = (
                     draft_times_acc[0] + draft_elapsed,
-                    draft_times_acc[1]
-                    + (draft_elapsed**2 / n_drafted if n_drafted > 0 else 0),
+                    draft_times_acc[1] + (draft_elapsed**2 / n_drafted if n_drafted > 0 else 0),
                     draft_times_acc[2] + n_drafted,
                 )
                 verifier_elapsed = verifier_start.elapsed_time(verifier_end)  # ms
@@ -411,9 +409,7 @@ def speculative_decode(
             #
             # We must use the raw logits here, not the post-softmax values, because
             # apply_repetition_penalty relies on logit sign to decide divide vs multiply.
-            target_raw_logits = target_out.logits[
-                :, -(new_draft_tokens.size(-1) + 1) :, :
-            ]  # (bs, n_draft+1, d_vocab)
+            target_raw_logits = target_out.logits[:, -(new_draft_tokens.size(-1) + 1):, :]  # (bs, n_draft+1, d_vocab)
             penalized_target_logits = apply_repetition_penalty_batched(
                 logits=target_raw_logits,
                 generated_tokens=torch.cat(
@@ -453,15 +449,9 @@ def speculative_decode(
                 total_matched_tokens += first_collision_idx
                 total_draft_tokens += first_collision_idx + 1
                 for idx in octile_idxs_to_log:
-                    if (
-                        octile_offsets[idx]
-                        < cur_gen_idx + first_collision_idx - prompt_len
-                    ):
+                    if octile_offsets[idx] < cur_gen_idx + first_collision_idx - prompt_len:
                         per_position_accept_count[idx] += 1
-                    if (
-                        octile_offsets[idx]
-                        <= cur_gen_idx + first_collision_idx - prompt_len
-                    ):
+                    if octile_offsets[idx] <= cur_gen_idx + first_collision_idx - prompt_len:
                         per_position_draft_count[idx] += 1
 
                 # Resample token from p_target(x) - p_draft(x)
@@ -487,10 +477,7 @@ def speculative_decode(
                     per_position_accept_count[idx] += 1
                     per_position_draft_count[idx] += 1
 
-                if (
-                    new_draft_tokens.size(-1) > 0
-                    and torch.isin(new_draft_tokens[:, -1], stop_token_ids).any()
-                ):
+                if new_draft_tokens.size(-1) > 0 and torch.isin(new_draft_tokens[:, -1], stop_token_ids).any():
                     # If we've reached <eos>, don't add bonus token
                     tokens_to_add = new_draft_tokens
                 else:
@@ -508,6 +495,8 @@ def speculative_decode(
                         )
                     else:
                         tokens_to_add = new_draft_tokens
+
+
 
             # Actually add the new tokens and update idxs
             new_gen_idx = cur_gen_idx + tokens_to_add.size(-1)
@@ -566,8 +555,7 @@ def speculative_decode(
     )
     total_generated_tokens = cur_gen_idx - input_ids.size(1)
     octile_position_acceptance = [
-        acc / draf if draf > 0 else None
-        for acc, draf in zip(per_position_accept_count, per_position_draft_count)
+        acc / draf if draf > 0 else None for acc, draf in zip(per_position_accept_count, per_position_draft_count)
     ]
 
     metrics = {
@@ -586,8 +574,8 @@ def speculative_decode(
     if draft_times_acc[2] > 0 and verifier_times_acc[2] > 0:
         d_sum, d_sum_sq, d_n = draft_times_acc
         v_sum, v_sum_sq, v_n = verifier_times_acc
-        average_draft_time = d_sum / d_n  # ms
-        average_verifier_time = v_sum / v_n  # ms
+        average_draft_time = d_sum / d_n          # ms
+        average_verifier_time = v_sum / v_n        # ms
         metrics["average_draft_time"] = average_draft_time / 1000  # seconds
         metrics["average_verifier_time"] = average_verifier_time / 1000
         # Variance of individual forward pass times (population variance, in ms^2)
@@ -622,9 +610,7 @@ def sample(logprobs: torch.Tensor, mode: Literal["greedy", "sample"]):
     """Sample a token index from (already filtered) log-probs."""
     if mode == "greedy":
         return logprobs.argmax(dim=-1)
-    return torch.distributions.Categorical(
-        logits=logprobs, validate_args=False
-    ).sample()
+    return torch.distributions.Categorical(logits=logprobs, validate_args=False).sample()
 
 
 def speculative_decode_different_tokenizers():
@@ -659,9 +645,7 @@ def apply_top_p(logits: torch.Tensor, p: float) -> torch.Tensor:
     if p >= 1.0:
         return logits
 
-    sorted_logits, sorted_indices = torch.sort(
-        logits, descending=True, dim=-1, stable=True
-    )
+    sorted_logits, sorted_indices = torch.sort(logits, descending=True, dim=-1, stable=True)
     cumulative_probs = torch.cumsum(torch.softmax(sorted_logits, dim=-1), dim=-1)
     sorted_indices_to_remove = cumulative_probs > p
 
@@ -689,14 +673,10 @@ def apply_repetition_penalty(
 
     for b in range(logits.size(0)):
         # window_counts = torch.nn.functional.one_hot(context_ids[b]).sum(dim=-2)
-        window_counts = torch.zeros(
-            logits.size(-1), dtype=torch.long, device=context_ids[b].device
-        )
-        window_counts.scatter_add_(
-            dim=0, index=context_ids[b], src=torch.ones_like(context_ids[b])
-        )
+        window_counts = torch.zeros(logits.size(-1), dtype=torch.long, device=context_ids[b].device)
+        window_counts.scatter_add_(dim=0, index=context_ids[b], src=torch.ones_like(context_ids[b]))
 
-        per_token_penalty = penalty**window_counts
+        per_token_penalty = penalty ** window_counts
         logits[b] = torch.where(
             logits[b] > 0,
             logits[b] / per_token_penalty,
@@ -724,47 +704,32 @@ def apply_repetition_penalty_batched(
 
     for b in range(bs):
         # Only positions before the current pos
-        mask = ~torch.triu(
-            torch.ones(seq_len + 1, seq_len, dtype=torch.bool, device=device)
-        )
+        mask = ~torch.triu(torch.ones(seq_len + 1, seq_len, dtype=torch.bool, device=device))
 
         # Only positions after the start of the window
-        window_start = torch.clamp(
-            torch.arange(seq_len + 1, device=device) - window, 0
-        ).unsqueeze(-1)
+        window_start = torch.clamp(torch.arange(seq_len + 1, device=device) - window, 0).unsqueeze(-1)
         start_mask = torch.arange(seq_len, device=device) >= window_start
         mask *= start_mask
 
         # Replace masked positions with an unused index (hack to avoid using 0)
         unused_idx = torch.max(generated_tokens).item() + 1
         unused_idx = cast(int, unused_idx)
-        window_tokens = (
-            generated_tokens[b]
-            .expand(seq_len + 1, seq_len)
-            .masked_fill(~mask, unused_idx)
-        )
+        window_tokens = generated_tokens[b].expand(seq_len + 1, seq_len).masked_fill(~mask, unused_idx)
 
         # Old way, OOM:
         # window_counts = torch.nn.functional.one_hot(window_tokens).sum(dim=1)[...,:-1] # cut off the unused one
 
-        window_counts = torch.zeros(
-            window_tokens.size(0),
-            unused_idx + 1,
-            dtype=torch.long,
-            device=window_tokens.device,
-        )
-        window_counts.scatter_add_(
-            dim=1, index=window_tokens, src=torch.ones_like(window_tokens)
-        )
-        window_counts = window_counts[..., :-1]  # cut off the unused vocab item
+        window_counts = torch.zeros(window_tokens.size(0), unused_idx + 1, dtype=torch.long, device=window_tokens.device)
+        window_counts.scatter_add_(dim=1, index=window_tokens, src=torch.ones_like(window_tokens))
+        window_counts  = window_counts[...,:-1] # cut off the unused vocab item
 
-        per_token_penalty = penalty**window_counts
+        per_token_penalty = penalty ** window_counts
         per_token_penalty = per_token_penalty[confirmed_len:]
 
-        logits[b, :, :unused_idx] = torch.where(
-            logits[b, :, :unused_idx] > 0,
-            logits[b, :, :unused_idx] / per_token_penalty,
-            logits[b, :, :unused_idx] * per_token_penalty,
+        logits[b,:,:unused_idx] = torch.where(
+            logits[b,:,:unused_idx] > 0,
+            logits[b,:,:unused_idx] / per_token_penalty,
+            logits[b,:,:unused_idx] * per_token_penalty,
         )
 
     return logits

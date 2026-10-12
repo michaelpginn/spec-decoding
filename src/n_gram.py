@@ -41,9 +41,7 @@ class NGramModel:
             return
         self._device = device
         self._logprob_buf = torch.full((self.vocab_size,), float("-inf"), device=device)
-        self._full_buf = torch.full(
-            (self.vocab_size,), 1 / len(self.tokenizer), device=device
-        )
+        self._full_buf = torch.full((self.vocab_size,), 1 / len(self.tokenizer), device=device)
         self._last_modified = None
 
     def train(self, train: Dataset):
@@ -64,10 +62,8 @@ class NGramModel:
             }
         # Precompute context cache for fast forward
         self._context_cache = {
-            ctx: (
-                torch.tensor(list(d.keys()), dtype=torch.long),
-                torch.tensor(list(d.values()), dtype=torch.float32),
-            )
+            ctx: (torch.tensor(list(d.keys()), dtype=torch.long),
+                torch.tensor(list(d.values()), dtype=torch.float32))
             for ctx, d in self.conditional_logprobs.items()
         }
         logger.info(
@@ -122,6 +118,6 @@ class NGramModel:
         else:
             full_seq = input_ids
         self._ensure_device(input_ids.device)
-        logits = self.predict(full_seq[0, -(self.n - 1) :].tolist())
+        logits = self.predict(full_seq[0, -(self.n - 1):].tolist())
         logits = logits.unsqueeze(0).unsqueeze(0)
         return CausalLMOutputWithPast(logits=logits, past_key_values=(full_seq,))  # type:ignore
