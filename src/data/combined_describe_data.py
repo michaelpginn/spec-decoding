@@ -22,7 +22,6 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 languages = [
     "amh",
-    "ber",
     "chr",
     "grn",
     "haw",

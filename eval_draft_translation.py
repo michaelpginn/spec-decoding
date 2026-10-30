@@ -6,15 +6,15 @@ from tqdm import tqdm
 
 from src.config.config import ExperimentConfig
 from src.data.create_inputs import create_inputs, create_prompt
+from src.data.dataset import HIGH_RESOURCE_LANGUAGES, LANGUAGES
 from src.tasks.translation import compute_eval_metrics, load_data
 from src.utils import load_model
-langs = ["amh","ber","chr","grn","haw","ibo","npi","oci","que","yor","zgh"]
 
 base_verifier_model, tokenizer = load_model("meta-llama/Llama-3.2-3B-Instruct")
 base_draft_model, _ = load_model("meta-llama/Llama-3.2-1B-Instruct")
 device = next(base_draft_model.parameters()).device
 metrics = dict()
-for lang in langs:
+for lang in LANGUAGES + HIGH_RESOURCE_LANGUAGES:
     distilled_model, _ = load_model(f"lecslab/{lang}-translation-Llama-3.2-3B-Instruct-Llama-3.2-1B-Instruct")
     config = ExperimentConfig(
         task="translation",
