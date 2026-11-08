@@ -31,7 +31,7 @@ def get_raw_url(url: str) -> str:
     return url
 
 LANGUAGES = [
-    "amh", "ber", "chr", "grn", "haw", "ibo", "npi", "oci","que", "yor", "zgh"
+    "amh", "chr", "grn", "haw", "ibo", "npi", "oci","que", "yor", "zgh"
 ]
 
 # High/mid-resource comparison languages. English has no bilingual data

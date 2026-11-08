@@ -18,7 +18,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
 # ── Configuration ─────────────────────────────────────────────
-LANGS="ber chr haw ibo lkt mus npi oci oji que yua zgh"
+LANGS="chr haw ibo lkt mus npi oci oji que yua zgh"
 BASELINE_CFG="experiments/baseline.cfg"
 SPEC_CFG="experiments/spec_greedy.cfg"
 MAX_SAMPLES=100
@@ -40,7 +40,7 @@ run_one() {
 # ───────────────────────────────────────────────────────────────
 
 echo "###  Quick test — Qwen 0.5B + 0.5B, gamma=5, zgh/chr/npi  ###"
-for lang in ber chr npi; do
+for lang in chr npi; do
     run_one python run.py $SPEC_CFG \
         -o language_code=$lang \
            target_model=Qwen/Qwen3.5-0.8B \

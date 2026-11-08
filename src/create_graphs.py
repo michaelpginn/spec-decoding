@@ -45,7 +45,7 @@ plt.rcParams.update({
     "axes.axisbelow": True,
 })
 
-langs = ["amh","ber","chr","grn","haw","ibo","npi","oci","que","yor","zgh"]
+langs = ["amh","chr","grn","haw","ibo","npi","oci","que","yor","zgh"]
 
 # Chinese is a high-resource anchor rather than one of the languages under
 # study: it is in the cross-language comparisons (the baseline speed-up bars and
@@ -1129,14 +1129,14 @@ def load_divergences() -> pd.DataFrame:
 
 def _size_scaling_plot(data: pd.DataFrame, y: str, filename: str, family: str | None = None):
     size_order = ["0.8B", "2B", "4B"]
-    lang_order = ["amh", "ber", "oci"]
+    lang_order = ["amh", "oci", "zgh"]
     sub = data[
         (data["task"] == "translation")
         & (data["setting"] == "Baseline")
         & (data["language"].isin(lang_order))
         & (data["model_size"].isin(size_order))
     ]
-    pivot = sub.pivot_table(index="model_size", columns="language", values=y).reindex(size_order)
+    pivot = sub.pivot_table(index="model_size", columns="language", values=y).reindex(index=size_order, columns=lang_order)
 
     fig, ax = plt.subplots(figsize=(4, 1.5))
     colors = _shades(_family_color(family), len(lang_order))

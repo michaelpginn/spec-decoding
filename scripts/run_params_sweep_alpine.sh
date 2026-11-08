@@ -20,7 +20,7 @@
 #          scripts/run_params_sweep_alpine.sh
 #
 # ── Multiple languages (each language = its own array batch) ───
-#   for lang in ber npi haw smo; do
+#   for lang in npi haw smo; do
 #     sbatch --array=0-323 --export=LANG_CODE=$lang,MODE=general \
 #            --job-name=distill-${lang} scripts/run_params_sweep_alpine.sh
 #   done

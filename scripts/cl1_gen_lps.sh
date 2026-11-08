@@ -19,7 +19,7 @@ mkdir -p $WANDB_DIR
 module load uv
 uv sync
 
-for lang in amh ber chr grn haw ibo npi oci que yor zgh
+for lang in amh chr grn haw ibo npi oci que yor zgh
 do
     uv run scripts/generate_teacher_logprobs.py "$1" \
         -o language_code=$lang

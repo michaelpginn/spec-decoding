@@ -1,5 +1,4 @@
 Language,Code,source,# of units,path,hugging face
-Berber,ber,tatoeba,353517,data/bilingual/ber/tatoeba.tsv,lecslab/biling_ber
 Cherokee,chr,tatoeba,28,data/bilingual/chr/tatoeba.tsv,lecslab/biling_chr
 Cherokee,chr,cherokeedictionary.net/,11395,data/bilingual/chr/dictionary.csv,
 Cherokee,chr,hugging face,45,data/bilingual/chr/hugging_face.py,wang4067/cherokee-english-45

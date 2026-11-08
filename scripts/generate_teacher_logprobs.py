@@ -9,7 +9,7 @@ Outputs are saved as a parquet file, where each row contains the following:
 
 Usage:
     python scripts/generate_teacher_logprobs.py experiments/distillation/logprobs_translation.cfg
-    python scripts/generate_teacher_logprobs.py experiments/logprobs_translation.cfg -o language_code=ber max_samples=5000
+    python scripts/generate_teacher_logprobs.py experiments/logprobs_translation.cfg -o language_code=amh max_samples=5000
 """
 
 import argparse

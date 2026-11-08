@@ -8,7 +8,7 @@ from src.config.config import ExperimentConfig
 from src.data.create_inputs import create_inputs, create_prompt
 from src.tasks.translation import compute_eval_metrics, load_data
 from src.utils import load_model
-langs = ["amh","ber","chr","grn","haw","ibo","npi","oci","que","yor","zgh"]
+langs = ["amh","chr","grn","haw","ibo","npi","oci","que","yor","zgh"]
 
 base_verifier_model, tokenizer = load_model("meta-llama/Llama-3.2-3B-Instruct")
 base_draft_model, _ = load_model("meta-llama/Llama-3.2-1B-Instruct")

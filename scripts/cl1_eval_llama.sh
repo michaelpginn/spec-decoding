@@ -31,7 +31,7 @@ if torch.cuda.is_available():
     print("GPU 0:", torch.cuda.get_device_name(0))
 PY
 
-LANGS="${LANGS:-amh ber chr grn haw ibo npi oci que yor zgh zh deu spa hin eng}"
+LANGS="${LANGS:-amh chr grn haw ibo npi oci que yor zgh zh deu spa hin eng}"
 # English has no parallel data, so it only runs for story generation
 if grep -Eq "^task *= *translation" "$1"; then
     LANGS=$(echo " $LANGS " | sed 's/ eng / /g')
