@@ -10,3 +10,4 @@ logprobs
 **/*.log
 *.pdf
 *.docx
+viz/dataset_stats.txt

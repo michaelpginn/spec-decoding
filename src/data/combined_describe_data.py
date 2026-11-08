@@ -31,6 +31,11 @@ languages = [
     "que",
     "yor",
     "zgh",
+    # High-resource comparison languages
+    "deu",
+    "spa",
+    "hin",
+    "zh",
 ]
 
 # Cut: lkt,mus,oji
