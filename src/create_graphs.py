@@ -45,7 +45,7 @@ plt.rcParams.update({
     "axes.axisbelow": True,
 })
 
-langs = ["amh","ber","chr","grn","haw","ibo","npi","oci","que","yor","zgh"]
+langs = ["amh","chr","grn","haw","ibo","npi","oci","que","yor","zgh"]
 
 # Chinese is a high-resource anchor rather than one of the languages under
 # study: it is in the cross-language comparisons (the baseline speed-up bars and
