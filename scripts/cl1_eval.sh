@@ -48,7 +48,8 @@ do
             uv run python run.py "$1" \
                 -o language_code=$lang \
                 gamma=$gamma \
-                wandb_tag=final
+                wandb_tag=final \
+                draft=${draft}
         done
     done
 done
