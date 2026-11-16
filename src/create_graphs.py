@@ -45,7 +45,10 @@ plt.rcParams.update({
     "axes.axisbelow": True,
 })
 
-langs = ["amh","chr","grn","haw","ibo","npi","oci","que","yor","zgh"]
+# Cherokee (chr) is excluded: the 9B target cannot translate into it (chrF ~2.6)
+# and falls into repetition loops, so its acceptance rate reflects agreement on
+# degenerate text rather than drafting quality.
+langs = ["amh","grn","haw","ibo","npi","oci","que","yor","zgh"]
 
 # Chinese is a high-resource anchor rather than one of the languages under
 # study: it is in the cross-language comparisons (the baseline speed-up bars and
@@ -1128,39 +1131,56 @@ def load_divergences() -> pd.DataFrame:
 
 
 def _size_scaling_plot(data: pd.DataFrame, y: str, filename: str, family: str | None = None):
+    """Baseline translation metric vs. draft size for every language with all sizes.
+
+    Too many languages to label individually, so each is a thin line shaded by
+    group (low- vs. high-resource) and each group's mean is drawn bold and labelled.
+    """
     size_order = ["0.8B", "2B", "4B"]
-    lang_order = ["amh", "ber", "oci"]
     sub = data[
         (data["task"] == "translation")
         & (data["setting"] == "Baseline")
-        & (data["language"].isin(lang_order))
+        & (data["language"].isin(comparison_langs))
         & (data["model_size"].isin(size_order))
     ]
-    pivot = sub.pivot_table(index="model_size", columns="language", values=y).reindex(size_order)
+    # Only languages run at every size, so the group means compare like with like.
+    pivot = sub.pivot_table(index="model_size", columns="language", values=y).reindex(size_order).dropna(axis=1)
+    missing = sorted(set(sub["language"]) - set(pivot.columns))
+    if missing:
+        logger.warning(f"[{filename}] dropping languages without all draft sizes: {missing}")
 
-    fig, ax = plt.subplots(figsize=(4, 1.5))
-    colors = _shades(_family_color(family), len(lang_order))
+    fig, ax = plt.subplots(figsize=(4, 1.8))
+    light, dark = _shades(_family_color(family), 2, light=0.65, dark=0.3)
     xs = np.arange(len(size_order))
-    for lang, color in zip(lang_order, colors):
-        ys = pivot[lang].to_numpy()
-        ax.plot(xs, ys, color=color, linewidth=1.5, marker="o", markersize=4, markeredgecolor="black", markeredgewidth=0.4)
-        last = np.where(~np.isnan(ys))[0]
-        if len(last):
-            i = last[-1]
-            ax.annotate(
-                lang,
-                (xs[i], ys[i]),
-                xytext=(5, 0),
-                textcoords="offset points",
-                fontsize=10,
-                fontweight="bold",
-                color=color,
-                va="center",
-            )
+    groups = [
+        ("Low-resource", [lang for lang in langs if lang in pivot.columns], light),
+        ("High-resource", [lang for lang in HIGH_RESOURCE_LANGS if lang in pivot.columns], dark),
+    ]
+    for _, group_langs, color in groups:
+        for lang in group_langs:
+            ax.plot(xs, pivot[lang].to_numpy(), color=color, linewidth=0.7, alpha=0.6, zorder=2)
+    for label, group_langs, color in groups:
+        if not group_langs:
+            continue
+        mean = pivot[group_langs].mean(axis=1).to_numpy()
+        ax.plot(
+            xs, mean, color=color, linewidth=2.2, marker="o", markersize=4.5,
+            markeredgecolor="black", markeredgewidth=0.4, zorder=3,
+        )
+        ax.annotate(
+            f"{label}\n(n={len(group_langs)})",
+            (xs[-1], mean[-1]),
+            xytext=(6, 0),
+            textcoords="offset points",
+            fontsize=8,
+            fontweight="bold",
+            color=color,
+            va="center",
+        )
 
     ax.set_xticks(xs)
     ax.set_xticklabels(size_order)
-    ax.set_xlim(-0.2, len(size_order) - 1 + 0.5)
+    ax.set_xlim(-0.2, len(size_order) - 1 + 0.9)
     ax.set_xlabel("Draft Model Size")
     ax.set_ylabel(KEY_TO_TITLE[y])
     _style_spines(ax)
@@ -1237,13 +1257,8 @@ def _create_family_graphs(data: pd.DataFrame, family: str):
         family,
     )
 
-    # Size scaling only applies where multiple baseline draft sizes were run.
-    n_baseline_sizes = data[(data["task"] == "translation") & (data["setting"] == "Baseline")]["model_size"].nunique()
-    if n_baseline_sizes > 1:
-        _size_scaling_plot(data, "sentence_avg_acceptance_rate", "size_scaling_acceptance", family)
-        _size_scaling_plot(data, "speedup_factor", "size_scaling_speedup", family)
-    else:
-        logger.info(f"[{family}] only one baseline draft size; skipping size-scaling plots")
+    # Size scaling is drawn from __main__, since it covers the high-resource
+    # languages too and `data` here is the low-resource set only.
 
 
 # eval_kl.py writes one teacher||student KL file per distillation setup, and the
@@ -1358,6 +1373,17 @@ if __name__ == "__main__":
         if kl_data is not None:
             _pinsker_plot(kl_data, core_data[core_data["family"] == family], family)
     create_graphs(core_data)
+
+    # Size scaling covers every language (low- and high-resource), and only
+    # applies where multiple baseline draft sizes were run.
+    for family in families:
+        fam_data = spec_data[spec_data["family"] == family]
+        n_baseline_sizes = fam_data[(fam_data["task"] == "translation") & (fam_data["setting"] == "Baseline")]["model_size"].nunique()
+        if n_baseline_sizes > 1:
+            _size_scaling_plot(fam_data, "sentence_avg_acceptance_rate", "size_scaling_acceptance", family)
+            _size_scaling_plot(fam_data, "speedup_factor", "size_scaling_speedup", family)
+        else:
+            logger.info(f"[{family}] only one baseline draft size; skipping size-scaling plots")
 
     # Figures relating a per-language measure (y) to a resourcedness measure (x)
     # are named <y>_vs_<x>, with y carrying its normalization, because per-token
