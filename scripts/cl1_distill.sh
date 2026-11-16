@@ -48,23 +48,13 @@ PY
 
 LANGS="spa"
 NEEDS_SMALLER_BS=(amh que yor hin zh deu)
-NEEDS_SMALLEST_BS=(spa)
 # DRAFT="Qwen/Qwen3.5-0.8B Qwen/Qwen3.5-2B Qwen/Qwen3.5-4B"
 
 # for draft in $DRAFT
 # do
     for lang in $LANGS
     do
-	if [[ " ${NEEDS_SMALLEST_BS[*]} " == *" $lang "* ]]; then
-	    uv run scripts/distill.py "$1" \
-                -o language_code=$lang \
-                output_dir="/scratch/alpine/$USER/spec-dec/" \
-                dataset_path="logprobs/logprobs-Qwen3.5-9B-$lang-$2.parquet" \
-                task=$2 \
-                batch_size=16 \
-                grad_accum_steps=9
-                # draft_model=$draft \
-        elif [[ " ${NEEDS_SMALLER_BS[*]} " == *" $lang "* ]]; then
+        if [[ " ${NEEDS_SMALLER_BS[*]} " == *" $lang "* ]]; then
             uv run scripts/distill.py "$1" \
                 -o language_code=$lang \
                 output_dir="/scratch/alpine/$USER/spec-dec/" \

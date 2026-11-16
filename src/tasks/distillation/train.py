@@ -148,6 +148,12 @@ def run_distillation(config: DistillConfig):
     assert isinstance(dataset, datasets.Dataset)
     # There's a few one-token samples which we can't use for training
     dataset = dataset.filter(lambda r: len(r['logprobs']) > 0)
+    n_before = len(dataset)
+    dataset = dataset.filter(lambda r: len(r['token_ids']) <= config.max_seq_length)
+    if len(dataset) < n_before:
+        logger.warning(
+            f"Dropped {n_before - len(dataset)} examples longer than max_seq_length={config.max_seq_length} tokens"
+        )
     repo_name = build_repo_name(config)
     logger.info(f"HF repo: {repo_name}")
 

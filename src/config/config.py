@@ -72,6 +72,10 @@ class DistillConfig:
     warmup_ratio: float = 0.06
     lr_scheduler: Literal["cosine", "linear", "constant"] = "cosine"
     max_length: int = 128
+    # Drop training examples (prompt + teacher output) longer than this. The loss
+    # materializes full-vocab logits for every position of the padded batch, so one
+    # very long example (e.g. a ~850-token song lyric in opus-100 en-es) OOMs the batch.
+    max_seq_length: int = 512
     eval_split_ratio: float = 0.05
     eval_every: int = 50
 

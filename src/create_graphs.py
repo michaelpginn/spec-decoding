@@ -16,6 +16,7 @@ from tqdm import tqdm
 import wandb
 
 from src.config.config import WANDB_ENTITY, WANDB_PROJECT
+from src.data.dataset import get_language_name
 
 logging.basicConfig(
     level=logging.INFO,
@@ -1187,6 +1188,58 @@ def _size_scaling_plot(data: pd.DataFrame, y: str, filename: str, family: str | 
     _finalize(fig, filename, family)
 
 
+def _chrf_table(data: pd.DataFrame, filename: str = "chrf_table"):
+    """Write viz/<filename>.tex: a LaTeX tabular (snippet only, no table float)
+    of translation chrF per language, one column per target-model family.
+
+    With exact speculative sampling, output quality doesn't depend on the
+    drafter, so each cell is the mean chrF over every drafter's translation run
+    for that language. Low- and high-resource languages are separate blocks.
+    Requires booktabs."""
+    if "chrf2" not in data.columns:
+        logger.info(f"no chrf2 metric in the runs; skipping {filename}")
+        return
+    d = data[(data["task"] == "translation") & data["chrf2"].notna() & data["language"].isin(comparison_langs)]
+    if d.empty:
+        logger.info(f"no translation chrF values; skipping {filename}")
+        return
+    table = d.groupby(["language", "family"])["chrf2"].mean().unstack("family")
+    families = [f for f in FAMILY_STYLE if f in table.columns]
+    n_drafters = d.groupby(["language", "family"])["draft_model"].nunique().unstack("family")
+    for fam in families:
+        logger.info(f"[{filename}] {fam}: drafters per language {n_drafters[fam].dropna().astype(int).to_dict()}")
+
+    def rows(lang_codes: list[str]) -> list[str]:
+        out = []
+        for lang in lang_codes:
+            if lang not in table.index:
+                continue
+            cells = [
+                "--" if pd.isna(table.at[lang, fam]) else f"{table.at[lang, fam]:.1f}"
+                for fam in families
+            ]
+            out.append(f"{get_language_name(lang)} & " + " & ".join(cells) + r" \\")
+        return out
+
+    header = "Language & " + " & ".join(str(FAMILY_STYLE[f]["label"]) for f in families) + r" \\"
+    lines = [
+        r"\begin{tabular}{l" + "r" * len(families) + "}",
+        r"\toprule",
+        header,
+        r"\midrule",
+        *rows(langs),
+    ]
+    high = rows(HIGH_RESOURCE_LANGS)
+    if high:
+        lines += [r"\midrule", *high]
+    lines += [r"\bottomrule", r"\end{tabular}"]
+
+    out_path = Path("viz") / f"{filename}.tex"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    logger.info(f"Wrote {out_path}")
+
+
 def create_graphs(data: pd.DataFrame):
     for family in sorted(data["family"].unique()):
         logger.info(f"Creating graphs for model family: {family}")
@@ -1384,6 +1437,8 @@ if __name__ == "__main__":
             _size_scaling_plot(fam_data, "speedup_factor", "size_scaling_speedup", family)
         else:
             logger.info(f"[{family}] only one baseline draft size; skipping size-scaling plots")
+
+    _chrf_table(spec_data)
 
     # Figures relating a per-language measure (y) to a resourcedness measure (x)
     # are named <y>_vs_<x>, with y carrying its normalization, because per-token
