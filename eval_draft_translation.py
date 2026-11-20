@@ -24,7 +24,7 @@ for lang in LANGUAGES + HIGH_RESOURCE_LANGUAGES:
         draft_model_type="none",
         decoding_mode='sample'
     )
-    dataset, _ = load_data(config, tokenizer)
+    dataset, language = load_data(config, tokenizer)
     dataset = dataset['test']
 
     verifier_preds = []
@@ -32,7 +32,7 @@ for lang in LANGUAGES + HIGH_RESOURCE_LANGUAGES:
     distilled_preds = []
     for row in tqdm(dataset, desc="Decoding"):
         assert isinstance(row, Mapping)
-        prompt = create_prompt(config.task, lang, row['source'])
+        prompt = create_prompt(config.task, language, row['source'])
         inputs = create_inputs(prompt, tokenizer, device)
         prompt_len = inputs["input_ids"].shape[1]
 
