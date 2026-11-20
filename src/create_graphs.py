@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from scipy import stats
+from matplotlib.patches import Rectangle
 from matplotlib.ticker import AutoMinorLocator, MaxNLocator
 from matplotlib.transforms import Bbox
 from tqdm import tqdm
@@ -46,16 +47,58 @@ plt.rcParams.update({
     "axes.axisbelow": True,
 })
 
-# Cherokee (chr) is excluded: the 9B target cannot translate into it (chrF ~2.6)
-# and falls into repetition loops, so its acceptance rate reflects agreement on
-# degenerate text rather than drafting quality.
 langs = ["amh","grn","haw","ibo","npi","oci","que","yor","zgh"]
 
-# Chinese is a high-resource anchor rather than one of the languages under
-# study: it is in the cross-language comparisons (the baseline speed-up bars and
-# the resourcedness / bits-per-char scatters), where the point is how the metric
-# moves across the resourcedness range, but not in the per-language setting
-# comparisons, which are about the low-resource set only.
+# Cherokee (chr) is an outlier: the 9B target cannot translate into it (chrF ~2.6)
+# and falls into repetition loops, so its acceptance rate reflects agreement on
+# degenerate text rather than drafting quality. It is drawn but flagged (hollow
+# marker / asterisk) and left out of every fit and correlation, and omitted
+# entirely from the before/after-distillation, n-gram vs. distilled and
+# chrF-vs-acceptance scatters.
+OUTLIER_LANGS = {"chr"}
+
+
+def _lang_label(lang: str) -> str:
+    """Language code as shown on a figure, with an asterisk on outliers."""
+    return f"{lang}*" if lang in OUTLIER_LANGS else lang
+
+
+OUTLIER_HATCH = "//////"
+
+
+def _outlier_bar(ax, patch, edgecolor: str = "#333333", linewidth: float = 0.4):
+    """Restyle a bar as an outlier: white with a hatch in the bar's own colour,
+    under a black outline. Matplotlib 3.10 draws a hatch in the edge colour, so
+    the hatch and the outline are separate layers."""
+    color = patch.get_facecolor()
+    patch.set_facecolor("white")
+    patch.set_edgecolor(color)
+    patch.set_linewidth(0)
+    patch.set_hatch(OUTLIER_HATCH)
+    ax.add_patch(Rectangle(
+        patch.get_xy(), patch.get_width(), patch.get_height(),
+        fill=False, edgecolor=edgecolor, linewidth=linewidth, zorder=patch.get_zorder(),
+    ))
+
+
+def _outlier_scatter(ax, xs, ys, color, marker: str = "o", s: float = 40, zorder: float = 3):
+    """Outlier markers: hatched in the series colour, outlined in black (two
+    layers, for the same reason as _outlier_bar)."""
+    ax.scatter(xs, ys, marker=marker, s=s, zorder=zorder, facecolors="white",
+               edgecolors=color, linewidths=0, hatch=OUTLIER_HATCH)
+    ax.scatter(xs, ys, marker=marker, s=s, zorder=zorder, facecolors="none",
+               edgecolors="black", linewidths=0.6)
+
+
+def _drop_outliers(data: pd.DataFrame) -> pd.DataFrame:
+    return data[~data["language"].isin(OUTLIER_LANGS)]
+
+# The high-resource languages are anchors rather than languages under study:
+# they are in the cross-language comparisons (the baseline speed-up bars, the
+# resourcedness / bits-per-char scatters, the task-acceptance scatters and the
+# n-gram vs. distilled scatters), where the point is how the metric moves across
+# the resourcedness range, but not in the per-language setting bar plots, which
+# are about the low-resource set only.
 HIGH_RESOURCE_LANGS = ["zh", "deu", "spa", "hin", "eng"]
 comparison_langs = langs + HIGH_RESOURCE_LANGS
 
@@ -207,7 +250,18 @@ def _finalize(fig, filename: str, family: str | None = None):
     plt.close(fig)
 
 
-def _bar_plot(data: pd.DataFrame, y: str, y_std: str, filename: str, family: str | None = None, show_legend: bool = True):
+def _bar_plot(
+    data: pd.DataFrame,
+    y: str,
+    y_std: str,
+    filename: str,
+    family: str | None = None,
+    show_legend: bool = True,
+    order: list[str] | None = None,
+):
+    """Grouped bars per language, one per setting. `order` gives the languages
+    left to right (by default the low-resource set)."""
+    order = order if order is not None else langs
     _log_stats(data, "setting", y, filename)
     fig, ax = plt.subplots(figsize=(8, 1.6 if show_legend else 1.3))
     bar_palette = ['#8C8C8C', *PALETTE[1:len(SETTINGS)]]
@@ -217,7 +271,7 @@ def _bar_plot(data: pd.DataFrame, y: str, y_std: str, filename: str, family: str
         y=y,
         hue="setting",
         hue_order=SETTINGS,
-        order=langs,
+        order=order,
         palette=bar_palette,
         edgecolor='#333333',
         linewidth=0.4,
@@ -227,22 +281,29 @@ def _bar_plot(data: pd.DataFrame, y: str, y_std: str, filename: str, family: str
 
     for container, setting in zip(ax.containers, SETTINGS):
         s_df = data[data["setting"] == setting]
+        if not len(container):
+            continue
         xs = [patch.get_x() + patch.get_width() / 2 for patch in container]
+        for x, patch in zip(xs, container):
+            if order[int(round(x))] in OUTLIER_LANGS:
+                _outlier_bar(ax, patch)
         ys = np.array([patch.get_height() for patch in container])
-        stds = s_df[y_std].to_numpy()
+        # Look each bar's std up by the language at its x position: the rows of
+        # s_df are in arbitrary order, and a setting may be missing languages.
+        by_lang = s_df.groupby("language")[y_std].mean()
+        stds = np.array([by_lang.get(order[int(round(x))], np.nan) for x in xs])
         lower = np.minimum(stds, ys)
-        try:
-            ax.errorbar(
-                xs, ys,
-                yerr=[lower, stds],
-                fmt='none',
-                ecolor='#444444',
-                capsize=2,
-                linewidth=0.6,
-                capthick=0.6,
-            )
-        except:
-            breakpoint()
+        ax.errorbar(
+            xs, ys,
+            yerr=[lower, stds],
+            fmt='none',
+            ecolor='#444444',
+            capsize=2,
+            linewidth=0.6,
+            capthick=0.6,
+        )
+    ax.set_xticks(range(len(order)))
+    ax.set_xticklabels([_lang_label(lang) for lang in order])
 
     if y != "speedup_factor":
         ax.set_ylim(bottom=0)
@@ -326,9 +387,9 @@ def load_distill_data() -> pd.DataFrame:
 
 
 def _chrf_acceptance_plot(data: pd.DataFrame, family: str | None = None):
+    data = _drop_outliers(data).copy()
     _log_stats(data, "setting", "sentence_avg_acceptance_rate", "chrf_acceptance")
     fig, ax = plt.subplots(figsize=(8, 2))
-    data = data.copy()
     baseline_chrf_by_lang = (
         data[data['setting'] == 'Baseline'].set_index('language')['chrf2']
     )
@@ -349,7 +410,7 @@ def _chrf_acceptance_plot(data: pd.DataFrame, family: str | None = None):
     ax.scatter(
         baseline_chrfs['chrf2'], baseline_chrfs['sentence_avg_acceptance_rate'],
         facecolors="none",
-        edgecolors="#8C8C8C",
+        edgecolors=SETTING_COLOR["Baseline"],
         s=40,
         linewidths=1.0,
         zorder=3,
@@ -425,6 +486,7 @@ def _task_acceptance_scatter(
     distill_setting: str = "Distilled (task)",
     filename: str = "task_acceptance_scatter",
 ):
+    data = _drop_outliers(data)
     settings_to_show = ["Baseline", distill_setting]
     setting_to_color = SETTING_COLOR
 
@@ -544,6 +606,25 @@ def _task_acceptance_scatter(
 TASK_TO_TITLE = {"translation": "Translation", "story_gen": "Story Generation"}
 
 
+def _task_acceptance_scatters(data: pd.DataFrame, family: str):
+    """Both task-acceptance scatters (task and general distillation) for one
+    family, at the comparison draft size alongside N-Gram. Takes the
+    cross-language set, so the high-resource languages appear too."""
+    comparison_sizes = [FAMILIES[family]["baseline_size"], "N-Gram"]
+    scatter_data = data[(data["family"] == family) & data["model_size"].isin(comparison_sizes)]
+    tasks = set(scatter_data["task"])
+    if not {"translation", "story_gen"} <= tasks:
+        logger.info(f"[{family}] task-acceptance scatter needs both tasks; skipping")
+        return
+    _task_acceptance_scatter(scatter_data, family)
+    _task_acceptance_scatter(
+        scatter_data,
+        family,
+        distill_setting="Distilled (general)",
+        filename="task_acceptance_scatter_general",
+    )
+
+
 def _baseline_family_rows(data: pd.DataFrame, task: str) -> pd.DataFrame:
     """Baseline runs at each family's comparison draft size, for one task."""
     return pd.concat([
@@ -564,7 +645,7 @@ def _ngram_vs_distilled_scatter(data: pd.DataFrame, task: str, filename: str, fa
     both how the two approaches compare and which flavour of distillation the
     language preferred."""
     distill_settings = ["Distilled (task)", "Distilled (general)"]
-    d = data[(data["family"] == family) & (data["task"] == task)]
+    d = _drop_outliers(data[(data["family"] == family) & (data["task"] == task)])
     cols = ["language", "setting", "sentence_avg_acceptance_rate", "speedup_factor"]
 
     ngram = d[d["setting"] == "N-Gram"].dropna(subset=["speedup_factor"])[cols]
@@ -665,11 +746,14 @@ def _baseline_speedup_bars(data: pd.DataFrame, counts: pd.DataFrame, task: str, 
         idx = [i for i, lang in enumerate(present) if (lang, fam) in values.index]
         ys = np.array([values[(present[i], fam)] for i in idx])
         errs = np.array([stds.get((present[i], fam), np.nan) for i in idx])
-        ax.bar(
+        bars = ax.bar(
             xs[idx] + offset, ys - 1.0, width=width, bottom=1.0,
             color=FAMILY_STYLE[fam]["color"], label=FAMILY_STYLE[fam]["label"],
             edgecolor="#333333", linewidth=0.4,
         )
+        for i, patch in zip(idx, bars):
+            if present[i] in OUTLIER_LANGS:
+                _outlier_bar(ax, patch)
         ax.errorbar(
             xs[idx] + offset, ys, yerr=np.nan_to_num(errs),
             fmt="none", ecolor="#444444", capsize=2, linewidth=0.6, capthick=0.6,
@@ -682,7 +766,7 @@ def _baseline_speedup_bars(data: pd.DataFrame, counts: pd.DataFrame, task: str, 
 
     ax.axhline(1.0, color="black", linewidth=1.0, zorder=3)
     ax.set_xticks(xs)
-    ax.set_xticklabels(present)
+    ax.set_xticklabels([_lang_label(lang) for lang in present])
     ax.set_xlim(-0.5, len(present) - 0.5)
 
     # Allow 0.25 steps so the region below break-even still gets a labelled tick.
@@ -694,7 +778,14 @@ def _baseline_speedup_bars(data: pd.DataFrame, counts: pd.DataFrame, task: str, 
     _style_spines(ax)
     ax.set_xlabel("")
     ax.set_ylabel(f"{KEY_TO_TITLE['speedup_factor']}\n{TASK_TO_TITLE.get(task, task)}")
+    # Explicit swatches: the automatic handle is each family's first bar, which
+    # is the hatched outlier when that language sorts first.
     ax.legend(
+        handles=[
+            Rectangle((0, 0), 1, 1, facecolor=FAMILY_STYLE[f]["color"], edgecolor="#333333",
+                      linewidth=0.4, label=FAMILY_STYLE[f]["label"])
+            for f in families
+        ],
         frameon=False, fontsize=10, loc="lower center",
         bbox_to_anchor=(0.5, 1.0), ncol=len(families), borderaxespad=0.1,
     )
@@ -719,12 +810,20 @@ def _scatter_with_fits(
         if not pts:
             continue
         style = FAMILY_STYLE[fam]
+        inliers = [p for p in pts if p[0] not in OUTLIER_LANGS]
+        outliers = [p for p in pts if p[0] in OUTLIER_LANGS]
         ax.scatter(
-            [p[1] for p in pts], [p[2] for p in pts],
+            [p[1] for p in inliers], [p[2] for p in inliers],
             marker=style["marker"], color=style["color"], label=style["label"],
             s=40, zorder=3, edgecolors="black", linewidths=0.4,
         )
-        fit_pts = [p for p in pts if p[0] in fit_langs]
+        if outliers:
+            # Outliers are shown hatched and never enter the fit.
+            _outlier_scatter(
+                ax, [p[1] for p in outliers], [p[2] for p in outliers],
+                style["color"], marker=style["marker"],
+            )
+        fit_pts = [p for p in inliers if p[0] in fit_langs]
         if len(fit_pts) > 2:
             fx = np.array([p[1] for p in fit_pts])
             fy = np.array([p[2] for p in fit_pts])
@@ -906,7 +1005,7 @@ def _resourcedness_plot(
     _place_labels(
         ax,
         [
-            (lang, x[lang], max(values[(lang, fam)] for fam in families if (lang, fam) in values.index))
+            (_lang_label(lang), x[lang], max(values[(lang, fam)] for fam in families if (lang, fam) in values.index))
             for lang in sorted(present, key=lambda l: x[l])
         ],
         obstacles,
@@ -1035,7 +1134,7 @@ def _vs_bpc_plot(
     obstacles = _scatter_with_fits(ax, points, set(present), relation, filename)
     _place_labels(
         ax,
-        sorted([(l, px, py) for pts in points.values() for l, px, py in pts], key=lambda i: i[1]),
+        sorted([(_lang_label(l), px, py) for pts in points.values() for l, px, py in pts], key=lambda i: i[1]),
         obstacles,
     )
 
@@ -1218,7 +1317,8 @@ def _chrf_table(data: pd.DataFrame, filename: str = "chrf_table"):
                 "--" if pd.isna(table.at[lang, fam]) else f"{table.at[lang, fam]:.1f}"
                 for fam in families
             ]
-            out.append(f"{get_language_name(lang)} & " + " & ".join(cells) + r" \\")
+            name = get_language_name(lang) + ("*" if lang in OUTLIER_LANGS else "")
+            out.append(f"{name} & " + " & ".join(cells) + r" \\")
         return out
 
     header = "Language & " + " & ".join(str(FAMILY_STYLE[f]["label"]) for f in families) + r" \\"
@@ -1240,13 +1340,20 @@ def _chrf_table(data: pd.DataFrame, filename: str = "chrf_table"):
     logger.info(f"Wrote {out_path}")
 
 
-def create_graphs(data: pd.DataFrame):
+def create_graphs(data: pd.DataFrame, comparison_data: pd.DataFrame, counts: pd.DataFrame):
+    """`data` is the low-resource set; `comparison_data` adds the high-resource
+    languages and feeds the grouped bars and the chrF-vs-acceptance plot."""
     for family in sorted(data["family"].unique()):
         logger.info(f"Creating graphs for model family: {family}")
-        _create_family_graphs(data[data["family"] == family], family)
+        _create_family_graphs(
+            data[data["family"] == family],
+            comparison_data[comparison_data["family"] == family],
+            family,
+            counts,
+        )
 
 
-def _create_family_graphs(data: pd.DataFrame, family: str):
+def _create_family_graphs(data: pd.DataFrame, comparison_data: pd.DataFrame, family: str, counts: pd.DataFrame):
     cfg = FAMILIES[family]
     baseline_size = cfg["baseline_size"]
     # The setting-comparison plots compare Baseline vs. Distilled at a fixed
@@ -1254,35 +1361,30 @@ def _create_family_graphs(data: pd.DataFrame, family: str):
     comparison_sizes = [baseline_size, 'N-Gram']
 
     # _bar_plot(data,             "Tokens / Second (Spec)", "tps_spec", family)
-    translation_data = data[(data['task'] == 'translation') & (data['model_size'].isin(comparison_sizes))]
+    # Grouped bars run left to right by resourcedness, matching the Qwen vs.
+    # Llama baseline speed-up bars.
+    bar_order = _resourcedness_order(
+        [lang for lang in comparison_langs if lang in set(comparison_data["language"])], counts
+    )
+
+    translation_data = comparison_data[(comparison_data['task'] == 'translation') & (comparison_data['model_size'].isin(comparison_sizes))]
     if translation_data.empty:
         logger.info(f"[{family}] no translation runs; skipping translation plots")
     else:
-        _bar_plot(translation_data, "sentence_avg_tokens_per_second", "sentence_std_tokens_per_second", "translation_tps", family)
-        _bar_plot(translation_data, "speedup_factor", "speedup_factor_std", "translation_speedup", family, show_legend=False)
-        _bar_plot(translation_data, "sentence_avg_acceptance_rate", "sentence_std_acceptance_rate", "translation_acceptance", family)
+        _bar_plot(translation_data, "sentence_avg_tokens_per_second", "sentence_std_tokens_per_second", "translation_tps", family, order=bar_order)
+        _bar_plot(translation_data, "speedup_factor", "speedup_factor_std", "translation_speedup", family, show_legend=False, order=bar_order)
+        _bar_plot(translation_data, "sentence_avg_acceptance_rate", "sentence_std_acceptance_rate", "translation_acceptance", family, order=bar_order)
         _chrf_acceptance_plot(translation_data, family)
 
-    story_data = data[(data['task'] == 'story_gen')  & (data['model_size'].isin(comparison_sizes))]
+    story_data = comparison_data[(comparison_data['task'] == 'story_gen') & (comparison_data['model_size'].isin(comparison_sizes))]
     if story_data.empty:
         logger.info(f"[{family}] no story_gen runs; skipping story plots")
     else:
-        _bar_plot(story_data, "sentence_avg_tokens_per_second", "sentence_std_tokens_per_second", "story_tps", family)
-        _bar_plot(story_data, "speedup_factor", "speedup_factor_std", "story_speedup", family)
-        _bar_plot(story_data, "sentence_avg_acceptance_rate", "sentence_std_acceptance_rate", "story_acceptance", family)
+        _bar_plot(story_data, "sentence_avg_tokens_per_second", "sentence_std_tokens_per_second", "story_tps", family, order=bar_order)
+        _bar_plot(story_data, "speedup_factor", "speedup_factor_std", "story_speedup", family, order=bar_order)
+        _bar_plot(story_data, "sentence_avg_acceptance_rate", "sentence_std_acceptance_rate", "story_acceptance", family, order=bar_order)
 
-    # Task-acceptance scatter needs both translation and story runs.
-    if not translation_data.empty and not story_data.empty:
-        scatter_data = data[data['model_size'].isin(comparison_sizes)]
-        _task_acceptance_scatter(scatter_data, family)
-        _task_acceptance_scatter(
-            scatter_data,
-            family,
-            distill_setting="Distilled (general)",
-            filename="task_acceptance_scatter_general",
-        )
-
-    if translation_data.empty:
+    if data[data["task"] == "translation"].empty:
         return
 
     forward_pass_data = data[
@@ -1386,9 +1488,16 @@ def _pinsker_plot(kl_df: pd.DataFrame, spec_df: pd.DataFrame, family: str | None
         subset = merged[merged["distill_type"] == dtype]
         if subset.empty:
             continue
+        out = subset[subset["language"].isin(OUTLIER_LANGS)]
+        if not out.empty:
+            _outlier_scatter(
+                ax, out["kl_divergence"], out["sentence_avg_acceptance_rate"],
+                type_to_color[dtype], marker=type_to_marker[dtype],
+            )
+        inl = subset[~subset["language"].isin(OUTLIER_LANGS)]
         ax.scatter(
-            subset["kl_divergence"],
-            subset["sentence_avg_acceptance_rate"],
+            inl["kl_divergence"],
+            inl["sentence_avg_acceptance_rate"],
             color=type_to_color[dtype],
             label=type_to_label[dtype],
             marker=type_to_marker[dtype],
@@ -1399,7 +1508,7 @@ def _pinsker_plot(kl_df: pd.DataFrame, spec_df: pd.DataFrame, family: str | None
         )
         for _, row in subset.iterrows():
             ax.annotate(
-                row["language"],
+                _lang_label(row["language"]),
                 (row["kl_divergence"], row["sentence_avg_acceptance_rate"]),
                 fontsize=7,
                 xytext=(3, 3),
@@ -1421,11 +1530,18 @@ if __name__ == "__main__":
     # cross-language figures below also get zh as a high-resource anchor.
     core_data = spec_data[spec_data["language"].isin(langs)]
     families = sorted(core_data["family"].unique())
+    # The grouped bars, chrF-vs-acceptance, Pinsker, task-acceptance and n-gram
+    # vs. distilled plots also show the high-resource languages, for reference
+    # against the low-resource set.
+    comparison_data = spec_data[spec_data["language"].isin(comparison_langs)]
+    fineweb_counts = pd.read_csv("viz/fineweb_counts.csv")
+    create_graphs(core_data, comparison_data, fineweb_counts)
     for family in families:
         kl_data = _load_kl_results(family)
         if kl_data is not None:
-            _pinsker_plot(kl_data, core_data[core_data["family"] == family], family)
-    create_graphs(core_data)
+            _pinsker_plot(kl_data, comparison_data[comparison_data["family"] == family], family)
+    for family in families:
+        _task_acceptance_scatters(comparison_data, family)
 
     # Size scaling covers every language (low- and high-resource), and only
     # applies where multiple baseline draft sizes were run.
@@ -1443,7 +1559,6 @@ if __name__ == "__main__":
     # Figures relating a per-language measure (y) to a resourcedness measure (x)
     # are named <y>_vs_<x>, with y carrying its normalization, because per-token
     # and per-char divergence behave very differently.
-    fineweb_counts = pd.read_csv("viz/fineweb_counts.csv")
     divergence_data = load_divergences()
     for task, name in [("translation", "translation"), ("story_gen", "story")]:
         _resourcedness_acceptance_plot(
@@ -1456,7 +1571,7 @@ if __name__ == "__main__":
         _bpc_acceptance_plot(spec_data, divergence_data, task, f"acceptance_{name}_vs_bpc")
         _baseline_speedup_bars(spec_data, fineweb_counts, task, f"baseline_speedup_{name}")
         for family in families:
-            _ngram_vs_distilled_scatter(core_data, task, f"ngram_vs_distilled_{name}", family)
+            _ngram_vs_distilled_scatter(comparison_data, task, f"ngram_vs_distilled_{name}", family)
 
     # Per token: the unit acceptance rate lives in, but diluted by byte-fallback
     # positions, so these track tokenizer script coverage as much as anything.
