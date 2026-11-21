@@ -23,7 +23,7 @@ import torch
 from torch.amp import autocast  # type: ignore[attr-defined]
 from torch.utils.data import DataLoader
 
-from src.data.dataset import LANGUAGES
+from src.data.dataset import HIGH_RESOURCE_LANGUAGES, LANGUAGES
 from src.utils import load_model
 
 logging.basicConfig(
@@ -139,7 +139,7 @@ def main():
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--eval-split-ratio", type=float, default=0.05,
                         help="Matches train.py default for dev fold.")
-    parser.add_argument("--languages", nargs="+", default=LANGUAGES)
+    parser.add_argument("--languages", nargs="+", default=LANGUAGES + HIGH_RESOURCE_LANGUAGES)
     parser.add_argument("--device", default="auto")
     args = parser.parse_args()
 
